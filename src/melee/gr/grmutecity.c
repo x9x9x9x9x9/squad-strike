@@ -1,4 +1,5 @@
 #include "grmutecity.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -430,7 +431,9 @@ void grMuteCity_801EFDF8(Ground_GObj* gobj)
     HSD_LObj* next_lobj;
     PAD_STACK(12);
 
-    grAnime_801C8138(gobj, gp->map_id, 0);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grAnime_801C8138(gobj, gp->map_id, 0);
+    }
     grAnime_801C775C(gobj, 0, 7, 0.0f, 3600.0f);
     gp->u.mutecity.xC4 = 0;
     gp->u.mutecity.xC6 = 0;
@@ -513,7 +516,9 @@ void grMuteCity_801F0120(Ground_GObj* gobj)
         HSD_LObjSetDistAttn(ground->u.mutecity.x110, light_ref_br,
                             light_ref_dist, light_dist_func);
     }
-    grMuteCity_801F04B8(gobj);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grMuteCity_801F04B8(gobj);
+    }
     grMuteCity_801F0948(gobj);
     if (ground->u.mutecity.xD0_flags.b0 != 0) {
         grMuteCity_801F0D20(gobj);
@@ -533,7 +538,9 @@ void grMuteCity_801F01B4(Ground_GObj* gobj)
 
     Ground_InitMapColl(jobj, gp->map_id);
     grMaterial_801C94D8(jobj);
-    grAnime_801C8138(gobj, gp->map_id, false);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grAnime_801C8138(gobj, gp->map_id, false);
+    }
     grAnime_801C775C(gobj, 0, 7, 0.0f, 3600.0f);
     grAnime_801C7FF8(gobj, 6, 7, 1, 0.0f, 1.0f);
     gp->x10_flags.b5 = 1;
@@ -1692,7 +1699,9 @@ void grMuteCity_801F1A34(HSD_GObj* arg0, Ground_GObj* arg1)
                     -200.0f < car_pos.y && car_pos.y < 200.0f &&
                     -1350.0f < car_pos.z && car_pos.z < 50.0f)
                 {
-                    Camera_RequestQuake(QuakeKind_Loop, NULL);
+                    if (!grStageExp_On()) { /* Stage Expansion: off */
+                        Camera_RequestQuake(QuakeKind_Loop, NULL);
+                    }
                     if (!grMc_8049F4B8[car_idx].x22_flags.b1) {
                         if (gp->u.mutecity.xD0_flags.b1) {
                             switch (HSD_Randi(3)) {
