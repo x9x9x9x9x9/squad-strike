@@ -1,4 +1,5 @@
 #include "grcastle.h"
+#include "grstageexp.h"
 
 #include <placeholder.h>
 
@@ -335,8 +336,12 @@ void grCastle_801CD60C(Ground_GObj* gobj) {}
 void grCastle_801CD610(Ground_GObj* gobj)
 {
     ftCo_800C06E8(gobj, 6, grCastle_801D09B8);
-    grCastle_801CF7B0(gobj);
-    grCastle_801CDFD8(gobj);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grCastle_801CF7B0(gobj);
+    }
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grCastle_801CDFD8(gobj);
+    }
 }
 
 void grCastle_801CD658(Ground_GObj* gobj)
