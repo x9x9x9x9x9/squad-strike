@@ -257,6 +257,20 @@ void Player_80031AD0(int slot)
     }
 }
 
+#ifdef TARGET_PC
+s32 Player_PcFighterKinds(CharacterKind kind, s32* extra)
+{
+    *extra = -1;
+    if ((unsigned) kind >= ChKind_Max) {
+        return -1;
+    }
+    if (hasExtraFighterId(&ftMapping_list[kind])) {
+        *extra = ftMapping_list[kind].extra_internal_id;
+    }
+    return ftMapping_list[kind].internal_id;
+}
+#endif
+
 void Player_80031CB0(CharacterKind kind, u8 color)
 {
     if (ftMapping_list[kind].internal_id != -1) {

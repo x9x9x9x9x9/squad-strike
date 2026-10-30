@@ -157,6 +157,11 @@ void Player_80031900(void);
 bool Player_800319C4(int slot, bool arg1);
 void Player_80031AD0(int slot);
 void Player_80031CB0(CharacterKind kind, u8 color);
+#ifdef TARGET_PC
+/// Squad Strike: a character's fighter kind, and its partner or
+/// transformation in @p extra (-1 if none).
+s32 Player_PcFighterKinds(CharacterKind kind, s32* extra);
+#endif
 void Player_80031D2C(CharacterKind kind, u8 color);
 void Player_80031DA8(s32 param_1, s32 param_2);
 void Player_80031DC8(void func_arg(s32, s32));

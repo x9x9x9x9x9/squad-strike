@@ -276,6 +276,11 @@ struct GameCache {
     u8 x3;
     StKind stkind;
     PreloadCacheSceneEntry entries[8];
+#ifdef TARGET_PC
+    /// Squad Strike (gmsquad.c): changes when a squad does, so the preloader
+    /// (lbDvd_80018254 compares this struct) requests the new members.
+    u32 pc_squad_key;
+#endif
 };
 
 struct PreloadedGameModeState {
@@ -288,7 +293,13 @@ struct PreloadCache {
     s32 persistent_heaps;
     PreloadedGameModeState scene;
     PreloadedGameModeState new_scene;
+#ifdef TARGET_PC
+    /// 80 on the GameCube; Squad Strike preloads up to eight fighters plus
+    /// Kirby's copies of them.
+    PreloadEntry entries[160];
+#else
     PreloadEntry entries[80];
+#endif
     s32 persistent_heap;
     bool preloaded;
     UNK_T x974;

@@ -528,6 +528,7 @@ src/melee/gm/gmscene.c
 src/melee/gm/gmscmemcard.c
 src/melee/gm/gmsinglebutton.c
 src/melee/gm/gmslomo.c
+src/melee/gm/gmsquad.c
 src/melee/gm/gmstaffroll.c
 src/melee/gm/gmstamina.c
 src/melee/gm/gmsupersudden.c

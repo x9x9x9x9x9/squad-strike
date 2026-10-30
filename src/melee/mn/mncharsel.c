@@ -75,6 +75,9 @@ static u8 mnCharSel_804D6CF6; ///< ::CSSPendingSceneChangeKind
 static u8 mnCharSel_804D6CF7;
 static u8 mnCharSel_804D6CF8;
 static s8 mnCharSel_804D6CF9;
+#ifdef TARGET_PC
+static void mnCharSel_SquadReset(int canvas); /* mncharsel_squad.h */
+#endif
 
 /// Can't be enum bc float, but reused values
 #define ICONROWHT_TOP_TOP 20.0F
@@ -4403,6 +4406,9 @@ s32 mnCharSel_802640A0(void)
     gobj->gxlink_prios = 0x1F;
     HSD_GObj_SetupProc(gobj, mn_8022BA1C, 5);
     ctx = HSD_SisLib_803A611C(0, gobj, 7, 8, 0x80, 1, 0x80, 0);
+#ifdef TARGET_PC
+    mnCharSel_SquadReset(ctx);
+#endif
 
     gobj = GObj_Create(3, 4, 0x80);
     {
@@ -5475,6 +5481,10 @@ void mnCharSel_Scene_OnEnter(void* arg0)
     mnCharSel_802640A0();
 }
 
+#ifdef TARGET_PC
+#include "mncharsel_squad.h"
+#endif
+
 void mnCharSel_Scene_OnFrame(void)
 {
     int num_slots;
@@ -5483,6 +5493,10 @@ void mnCharSel_Scene_OnFrame(void)
     int i;
 
     PAD_STACK(8);
+
+#ifdef TARGET_PC
+    mnCharSel_SquadFrame();
+#endif
 
     mnCharSel_804D6CEC += 1;
     if (mnCharSel_804D6CF6 <= 1) {

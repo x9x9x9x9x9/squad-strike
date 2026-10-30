@@ -1,4 +1,7 @@
 #include "lbdvd.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 
 #include <melee/ft/forward.h>
 #include <melee/gm/forward.h>
@@ -268,6 +271,9 @@ void lbDvd_80017960(void)
             }
         }
     }
+#ifdef TARGET_PC
+    gmSquad_AddPreloads(game_cache);
+#endif
 }
 
 static void lbDvd_80017A80(u32 unused)
@@ -400,7 +406,7 @@ void* lbDvd_GetPreloadedArchive(ssize_t entry_num)
         }
     }
 
-    if (i == 80) {
+    if (i == (signed) ARRAY_SIZE(preloadCache.entries)) {
         OSRestoreInterrupts(interrupt);
         return 0;
     }
@@ -676,7 +682,7 @@ int lbDvd_80018A2C(u8 arg0)
     bool enabled = OSDisableInterrupts();
     int i;
 
-    for (i = 0; i < 0x50; i++) {
+    for (i = 0; i < (signed) ARRAY_SIZE(preloadCache.entries); i++) {
         entry = &preloadCache.entries[i];
         if (entry->state == 0) {
             continue;

@@ -12,7 +12,10 @@ extern "C" {
 /* Game-visible memory. Runtime structs carry 64-bit pointers, so give the
  * game's heaps more room than the GameCube's 24MB. */
 #define PC_MEM1_SIZE (96u * 1024 * 1024)
-#define PC_ARAM_SIZE (16u * 1024 * 1024)
+/* ARAM: 16MB on the GameCube. Squad Strike (src/melee/gm/gmsquad.c) keeps
+ * up to eight fighters' animations resident, so the AllA heap is enlarged
+ * (lbheap.c) and ARAM with it. */
+#define PC_ARAM_SIZE (64u * 1024 * 1024)
 
 void pc_platform_init(void);
 

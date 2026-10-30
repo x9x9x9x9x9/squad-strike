@@ -1,4 +1,7 @@
 #include "gm_16A2.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 
 #include <stddef.h>
 
@@ -767,6 +770,9 @@ void fn_8016A4C8(void)
 
     PAD_STACK(0xC4);
 
+#ifdef TARGET_PC
+    gmSquad_OnVsFrame();
+#endif
     gp = &lbl_8046B488;
     has_active_spawn = 0;
     if (lbl_8046B488.unk_10_b1) {

@@ -1,4 +1,7 @@
 #include "gmvsmelee.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 
 #include <Runtime/platform.h>
 
@@ -141,6 +144,9 @@ void gmVsMelee_ExitCss(GameModeState* state, VsModeData* vs)
         for (i = 0; i < GM_MAX_PLAYERS; i++) {
             mask |= lbAudioAx_80026E84(css->vs.start.players[i].ckind);
         }
+#ifdef TARGET_PC
+        mask |= gmSquad_SoundMask();
+#endif
         lbAudioAx_80026F2C(20);
         lbAudioAx_8002702C(4, mask);
         lbAudioAx_80027168();
@@ -199,6 +205,9 @@ void gmVsMelee_EnterVs(GameModeState* state, VsModeData* vs,
         }
     }
 
+#ifdef TARGET_PC
+    gmSquad_OnEnterVs(start);
+#endif
     gm_SetupSubColors(start);
     gm_LoadRumbleEnabled(start);
     gm_LoadAnnouncer();
@@ -236,6 +245,9 @@ void gmVsMelee_EnterSuddenDeath(GameModeState* state, VsModeData* vs,
                                 gm_StartMeleeCallback start_cb,
                                 gm_PlayerInitCallback player_cb)
 {
+#ifdef TARGET_PC
+    gmSquad_Disable();
+#endif
     StartMeleeData* start = gm_GetGameModeStateEnterData(state);
     start->rules = vs->start.rules;
 

@@ -307,7 +307,13 @@ void lbMemory_8001564C(void)
 
     _p(a_arenaLo) = ARAlloc(0x20);
     ARFree(&freed_size);
+#ifdef TARGET_PC
+    /* The 16MB cap is for development hardware; the PC's larger ARAM
+     * (PC_ARAM_SIZE) holds Squad Strike's enlarged animation heap. */
+    _p(a_arenaHi) = ARGetSize();
+#else
     _p(a_arenaHi) = (ARGetSize() > 0x01000000U) ? 0x01000000U : ARGetSize();
+#endif
 
     _p(free_mem) = &_p(mem)[0];
     for (i = 0; i < (int) ARRAY_SIZE(_p(mem)) - 1; i++) {

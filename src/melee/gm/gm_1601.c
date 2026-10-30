@@ -1,4 +1,7 @@
 #include "gm_1601.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 #include <stdlib.h>
 
 #include "pc/pc.h"
@@ -3490,6 +3493,11 @@ void fn_8016719C(s32 slot, s32 subchar)
     StKind stkind;
     struct fn_8016719C_xC_bits* temp_r4;
 
+#ifdef TARGET_PC
+    if (gmSquad_HoldRespawn(slot, subchar)) {
+        return; /* a squad member is due: gmSquad_OnVsFrame respawns them */
+    }
+#endif
     scene_state = gmVs_GetSceneState();
     stkind = gm_GetStKind();
     if (Stage_80224DC8(stkind) != 0) {

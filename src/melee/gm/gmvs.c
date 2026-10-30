@@ -1,4 +1,7 @@
 #include "gmvs.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 
 #include <Runtime/platform.h>
 
@@ -1897,6 +1900,9 @@ void fn_8016E124(void)
             }
         }
     }
+#ifdef TARGET_PC
+    gmSquad_WarmFiles();
+#endif
 }
 
 /// @todo The loop's SFX flag load uses a different equivalent address form.

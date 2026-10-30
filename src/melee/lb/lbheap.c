@@ -314,6 +314,16 @@ void lbHeap_80015F3C(void)
         if (pc_region_pal && (curr_idx == 3 || curr_idx == 4)) {
             curr_heap->size *= 2;
         }
+        /* Squad Strike (gm/gmsquad.c) preloads up to eight fighters for a
+         * 1v1 instead of two: their data and costumes (AllM) and animations
+         * (AllA, ARAM; see PC_ARAM_SIZE). 4x either heap covers the heaviest
+         * lineup with room to spare, and the preloaded files are read-only
+         * during a match, so netplay never snapshots these heaps. */
+        if (curr_idx == LbHeapKind_AllM) {
+            curr_heap->size = desc->size * 4;
+        } else if (curr_idx == LbHeapKind_AllA) {
+            curr_heap->size = desc->size * 4;
+        }
 #endif
         prev_idx = desc->prev_idx;
         if (prev_idx == LbHeapKind_Count) {

@@ -2508,6 +2508,10 @@ void lbAudioAx_8002838C(void)
 
     fn_80023254(5);
     lbl_804D6444 += offsets_arr_803BC4E4[lbl_80433B44[0]][0];
+#ifdef TARGET_PC
+    /* Squad Strike: room for eight fighters' sound banks, not four. */
+    lbl_804D6444 *= 2;
+#endif
 
     lbl_804D6438 = lbl_804D643C + lbl_804D6440 + lbl_804D6444;
     lbl_804D3870 = lbl_804D6438;
