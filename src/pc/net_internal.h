@@ -231,8 +231,8 @@ typedef struct Rules {
     uint64_t item_mask;
     uint32_t stage_mask;
     uint8_t frozen_stadium; /* PC_RULE_* flags (net.h); bit 0 frozen stadium */
-    uint32_t unlock_hash; /* unlock_hash_now() after the sender forced its masks */
-    uint32_t hash;        /* rules_hash() of the wire image above; the guest recomputes it */
+    uint32_t unlock_hash;   /* unlock_hash_now() after the sender forced its masks */
+    uint32_t hash;          /* rules_hash() of the wire image above; the guest recomputes it */
 } __attribute__((packed)) Rules;
 
 /* Payload of the READY reply (net_handshake.c): the guest's own nonce and
