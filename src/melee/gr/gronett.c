@@ -1,4 +1,5 @@
 #include "gronett.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -99,7 +100,9 @@ void grOnett_801E3738(void)
     grOnett_801E37F4(2);
     grOnett_801E37F4(5);
     grOnett_801E37F4(4);
-    grOnett_801E37F4(3);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grOnett_801E37F4(3);
+    }
     un_802FD8A0(grOnett_801E56FC());
     un_802FD65C();
     Ground_801C39C0();
@@ -247,7 +250,9 @@ void grOnett_801E3CE4(Ground_GObj* gobj)
     PAD_STACK(8);
 
     Ground_InitMapColl(GET_JOBJ(gobj), gp->map_id);
-    grAnime_801C7FF8(gobj, 0, 7, 0, 0.0f, 0.0f);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grAnime_801C7FF8(gobj, 0, 7, 0, 0.0f, 0.0f);
+    }
 
     gp->u.onett_building.state = -1;
     gp->u.onett_building.next_state = 0;
@@ -258,8 +263,12 @@ void grOnett_801E3CE4(Ground_GObj* gobj)
     gp->xC_callback = NULL;
     gp->x10_flags.b5 = 1;
 
-    mpJointSetCb1(3, gp, grOnett_801E40E4);
-    mpJointSetCb1(4, gp, grOnett_801E40E4);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        mpJointSetCb1(3, gp, grOnett_801E40E4);
+    }
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        mpJointSetCb1(4, gp, grOnett_801E40E4);
+    }
 }
 
 bool grOnett_801E3D98(Ground_GObj* gobj)
