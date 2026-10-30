@@ -32,7 +32,6 @@ struct GameCache;
 #define GMSQUAD_SIZE 4          /* fighters per squad, the coin pick included */
 #define GMSQUAD_EXTRA (GMSQUAD_SIZE - 1)
 #define GMSQUAD_STOCKS_PER_FIGHTER 1
-#define GMSQUAD_STOCKS (GMSQUAD_SIZE * GMSQUAD_STOCKS_PER_FIGHTER)
 #define GMSQUAD_PORTS 4
 #define GMSQUAD_NONE 0xFF
 
@@ -48,6 +47,8 @@ extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
 bool gmSquad_ModeAllowed(void);
 int gmSquad_Count(int port);
 bool gmSquad_Any(void);
+/// Stocks a squad match gives everyone: the biggest squad's size.
+int gmSquad_StocksFor(void);
 void gmSquad_Clear(int port);
 void gmSquad_ClearAll(void);
 /// Changes whenever any squad changes; the preloader compares it.
@@ -60,7 +61,7 @@ u64 gmSquad_SoundMask(void);
 /// lbDvd_80017960: request squad members' files (and Kirby's copies).
 void gmSquad_AddPreloads(struct GameCache* cache);
 /// gmVsMelee_EnterVs: decide whether this match is a squad match and give
-/// everyone GMSQUAD_STOCKS stocks if it is.
+/// everyone gmSquad_StocksFor() stocks if it is.
 void gmSquad_OnEnterVs(StartMeleeData* start);
 /// Any other match (sudden death, other modes): squads off.
 void gmSquad_Disable(void);
@@ -72,6 +73,10 @@ void gmSquad_WarmFiles(void);
 bool gmSquad_HoldRespawn(s32 slot, s32 subchar);
 /// fn_8016A4C8 (every VS frame): swap held players and respawn them.
 void gmSquad_OnVsFrame(void);
+/// The HUD's stock icon i (0 = leftmost) for this player: the squad member
+/// who will be fighting by then, in their colour. False for the game's own
+/// icon (icon 0, or no squad).
+bool gmSquad_StockIconFrame(int slot, int i, f32* frame);
 
 #endif
 
