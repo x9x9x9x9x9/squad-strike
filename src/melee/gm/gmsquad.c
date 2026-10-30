@@ -18,6 +18,7 @@
 #include <melee/mn/types.h>
 #include <melee/pl/player.h>
 #include "pc/net.h"
+#include "pc/pc.h"
 
 /* Squad members after the coin pick, per port (character, colour). */
 GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
@@ -50,6 +51,9 @@ static void init(void)
 
 bool gmSquad_ModeAllowed(void)
 {
+    if (!pc_is_squad_strike_enabled()) {
+        return false; /* launcher / in-game menu: Squad Strike off */
+    }
     switch (gm_GetCurrentGameMode()) {
     case GM_VS:
         return true;
