@@ -9,15 +9,24 @@
 #include <sysdolphin/baselib/archive.h>
 
 #include "grstageexp_tables.h"
+#include "pc/pc.h"
+
+/* The setting as the stage in play was loaded with: taken once per stage
+ * load (grStageExp_Latch), so switching it in the in-game menu mid-match
+ * cannot leave a stage half expanded. */
+static int s_on = -1;
+
+void grStageExp_Latch(void)
+{
+    s_on = pc_is_stage_expansion_enabled() ? 1 : 0;
+}
 
 bool grStageExp_On(void)
 {
-    static int on = -1;
-    if (on < 0) {
-        const char* v = getenv("MELEE_STAGE_EXPANSION");
-        on = !(v != NULL && v[0] == '0');
+    if (s_on < 0) {
+        grStageExp_Latch();
     }
-    return on != 0;
+    return s_on != 0;
 }
 
 bool grStageExp_RCruiseOn(void)
