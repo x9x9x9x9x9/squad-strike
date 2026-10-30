@@ -1,4 +1,5 @@
 #include "grinishie2.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -317,7 +318,9 @@ void grInishie2_801FCF2C(HSD_GObj* gobj)
 void grInishie2_801FCFCC(Ground_GObj* arg0)
 {
     grInishie2_801FD0B4(arg0);
-    grInishie2_801FD3CC(arg0);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grInishie2_801FD3CC(arg0);
+    }
     grInishie2_801FD7A8(arg0);
     grInishie2_801FCF2C(arg0);
     lb_800115F4();
