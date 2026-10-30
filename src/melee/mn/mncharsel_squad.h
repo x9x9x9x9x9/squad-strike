@@ -100,9 +100,11 @@ static HSD_Archive* squad_icon_archive;
 static DynamicModelDesc* squad_icon_model;
 static HSD_GObj* squad_icons[4][SQUAD_ICONS_MAX];
 static u32 squad_icons_shown[4];
+/* Per door, the hover squad_preview_member last handled. */
+static u8 squad_seen_icon[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 static f32 squad_icon_dx, squad_icon_dy, squad_icon_dz;
-static f32 squad_icon_scale = 0.8f;
-static f32 squad_icon_gap = 2.1f;
+static f32 squad_icon_scale = 0.9f;
+static f32 squad_icon_gap = 2.3f;
 
 static f32 squad_env(const char* name, f32 fallback)
 {
@@ -131,8 +133,8 @@ static void squad_icons_load(void)
     squad_icon_dx = squad_env("MELEE_SQUAD_ICON_X", 0.0f);
     squad_icon_dy = squad_env("MELEE_SQUAD_ICON_Y", 0.0f);
     squad_icon_dz = squad_env("MELEE_SQUAD_ICON_Z", 0.0f);
-    squad_icon_scale = squad_env("MELEE_SQUAD_ICON_SCALE", 0.8f);
-    squad_icon_gap = squad_env("MELEE_SQUAD_ICON_GAP", 2.1f);
+    squad_icon_scale = squad_env("MELEE_SQUAD_ICON_SCALE", 0.9f);
+    squad_icon_gap = squad_env("MELEE_SQUAD_ICON_GAP", 2.3f);
     /* Returns whether it was preloaded, not whether it loaded. */
     lbArchive_80016F80(&squad_icon_archive, "IfAll");
     if (squad_icon_archive == NULL) {
@@ -158,6 +160,7 @@ static void mnCharSel_SquadReset(int canvas)
         squad_texts[i] = NULL;
         squad_shown[i] = 0;
         squad_icons_shown[i] = 0;
+        squad_seen_icon[i] = 0xFF;
         for (j = 0; j < SQUAD_ICONS_MAX; j++) {
             squad_icons[i][j] = NULL; /* freed with the last screen */
         }
@@ -503,7 +506,13 @@ static void squad_line(int port, char* out, size_t size)
 
 /* One stock icon, as the HUD makes them (ifStock_802F96D0), drawn by the
  * character select camera with the character models. */
-static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z)
+/* y is a reference height (where the first version put the model, at
+ * nametag + 2.2); rise is how far the icon's centre goes above the nametag's
+ * centre. The first version's icons (scale 0.8) measured 10.1 units above
+ * it, which pins the nametag's centre relative to the model whatever the
+ * icon's offset inside the model is. */
+static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z,
+                                   f32 rise)
 {
     HSD_GObj* gobj;
     HSD_JObj* jobj;
@@ -540,12 +549,17 @@ static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z)
     }
     HSD_JObjAnimAll(jobj);
     /* The icon sits off its model's origin (the HUD lays several out in a
-     * row from one origin): move the model sideways so the icon itself is
-     * centred on x. Its height stays where the model puts it. */
+     * row from one origin): move the model so the icon itself is centred on
+     * (x, y). */
     if (icon != NULL) {
         Vec3 at;
         lb_8000B1CC(icon, NULL, &at);
         HSD_JObjSetTranslateX(jobj, x + (x - at.x));
+        {
+            f32 off = (at.y - y) / squad_icon_scale; /* icon within model */
+            f32 tag_centre = y + off * 0.8f - 10.1f;
+            HSD_JObjSetTranslateY(jobj, y + (tag_centre + rise - at.y));
+        }
         HSD_JObjAnimAll(jobj);
     }
     return gobj;
@@ -584,6 +598,8 @@ static bool squad_icon_row(int p)
         key = (key ^ colors[i]) * 16777619u;
     }
     key = (key ^ (u32) n) * 16777619u;
+    key = (key ^ mnCharSel_803F0DFC.doors[p].p_kind) * 16777619u;
+    key = (key ^ gmMainLib_GetGameRules()->handicap) * 16777619u;
     key |= 1;
     if (key == squad_icons_shown[p]) {
         return true;
@@ -600,21 +616,37 @@ static bool squad_icon_row(int p)
         return true;
     }
 
-    /* Centre the row where the text banner sat: just above the nametag. */
+    /* The row sits just above the nametag (whose joint is at the tag's
+     * left end, vertically centred), or above the CPU level / handicap
+     * slider when the door shows one, so it covers as little of the
+     * character art as it can. Measured on a 2560x1440 screen: 1 unit is
+     * about 14 px of a 1456-wide frame. */
     lb_80011E24(mnCharSel_804D6CC0, &name_jobj,
                 mnCharSel_803F0E8C[p].name_jointl, -1);
     if (name_jobj == NULL) {
         return false;
     }
     lb_8000B1CC(name_jobj, NULL, &pos);
-    x0 = pos.x + 5.1f + squad_icon_dx - squad_icon_gap * (n - 1) / 2.0f;
-    for (i = 0; i < n; i++) {
-        if (cks[i] == GMSQUAD_NONE) {
-            continue; /* no coin pick yet: leave its place empty */
+    {
+        f32 above = 2.4f; /* tag half-height + icon half-height + a gap */
+        bool cpu = mnCharSel_803F0DFC.doors[p].p_kind == 1;
+        bool handicap = gmMainLib_GetGameRules()->handicap != 0;
+        if (cpu || handicap) {
+            above += 4.2f; /* "CPU Level" / handicap slider */
         }
-        squad_icons[p][i] = squad_icon_create(
-            cks[i], colors[i], x0 + squad_icon_gap * i,
-            pos.y + 2.2f + squad_icon_dy, pos.z + 0.5f + squad_icon_dz);
+        if (cpu && handicap) {
+            above += 2.6f; /* both sliders */
+        }
+        x0 = pos.x + 4.4f + squad_icon_dx - squad_icon_gap * (n - 1) / 2.0f;
+        for (i = 0; i < n; i++) {
+            if (cks[i] == GMSQUAD_NONE) {
+                continue; /* no coin pick yet: leave its place empty */
+            }
+            squad_icons[p][i] = squad_icon_create(
+                cks[i], colors[i], x0 + squad_icon_gap * i,
+                pos.y + 2.2f, pos.z + 0.5f + squad_icon_dz,
+                above + squad_icon_dy);
+        }
     }
     {
         static int logged;
@@ -689,6 +721,38 @@ static void squad_banners(void)
     }
 }
 
+/* Carrying a coin onto a fighter already in that squad: the portrait
+ * previews the member in its own colour (the game starts every new hover on
+ * the first free colour), so X/Y and Z carry on from it. Runs once per new
+ * hover, the frame after the game takes it, so X/Y still work after. */
+static void squad_preview_member(int p)
+{
+    struct CSSDoor* door = &mnCharSel_803F0DFC.doors[p];
+    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[p];
+    u8 ck, color;
+    int i;
+
+    if (door->sel_icon == squad_seen_icon[p] ||
+        door->sel_icon != door->sel_icon_prev)
+    {
+        return; /* no new hover, or the game hasn't taken it yet */
+    }
+    squad_seen_icon[p] = door->sel_icon;
+    if (!squad_door_shows(p, &ck, &color) || ck == (u8) pl->ckind) {
+        return; /* nothing shown, or it's the coin pick */
+    }
+    for (i = 0; i < GMSQUAD_EXTRA; i++) {
+        GmSquadMember* m = &gmSquad_rows[p][i];
+        if (m->ckind == ck && m->color != color &&
+            m->color < squad_num_colors(ck))
+        {
+            door->costume = m->color;
+            mnCharSel_8025DB34((u8) p);
+            return;
+        }
+    }
+}
+
 /* Runs at the top of mnCharSel_Scene_OnFrame, before the game hands this
  * frame's coin picks to the preloader. */
 static void mnCharSel_SquadFrame(void)
@@ -710,6 +774,7 @@ static void mnCharSel_SquadFrame(void)
             gmSquad_Clear(p); /* a closed door has no squad */
             continue;
         }
+        squad_preview_member(p);
         if (mnCharSel_804D6CF6 == 0) {
             squad_buttons(p);
         }
@@ -730,9 +795,23 @@ static void mnCharSel_SquadFrame(void)
 
     lbDvd_GetPreloadCacheScene()->game_cache.pc_squad_key = gmSquad_Key();
 
-    if (gmSquad_Any() && gmMainLib_GetGameRules()->mode == Mode_Stock) {
-        /* One stock per fighter, as the match will give everyone. */
-        gmMainLib_GetGameRules()->stock_count = GMSQUAD_STOCKS;
+    {
+        /* One stock per fighter of the biggest squad, as the match will give
+         * everyone; the player's own stock count comes back when the last
+         * squad is gone. */
+        static int saved_stocks = -1;
+        GameRules* rules = gmMainLib_GetGameRules();
+        if (gmSquad_Any() && rules->mode == Mode_Stock) {
+            if (saved_stocks < 0) {
+                saved_stocks = rules->stock_count;
+            }
+            rules->stock_count = (u8) gmSquad_StocksFor();
+        } else if (saved_stocks >= 0) {
+            if (rules->mode == Mode_Stock) {
+                rules->stock_count = (u8) saved_stocks;
+            }
+            saved_stocks = -1;
+        }
     }
 
     squad_banners();
