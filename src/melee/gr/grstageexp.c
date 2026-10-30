@@ -20,6 +20,16 @@ bool grStageExp_On(void)
     return on != 0;
 }
 
+bool grStageExp_RCruiseOn(void)
+{
+    static int on = -1;
+    if (on < 0) {
+        const char* v = getenv("MELEE_STAGE_EXPANSION_RCRUISE");
+        on = v != NULL && v[0] == '1';
+    }
+    return on != 0 && grStageExp_On();
+}
+
 /* The file's data is big-endian, as on the GameCube. */
 static void store_be32(u8* p, u32 v)
 {
@@ -38,6 +48,9 @@ void grStageExp_PatchStageFile(StKind stkind)
     if (!grStageExp_On() || (unsigned) stkind > 32 ||
         (e = grSe_Lists[stkind]) == NULL)
     {
+        return;
+    }
+    if (stkind == St_Kind_RCruise && !grStageExp_RCruiseOn()) {
         return;
     }
     arc = grDatFiles_GetArchive();
