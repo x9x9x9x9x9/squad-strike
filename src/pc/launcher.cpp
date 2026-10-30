@@ -583,6 +583,8 @@ class Launcher final : public Rml::EventListener {
         text("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         text("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
+        text("squad-strike", prefs.squad_strike ? "On" : "Off");
+        text("stage-expansion", prefs.stage_expansion ? "On" : "Off");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -811,6 +813,16 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("frozen-stadium")->Focus();
+        } else if (id == "squad-strike") {
+            prefs.squad_strike = !prefs.squad_strike;
+            save();
+            refresh_settings();
+            element("squad-strike")->Focus();
+        } else if (id == "stage-expansion") {
+            prefs.stage_expansion = !prefs.stage_expansion;
+            save();
+            refresh_settings();
+            element("stage-expansion")->Focus();
         } else if (id == "free-camera") {
             prefs.free_camera = !prefs.free_camera;
             save();
@@ -1706,6 +1718,8 @@ public:
         label("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         label("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
+        label("squad-strike", prefs.squad_strike ? "On" : "Off");
+        label("stage-expansion", prefs.stage_expansion ? "On" : "Off");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
         label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -1970,6 +1984,10 @@ public:
             prefs.hud_mode = (prefs.hud_mode + 1) % 2;
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
+        } else if (id == "squad-strike") {
+            prefs.squad_strike = !prefs.squad_strike;
+        } else if (id == "stage-expansion") {
+            prefs.stage_expansion = !prefs.stage_expansion;
         } else if (id == "free-camera") {
             prefs.free_camera = !prefs.free_camera;
         } else if (id == "ucf") {
@@ -2326,6 +2344,26 @@ extern "C" bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
 extern "C" bool pc_is_unlock_all_enabled(void) {
     bool unlock_all, frozen;
     return pc_net_rules(&unlock_all, &frozen) ? unlock_all : prefs.unlock_all;
+}
+extern "C" bool pc_net_rule_flags(unsigned* flags);
+/* Squad Strike and Stage Expansion change the simulation, so in a netplay
+ * session the host's settings (carried in RULES) decide for both peers. The
+ * environment overrides the launcher's preference offline. */
+extern "C" bool pc_is_squad_strike_enabled(void) {
+    unsigned flags;
+    if (pc_net_rule_flags(&flags)) {
+        return (flags & PC_RULE_SQUAD_STRIKE) != 0;
+    }
+    static const char* env = std::getenv("MELEE_SQUAD_STRIKE");
+    return env ? env[0] != '0' : prefs.squad_strike;
+}
+extern "C" bool pc_is_stage_expansion_enabled(void) {
+    unsigned flags;
+    if (pc_net_rule_flags(&flags)) {
+        return (flags & PC_RULE_STAGE_EXPANSION) != 0;
+    }
+    static const char* env = std::getenv("MELEE_STAGE_EXPANSION");
+    return env ? env[0] != '0' : prefs.stage_expansion;
 }
 extern "C" bool pc_is_frozen_stadium_enabled(void) {
     bool unlock_all, frozen;
