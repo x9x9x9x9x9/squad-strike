@@ -91,6 +91,10 @@ uint16_t VIPadFrameBufferWidth(uint16_t width);
 bool pc_is_custom_textures_enabled(void);
 bool pc_is_unlock_all_enabled(void);
 bool pc_is_frozen_stadium_enabled(void);
+/* Squad Strike / Stage Expansion: launcher Gameplay settings (and the
+ * in-game menu), synced through netplay RULES. */
+bool pc_is_squad_strike_enabled(void);
+bool pc_is_stage_expansion_enabled(void);
 bool pc_is_free_camera_enabled(void);
 bool pc_is_ucf_enabled(void);
 int pc_get_hud_mode(void);
