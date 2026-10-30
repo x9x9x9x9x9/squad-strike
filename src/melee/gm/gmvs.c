@@ -1,6 +1,7 @@
 #include "gmvs.h"
 #ifdef TARGET_PC
 #include <melee/gm/gmsquad.h>
+#include <melee/gr/grstageexp.h>
 #endif
 
 #include <Runtime/platform.h>
@@ -2046,6 +2047,9 @@ void fn_8016E730(StartMeleeData* arg0)
     mpColl_80041C78();
     Ground_801C0378(0x40);
     Stage_802251E8(arg0->rules.stkind, NULL);
+#ifdef TARGET_PC
+    grStageExp_PatchStageFile(arg0->rules.stkind);
+#endif
 
     r30 = &controller;
 
