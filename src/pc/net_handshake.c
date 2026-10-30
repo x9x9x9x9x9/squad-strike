@@ -129,7 +129,7 @@ static uint64_t s_direct_idle_ns;
 static bool s_rules_on; /* a RULES set is in force (host or guest) */
 static bool s_rules_frozen;
 static unsigned s_rules_flags; /* PC_RULE_* */
-static bool s_rules_saved; /* guest: s_rules_orig holds its own values */
+static bool s_rules_saved;     /* guest: s_rules_orig holds its own values */
 static Rules s_rules_orig;
 static uint64_t s_nonce_local;   /* ours this session; 0: not drawn yet */
 static uint32_t s_nonce_session; /* net.session s_nonce_local was drawn for */
@@ -234,9 +234,9 @@ static void rules_capture(Rules* ru) {
     ru->item_freq = p->item_freq;
     ru->item_mask = p->item_mask;
     ru->stage_mask = p->stage_mask;
-    ru->frozen_stadium = (uint8_t) ((pc_is_frozen_stadium_enabled() ? PC_RULE_FROZEN_STADIUM : 0) |
-                                    (pc_is_squad_strike_enabled() ? PC_RULE_SQUAD_STRIKE : 0) |
-                                    (pc_is_stage_expansion_enabled() ? PC_RULE_STAGE_EXPANSION : 0));
+    ru->frozen_stadium = (uint8_t)((pc_is_frozen_stadium_enabled() ? PC_RULE_FROZEN_STADIUM : 0) |
+                                   (pc_is_squad_strike_enabled() ? PC_RULE_SQUAD_STRIKE : 0) |
+                                   (pc_is_stage_expansion_enabled() ? PC_RULE_STAGE_EXPANSION : 0));
 }
 
 static void rules_apply(const Rules* ru, bool from_peer) {
