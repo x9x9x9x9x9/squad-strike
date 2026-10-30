@@ -91,6 +91,12 @@ struct GamePrefs* gmMainLib_GetGamePrefs(void) {
 bool pc_is_frozen_stadium_enabled(void) {
     return true;
 }
+bool pc_is_squad_strike_enabled(void) {
+    return false;
+}
+bool pc_is_stage_expansion_enabled(void) {
+    return false;
+}
 int pc_net_recv_reliable(uint8_t* t, void* p, int max) {
     (void)t;
     (void)p;
