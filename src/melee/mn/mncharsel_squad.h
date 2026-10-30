@@ -162,6 +162,13 @@ static void mnCharSel_SquadReset(int canvas)
     squad_icons_load();
 }
 
+/* A coin pick's colour as character select has it right now (X/Y change
+ * the door's costume at once; players[].color only follows on leaving). */
+static u8 squad_coin_color(int port)
+{
+    return mnCharSel_803F0DFC.doors[port].costume;
+}
+
 static bool squad_door_open(int port)
 {
     u8 type = mnCharSel_804D6CB0->vs.start.players[port].slot_type;
@@ -190,7 +197,7 @@ static bool squad_clash(int port, u8 ck, u8 color)
             continue;
         }
         pl = &mnCharSel_804D6CB0->vs.start.players[p];
-        if ((u8) pl->ckind == ck && pl->color == color) {
+        if ((u8) pl->ckind == ck && squad_coin_color(p) == color) {
             return true;
         }
         for (i = 0; i < GMSQUAD_EXTRA; i++) {
@@ -281,11 +288,13 @@ static int squad_hovered(struct CSSCursorData* cursor)
     return -1;
 }
 
-/* Which member of this port's squad the free pointer is on, or -1. */
-static int squad_member_under_cursor(int port)
+/* Which squad member this port's free pointer is on: its own first, else a
+ * CPU's (whose squad this player builds by holding the CPU's coin). Returns
+ * the member's index and sets *owner to its port, or returns -1. */
+static int squad_member_under_cursor(int port, int* owner)
 {
     struct CSSCursorData* cursor;
-    int ck, i;
+    int ck, i, q;
     if (port < 0 || port >= 4 || mnCharSel_804D6CB0 == NULL ||
         mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1 ||
         !gmSquad_ModeAllowed())
@@ -300,9 +309,16 @@ static int squad_member_under_cursor(int port)
     if (ck < 0) {
         return -1;
     }
-    for (i = 0; i < GMSQUAD_EXTRA; i++) {
-        if (gmSquad_rows[port][i].ckind == (u8) ck) {
-            return i;
+    for (q = 0; q < 4; q++) {
+        int who = (port + q) % 4; /* own squad first */
+        if (who != port && mnCharSel_803F0DFC.doors[who].p_kind != 1) {
+            continue; /* other humans recolour their own members */
+        }
+        for (i = 0; i < GMSQUAD_EXTRA; i++) {
+            if (gmSquad_rows[who][i].ckind == (u8) ck) {
+                *owner = who;
+                return i;
+            }
         }
     }
     return -1;
@@ -311,7 +327,8 @@ static int squad_member_under_cursor(int port)
 /* mnCharSel_CostumeChange asks: is this port's X/Y ours this frame? */
 static bool mnCharSel_SquadTakesXY(int port)
 {
-    return squad_member_under_cursor(port) >= 0;
+    int owner;
+    return squad_member_under_cursor(port, &owner) >= 0;
 }
 
 static void squad_add(int target, u8 ck)
@@ -367,9 +384,10 @@ static void squad_buttons(int port)
     if (pressed & (HSD_PAD_X | HSD_PAD_Y)) {
         /* Pointing at one of your members: X/Y recolour it, like the coin
          * pick (mnCharSel_CostumeChange leaves these presses to us). */
-        int index = squad_member_under_cursor(port);
+        int owner = port;
+        int index = squad_member_under_cursor(port, &owner);
         if (index >= 0) {
-            if (squad_cycle_color(port, index,
+            if (squad_cycle_color(owner, index,
                                   (pressed & HSD_PAD_X) ? 1 : -1))
             {
                 sfxMove();
@@ -510,7 +528,7 @@ static bool squad_icon_row(int p)
     }
     if (gmSquad_Count(p) != 0) {
         cks[n] = (u8) pl->ckind < 26 ? (u8) pl->ckind : GMSQUAD_NONE;
-        colors[n] = pl->color;
+        colors[n] = squad_coin_color(p);
         n++;
         for (i = 0; i < GMSQUAD_EXTRA; i++) {
             if (gmSquad_rows[p][i].ckind < 26) {
