@@ -110,6 +110,16 @@
               </span>
               <button id="frozen-stadium" class="value">Off</button>
             </div>
+            <div class="row" data-desc="1v1 VS teams of up to four fighters, one stock each. Z on character select adds a fighter.">
+              <span class="name">Squad Strike<span class="detail">1v1 VS teams of up to four fighters, one stock each. Z on character select adds a fighter.</span>
+              </span>
+              <button id="squad-strike" class="value">On</button>
+            </div>
+            <div class="row" data-desc="Hazard-free layouts for Peach's Castle, Onett, Mute City, Jungle Japes and more. Applies from the next stage loaded.">
+              <span class="name">Stage Expansion<span class="detail">Hazard-free layouts for Peach's Castle, Onett, Mute City, Jungle Japes and more. Applies from the next stage loaded.</span>
+              </span>
+              <button id="stage-expansion" class="value">On</button>
+            </div>
             <div class="row" data-desc="Unlock 360° orbital rotation and zoom distance in pause mode.">
               <span class="name">Free camera<span class="detail">Unlock 360° orbital rotation and zoom distance in pause mode.</span>
               </span>
