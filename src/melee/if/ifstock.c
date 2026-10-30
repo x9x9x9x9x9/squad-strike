@@ -1,4 +1,7 @@
 #include "ifstock.h"
+#ifdef TARGET_PC
+#include <melee/gm/gmsquad.h>
+#endif
 
 #include <melee/gm/forward.h>
 #include <melee/sc/forward.h>
@@ -182,8 +185,19 @@ void ifStock_802F8298(HSD_GObj* gobj)
             }
             HSD_JObjReqAnimAll(jobj2,
                                ifStock_804A157C[user_data->player].anim[i]);
+#ifdef TARGET_PC
+            {
+                /* Squad Strike: each stock shows who fights it, in order. */
+                f32 frame;
+                if (!gmSquad_StockIconFrame(user_data->player, i, &frame)) {
+                    frame = ifStock_802F8298_tobj_frame(user_data->player);
+                }
+                HSD_TObjReqAnimAll(jobj2->u.dobj->mobj->tobj, frame);
+            }
+#else
             HSD_TObjReqAnimAll(jobj2->u.dobj->mobj->tobj,
                                ifStock_802F8298_tobj_frame(user_data->player));
+#endif
             HSD_AObjSetRate(jobj2->u.dobj->mobj->tobj->aobj, 0.0f);
         }
     } else {
