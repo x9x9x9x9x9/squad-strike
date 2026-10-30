@@ -753,6 +753,26 @@ static void squad_preview_member(int p)
     }
 }
 
+/* One stock per fighter of the biggest squad, as the match will give
+ * everyone; the player's own stock count comes back when the last squad is
+ * gone. */
+static void squad_sync_stocks(void)
+{
+    static int saved_stocks = -1;
+    GameRules* rules = gmMainLib_GetGameRules();
+    if (gmSquad_Any() && rules->mode == Mode_Stock) {
+        if (saved_stocks < 0) {
+            saved_stocks = rules->stock_count;
+        }
+        rules->stock_count = (u8) gmSquad_StocksFor();
+    } else if (saved_stocks >= 0) {
+        if (rules->mode == Mode_Stock) {
+            rules->stock_count = (u8) saved_stocks;
+        }
+        saved_stocks = -1;
+    }
+}
+
 /* Runs at the top of mnCharSel_Scene_OnFrame, before the game hands this
  * frame's coin picks to the preloader. */
 static void mnCharSel_SquadFrame(void)
@@ -763,9 +783,16 @@ static void mnCharSel_SquadFrame(void)
         return;
     }
     gmSquad_CheckSession();
-    if (mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1 ||
-        !gmSquad_ModeAllowed())
-    {
+    if (mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1) {
+        return;
+    }
+    if (!gmSquad_ModeAllowed()) {
+        /* Squad Strike switched off (launcher or in-game menu): drop any
+         * squads, their icons, and the stock count they set. */
+        gmSquad_ClearAll();
+        lbDvd_GetPreloadCacheScene()->game_cache.pc_squad_key = gmSquad_Key();
+        squad_sync_stocks();
+        squad_banners();
         return;
     }
 
@@ -795,24 +822,6 @@ static void mnCharSel_SquadFrame(void)
 
     lbDvd_GetPreloadCacheScene()->game_cache.pc_squad_key = gmSquad_Key();
 
-    {
-        /* One stock per fighter of the biggest squad, as the match will give
-         * everyone; the player's own stock count comes back when the last
-         * squad is gone. */
-        static int saved_stocks = -1;
-        GameRules* rules = gmMainLib_GetGameRules();
-        if (gmSquad_Any() && rules->mode == Mode_Stock) {
-            if (saved_stocks < 0) {
-                saved_stocks = rules->stock_count;
-            }
-            rules->stock_count = (u8) gmSquad_StocksFor();
-        } else if (saved_stocks >= 0) {
-            if (rules->mode == Mode_Stock) {
-                rules->stock_count = (u8) saved_stocks;
-            }
-            saved_stocks = -1;
-        }
-    }
-
+    squad_sync_stocks();
     squad_banners();
 }
