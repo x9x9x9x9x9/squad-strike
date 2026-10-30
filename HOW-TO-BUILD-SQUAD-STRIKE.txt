@@ -1,0 +1,31 @@
+Squad Strike for melee-pc - getting a Windows build
+=====================================================
+
+These files are a change to melee-pc (github.com/999sian/melee-pc), made
+against commit 0fb0af3 (v0.4.2, 21 Oct 2026). GitHub builds it for free.
+
+1. Sign in to github.com and open https://github.com/999sian/melee-pc
+   Click "Fork", then "Create fork".
+2. In your fork, open the "Actions" tab and click the green button to
+   enable workflows.
+3. In your fork's main page: "Add file" -> "Upload files".
+   Drag in the CONTENTS of this folder (src, cmake, docs and README.md;
+   not this .txt file). GitHub keeps the folder paths and replaces the
+   existing files.
+   At the bottom choose "Create a new branch", name it squad-strike,
+   and click "Propose changes" (you don't need to open a pull request).
+4. Open "Actions" again. A "Build" run starts for the squad-strike branch.
+   When the "Windows (x86_64)" job is green (about 20-30 minutes), open the
+   run, scroll to "Artifacts" and download "windows-x86_64".
+   It contains Melee-Windows-x86_64.zip: unzip it and run melee.exe with
+   your own GALE01 disc image, as with any melee-pc build.
+   (Other jobs in the run, like macOS or iOS, may fail; you don't need them.)
+5. For online play, send your friend that same zip. Netplay only connects
+   two copies of the same build.
+
+Playing: see docs/squad-strike.md. Squads work offline and in
+VS Mode -> ONLINE -> LAN PLAY or DIRECT CONNECT (not Unranked/Ranked).
+
+If upstream melee-pc has moved on since 0fb0af3 and the build fails, the
+uploaded files may be older than your fork's: send the error log and they
+can be brought up to date (squad-strike.patch has the exact change).

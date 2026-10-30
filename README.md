@@ -99,6 +99,7 @@ table is right and the other one is stale.
 | Replay recording (`.slp`) | done | Set `MELEE_SLP_DIR` to record offline or online VS matches; off by default. |
 | Online play (LAN / direct IP) | partial | LAN/direct-IP plus signed internet Direct, Unranked and Ranked implemented. Every datagram is authenticated (protocol 9), so both peers must run the same build, and a connect code is 8 characters after the `#`. Phone VPN to home broadband Direct Connect reached results; broader two-NAT and live ranked acceptance remain pending. See platform matrix below. |
 | RetroAchievements | planned | |
+| Squad Strike (tag team) | partial | 1v1 squads of up to four fighters, offline and in LAN / Direct netplay; see [docs/squad-strike.md](docs/squad-strike.md). New; not yet tested in play. |
 
 The phases behind the planned rows, and why they are ordered that way, are in
 [ROADMAP.md](ROADMAP.md).

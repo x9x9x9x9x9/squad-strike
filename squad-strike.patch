@@ -1,0 +1,1317 @@
+From 9af84909d26fc049ecac7bc6097af1f3d3cc6740 Mon Sep 17 00:00:00 2001
+From: Chris <chris_bass_player@yahoo.com>
+Date: Thu, 29 Oct 2026 22:38:48 -0500
+Subject: [PATCH] Add Squad Strike (1v1 tag team) for offline and LAN/Direct
+ netplay
+
+Port of the Squad Strike v4.0.1 Gecko codes. Each player builds a squad of
+up to four fighters on character select (Z adds, Z on your coin pick
+removes, Z on a member recolours); one stock each, the next fighter drops in
+on the revival platform.
+
+Instead of v4's mid-match streaming, the AllM/AllA heaps are 4x, ARAM is
+64 MB and the sound allowance 2x, so every member is preloaded and its
+archives parsed during match setup. A swap never touches the disc and is
+plain snapshotted game state, so rollback netplay stays deterministic.
+Unranked and Ranked are unchanged.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01LGEra9KPAZ22ueoBzgh3ww
+---
+ README.md                      |   1 +
+ cmake/game_sources.manifest    |   1 +
+ src/melee/gm/gm_1601.c         |   8 +
+ src/melee/gm/gm_16A2.c         |   6 +
+ src/melee/gm/gmsquad.c         | 411 +++++++++++++++++++++++++++++++++
+ src/melee/gm/gmsquad.h         |  78 +++++++
+ src/melee/gm/gmvs.c            |   6 +
+ src/melee/gm/gmvsmelee.c       |  12 +
+ src/melee/lb/lbaudio_ax.c      |   4 +
+ src/melee/lb/lbdvd.c           |  10 +-
+ src/melee/lb/lbheap.c          |  10 +
+ src/melee/lb/lbmemory.c        |   6 +
+ src/melee/lb/types.h           |  11 +
+ src/melee/mn/mncharsel.c       |  14 ++
+ src/melee/mn/mncharsel_squad.h | 403 ++++++++++++++++++++++++++++++++
+ src/melee/pl/player.c          |  14 ++
+ src/melee/pl/player.h          |   5 +
+ src/pc/pc.h                    |   5 +-
+ 18 files changed, 1002 insertions(+), 3 deletions(-)
+ create mode 100644 src/melee/gm/gmsquad.c
+ create mode 100644 src/melee/gm/gmsquad.h
+ create mode 100644 src/melee/mn/mncharsel_squad.h
+
+diff --git a/README.md b/README.md
+index a25befb..5760bce 100644
+--- a/README.md
++++ b/README.md
+@@ -99,6 +99,7 @@ table is right and the other one is stale.
+ | Replay recording (`.slp`) | done | Set `MELEE_SLP_DIR` to record offline or online VS matches; off by default. |
+ | Online play (LAN / direct IP) | partial | LAN/direct-IP plus signed internet Direct, Unranked and Ranked implemented. Every datagram is authenticated (protocol 9), so both peers must run the same build, and a connect code is 8 characters after the `#`. Phone VPN to home broadband Direct Connect reached results; broader two-NAT and live ranked acceptance remain pending. See platform matrix below. |
+ | RetroAchievements | planned | |
++| Squad Strike (tag team) | partial | 1v1 squads of up to four fighters, offline and in LAN / Direct netplay; see [docs/squad-strike.md](docs/squad-strike.md). New; not yet tested in play. |
+ 
+ The phases behind the planned rows, and why they are ordered that way, are in
+ [ROADMAP.md](ROADMAP.md).
+diff --git a/cmake/game_sources.manifest b/cmake/game_sources.manifest
+index b16c58a..e66550b 100644
+--- a/cmake/game_sources.manifest
++++ b/cmake/game_sources.manifest
+@@ -528,6 +528,7 @@ src/melee/gm/gmscene.c
+ src/melee/gm/gmscmemcard.c
+ src/melee/gm/gmsinglebutton.c
+ src/melee/gm/gmslomo.c
++src/melee/gm/gmsquad.c
+ src/melee/gm/gmstaffroll.c
+ src/melee/gm/gmstamina.c
+ src/melee/gm/gmsupersudden.c
+diff --git a/src/melee/gm/gm_1601.c b/src/melee/gm/gm_1601.c
+index 1beab15..181b6c7 100644
+--- a/src/melee/gm/gm_1601.c
++++ b/src/melee/gm/gm_1601.c
+@@ -1,4 +1,7 @@
+ #include "gm_1601.h"
++#ifdef TARGET_PC
++#include <melee/gm/gmsquad.h>
++#endif
+ #include <stdlib.h>
+ 
+ #include "pc/pc.h"
+@@ -3490,6 +3493,11 @@ void fn_8016719C(s32 slot, s32 subchar)
+     StKind stkind;
+     struct fn_8016719C_xC_bits* temp_r4;
+ 
++#ifdef TARGET_PC
++    if (gmSquad_HoldRespawn(slot, subchar)) {
++        return; /* a squad member is due: gmSquad_OnVsFrame respawns them */
++    }
++#endif
+     scene_state = gmVs_GetSceneState();
+     stkind = gm_GetStKind();
+     if (Stage_80224DC8(stkind) != 0) {
+diff --git a/src/melee/gm/gm_16A2.c b/src/melee/gm/gm_16A2.c
+index 9ea07d7..3cc18cf 100644
+--- a/src/melee/gm/gm_16A2.c
++++ b/src/melee/gm/gm_16A2.c
+@@ -1,4 +1,7 @@
+ #include "gm_16A2.h"
++#ifdef TARGET_PC
++#include <melee/gm/gmsquad.h>
++#endif
+ 
+ #include <stddef.h>
+ 
+@@ -767,6 +770,9 @@ void fn_8016A4C8(void)
+ 
+     PAD_STACK(0xC4);
+ 
++#ifdef TARGET_PC
++    gmSquad_OnVsFrame();
++#endif
+     gp = &lbl_8046B488;
+     has_active_spawn = 0;
+     if (lbl_8046B488.unk_10_b1) {
+diff --git a/src/melee/gm/gmsquad.c b/src/melee/gm/gmsquad.c
+new file mode 100644
+index 0000000..d9ca385
+--- /dev/null
++++ b/src/melee/gm/gmsquad.c
+@@ -0,0 +1,411 @@
++#include "gmsquad.h"
++
++#ifdef TARGET_PC
++
++#include <string.h>
++
++#include "gm_1601.h"
++#include "gm_1A3F.h"
++#include "gmonlinemode.h"
++#include "gmvs.h"
++#include "types.h"
++#include <melee/ef/efasync.h>
++#include <melee/ft/ft_0D4D.h>
++#include <melee/ft/ftdata.h>
++#include <melee/ft/ftlib.h>
++#include <melee/lb/lbaudio_ax.h>
++#include <melee/lb/types.h>
++#include <melee/mn/types.h>
++#include <melee/pl/player.h>
++#include "pc/net.h"
++
++/* Squad members after the coin pick, per port (character, colour). */
++GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
++
++/* Whether the table above has been initialised, and for which netplay
++ * session (pc_net_seed()) or 0 for offline play. */
++static bool s_init;
++static u32 s_session;
++
++/* The match in progress is a squad match. */
++static bool s_live;
++/* Respawns held by gmSquad_HoldRespawn, waiting for gmSquad_OnVsFrame. */
++static bool s_held[GMSQUAD_PORTS];
++/* Set while gmSquad_OnVsFrame calls fn_8016719C itself. */
++static bool s_respawning;
++
++static void init(void)
++{
++    if (!s_init) {
++        memset(gmSquad_rows, GMSQUAD_NONE, sizeof(gmSquad_rows));
++        s_init = true;
++    }
++}
++
++bool gmSquad_ModeAllowed(void)
++{
++    switch (gm_GetCurrentGameMode()) {
++    case GM_VS:
++        return true;
++    case GM_ONLINE:
++        /* Matchmaking pairs strangers on the vanilla ruleset: no squads. */
++        return gmOnline_GetKind() == ONLINE_KIND_LAN ||
++               gmOnline_GetKind() == ONLINE_KIND_DIRECT;
++    default:
++        return false;
++    }
++}
++
++int gmSquad_Count(int port)
++{
++    int n = 0;
++    int i;
++    init();
++    if (port < 0 || port >= GMSQUAD_PORTS) {
++        return 0;
++    }
++    for (i = 0; i < GMSQUAD_EXTRA; i++) {
++        if (gmSquad_rows[port][i].ckind != GMSQUAD_NONE) {
++            n++;
++        }
++    }
++    return n;
++}
++
++bool gmSquad_Any(void)
++{
++    int p;
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        if (gmSquad_Count(p) != 0) {
++            return true;
++        }
++    }
++    return false;
++}
++
++void gmSquad_Clear(int port)
++{
++    init();
++    if (port >= 0 && port < GMSQUAD_PORTS) {
++        memset(gmSquad_rows[port], GMSQUAD_NONE, sizeof(gmSquad_rows[port]));
++    }
++}
++
++void gmSquad_ClearAll(void)
++{
++    init();
++    memset(gmSquad_rows, GMSQUAD_NONE, sizeof(gmSquad_rows));
++}
++
++u32 gmSquad_Key(void)
++{
++    u32 key = 2166136261u;
++    const u8* p = (const u8*) gmSquad_rows;
++    size_t i;
++    init();
++    for (i = 0; i < sizeof(gmSquad_rows); i++) {
++        key = (key ^ p[i]) * 16777619u;
++    }
++    return key;
++}
++
++void gmSquad_CheckSession(void)
++{
++    u32 session = pc_net_active() ? (pc_net_seed() | 1u) : 0;
++    init();
++    if (session != s_session) {
++        /* Both peers start a session with the same (empty) squads. */
++        gmSquad_ClearAll();
++        s_session = session;
++    }
++}
++
++u64 gmSquad_SoundMask(void)
++{
++    u64 mask = 0;
++    int p, i;
++    init();
++    if (!gmSquad_ModeAllowed()) {
++        return 0;
++    }
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        for (i = 0; i < GMSQUAD_EXTRA; i++) {
++            u8 ck = gmSquad_rows[p][i].ckind;
++            if (ck < ChKind_Max) {
++                mask |= lbAudioAx_80026E84(ck);
++            }
++        }
++    }
++    return mask;
++}
++
++/* ---- preloading ---------------------------------------------------------- */
++
++void gmSquad_AddPreloads(struct GameCache* cache)
++{
++    CharacterKind lineup[GMSQUAD_PORTS * GMSQUAD_SIZE];
++    u8 kirby_colors[GMSQUAD_PORTS * GMSQUAD_SIZE];
++    int n_lineup = 0;
++    int n_kirby = 0;
++    bool any_coin = false;
++    int p, i, j;
++
++    init();
++    if (!gmSquad_ModeAllowed() || !gmSquad_Any()) {
++        return;
++    }
++    /* Character select releases every character for a moment on entry so
++     * the last match's files are freed rather than moved; adding squads in
++     * that moment would keep them alive. Only add while a coin is down. */
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        if (cache->entries[p].char_id != ChKind_None) {
++            any_coin = true;
++        }
++    }
++    if (!any_coin) {
++        return;
++    }
++
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        CharacterKind coin = cache->entries[p].char_id;
++        if (coin < ChKind_Max) {
++            lineup[n_lineup++] = coin;
++            if (coin == CKind_Kirby) {
++                kirby_colors[n_kirby++] = cache->entries[p].color;
++            }
++        }
++        for (i = 0; i < GMSQUAD_EXTRA; i++) {
++            GmSquadMember* m = &gmSquad_rows[p][i];
++            if (m->ckind >= ChKind_Max) {
++                continue;
++            }
++            Player_80031CB0(m->ckind, m->color);
++            lineup[n_lineup++] = m->ckind;
++            if (m->ckind == CKind_Kirby) {
++                kirby_colors[n_kirby++] = m->color;
++            }
++        }
++    }
++
++    /* Every Kirby can copy anyone in either lineup; the preloader ignores
++     * repeated requests. */
++    for (j = 0; j < n_kirby; j++) {
++        for (i = 0; i < n_lineup; i++) {
++            if (lineup[i] != CKind_Kirby) {
++                Player_80031D2C(lineup[i], kirby_colors[j]);
++            }
++        }
++    }
++}
++
++/* ---- match ------------------------------------------------------------- */
++
++void gmSquad_Disable(void)
++{
++    s_live = false;
++    memset(s_held, 0, sizeof(s_held));
++    s_respawning = false;
++}
++
++void gmSquad_OnEnterVs(StartMeleeData* start)
++{
++    int players = 0;
++    bool any = false;
++    int i;
++
++    gmSquad_Disable();
++    init();
++    if (!gmSquad_ModeAllowed() || start->rules.match_kind != MatchKind_Stock) {
++        return;
++    }
++    for (i = 0; i < GM_MAX_PLAYERS; i++) {
++        if (start->players[i].slot_type == Gm_PKind_NA) {
++            continue;
++        }
++        players++;
++        if (i < GMSQUAD_PORTS && gmSquad_Count(i) != 0) {
++            any = true;
++        }
++    }
++    if (!any || players != 2) {
++        return;
++    }
++    s_live = true;
++    for (i = 0; i < GM_MAX_PLAYERS; i++) {
++        if (start->players[i].slot_type != Gm_PKind_NA) {
++            start->players[i].stocks = GMSQUAD_STOCKS;
++        }
++    }
++}
++
++/* What Fighter_Create loads for this fighter, so its archives are parsed now
++ * (during setup, which netplay never rolls back) instead of at the swap.
++ * Re-parsing an already relocated archive after a rollback would corrupt
++ * it; these loaders cache their results and do nothing the second time. */
++static void warm_fighter(s32 kind, u8 color)
++{
++    if (kind < 0) {
++        return;
++    }
++    ftData_8008572C(kind);
++    efAsync_LoadSync(ftData_UnkBytePerCharacter[kind]);
++    ftData_80085820(kind, color);
++    ftData_80085A14(kind);
++}
++
++static void warm_copy(s32 kind, u8 kirby_color)
++{
++    if (kind >= 0 && kind != Ft_Kind_Kirby) {
++        Player_80031DA8(kind, kirby_color);
++    }
++}
++
++void gmSquad_WarmFiles(void)
++{
++    CharacterKind lineup[GMSQUAD_PORTS][GMSQUAD_SIZE];
++    u8 colors[GMSQUAD_PORTS][GMSQUAD_SIZE];
++    int count[GMSQUAD_PORTS];
++    int p, i, q, k;
++
++    if (!s_live) {
++        return;
++    }
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        count[p] = 0;
++        if (Player_GetPlayerSlotType(p) == Gm_PKind_NA) {
++            continue;
++        }
++        lineup[p][count[p]] = Player_GetPlayerCharacter(p);
++        colors[p][count[p]] = Player_GetCostumeId(p);
++        count[p]++;
++        for (i = 0; i < GMSQUAD_EXTRA; i++) {
++            GmSquadMember* m = &gmSquad_rows[p][i];
++            if (m->ckind < ChKind_Max) {
++                s32 extra;
++                s32 kind = Player_PcFighterKinds(m->ckind, &extra);
++                warm_fighter(kind, m->color);
++                warm_fighter(extra, m->color);
++                lineup[p][count[p]] = m->ckind;
++                colors[p][count[p]] = m->color;
++                count[p]++;
++            }
++        }
++    }
++    /* Kirby copies: each Kirby (in its colour) copies anyone on the other
++     * side, whoever is on stage when it swallows them. */
++    for (p = 0; p < GMSQUAD_PORTS; p++) {
++        for (i = 0; i < count[p]; i++) {
++            if (lineup[p][i] != CKind_Kirby) {
++                continue;
++            }
++            for (q = 0; q < GMSQUAD_PORTS; q++) {
++                if (q == p) {
++                    continue;
++                }
++                for (k = 0; k < count[q]; k++) {
++                    s32 extra;
++                    s32 kind = Player_PcFighterKinds(lineup[q][k], &extra);
++                    warm_copy(kind, colors[p][i]);
++                    warm_copy(extra, colors[p][i]);
++                }
++            }
++        }
++    }
++}
++
++/* The squad member due now for this player, or NULL to respawn as is. */
++static GmSquadMember* due_member(s32 slot)
++{
++    StaticPlayer* ps;
++    int lost;
++    int index;
++    GmSquadMember* m;
++
++    if (!s_live || slot < 0 || slot >= GMSQUAD_PORTS) {
++        return NULL;
++    }
++    ps = Player_GetPtrForSlot(slot);
++    if (ps->pkind != Gm_PKind_Human && ps->pkind != Gm_PKind_Cpu) {
++        return NULL;
++    }
++    if (ps->player_state != 2 || ps->stocks <= 0) {
++        return NULL;
++    }
++    lost = GMSQUAD_STOCKS - ps->stocks;
++    if (lost <= 0 || lost % GMSQUAD_STOCKS_PER_FIGHTER != 0) {
++        return NULL;
++    }
++    index = lost / GMSQUAD_STOCKS_PER_FIGHTER - 1;
++    if (index < 0 || index >= GMSQUAD_EXTRA) {
++        return NULL;
++    }
++    m = &gmSquad_rows[slot][index];
++    if (m->ckind >= ChKind_Max || m->ckind == ps->ckind) {
++        return NULL;
++    }
++    return m;
++}
++
++bool gmSquad_HoldRespawn(s32 slot, s32 subchar)
++{
++    if (s_respawning || subchar != 0 || due_member(slot) == NULL) {
++        return false;
++    }
++    /* Don't swap here: this can run inside the dying fighter's own
++     * callbacks, and the swap frees that fighter. The next frame's
++     * gmSquad_OnVsFrame does it from the scene. */
++    s_held[slot] = true;
++    return true;
++}
++
++static void swap_in(s32 slot, GmSquadMember* m)
++{
++    StaticPlayer* ps = Player_GetPtrForSlot(slot);
++
++    Player_80031EBC(slot); /* free the fighter that's out (and Nana/Sheik) */
++    ps->player_entity[0] = NULL;
++    ps->player_entity[1] = NULL;
++    ps->transformed[0] = 0; /* not transformed: Zelda, not Sheik */
++    ps->transformed[1] = 1;
++    ps->flags.b2 = false; /* "has a second fighter": the new one decides */
++
++    Player_SetPlayerCharacter(slot, m->ckind);
++    Player_SetCostumeId(slot, m->color);
++    Player_80031AD0(slot); /* create the new fighter(s) */
++    fn_8016E124();         /* Kirby copies for everyone now present */
++    Player_80031848(slot);
++
++    if (m->ckind == CKind_PopoNana) {
++        /* The game only revives a partner that is asleep, and a new Nana
++         * isn't: put her to sleep so she drops in beside Popo. */
++        HSD_GObj* nana = ps->player_entity[ps->transformed[1]];
++        if (nana != NULL) {
++            ftCo_800D4F24(nana, 0);
++        }
++    }
++}
++
++void gmSquad_OnVsFrame(void)
++{
++    s32 slot;
++
++    if (!s_live) {
++        return;
++    }
++    for (slot = 0; slot < GMSQUAD_PORTS; slot++) {
++        GmSquadMember* m;
++        if (!s_held[slot]) {
++            continue;
++        }
++        s_held[slot] = false;
++        m = due_member(slot);
++        if (m != NULL) {
++            swap_in(slot, m);
++        }
++        s_respawning = true;
++        fn_8016719C(slot, 0);
++        s_respawning = false;
++    }
++}
++
++#endif
+diff --git a/src/melee/gm/gmsquad.h b/src/melee/gm/gmsquad.h
+new file mode 100644
+index 0000000..790dfdd
+--- /dev/null
++++ b/src/melee/gm/gmsquad.h
+@@ -0,0 +1,78 @@
++#ifndef MELEE_GM_GMSQUAD_H
++#define MELEE_GM_GMSQUAD_H
++
++/* PC only: Squad Strike (Smash Ultimate's tag team) for 1v1 VS matches.
++ *
++ * Each player builds a squad of up to four fighters on the character select
++ * screen: the coin pick, then up to three more added with Z. Every fighter
++ * gets one stock; when one is KO'd, the next drops in on the revival
++ * platform. Ported from the "Squad Strike v4" Gecko codes for Dolphin.
++ *
++ * On PC the preload heap and ARAM are enlarged (lbheap.c, lbmemory.c, pc.h),
++ * so every squad member's files are preloaded on character select and
++ * initialised at match setup (gmSquad_WarmFiles): nothing streams from disc
++ * during a match. That keeps the swap a plain game-state change, which the
++ * netplay snapshots roll back like any other. Squads are offered offline and
++ * in LAN / Direct netplay; never in Unranked or Ranked.
++ *
++ * All state here is ordinary game statics (melee_bss), so it is snapshotted,
++ * and every decision is a function of synced inputs. */
++
++#include <stdbool.h>
++#include <dolphin/types.h>
++#include <melee/ft/forward.h>
++#include <melee/gm/forward.h>
++#include <melee/lb/forward.h>
++#include <melee/mn/forward.h>
++
++#ifdef TARGET_PC
++
++struct GameCache;
++
++#define GMSQUAD_SIZE 4          /* fighters per squad, the coin pick included */
++#define GMSQUAD_EXTRA (GMSQUAD_SIZE - 1)
++#define GMSQUAD_STOCKS_PER_FIGHTER 1
++#define GMSQUAD_STOCKS (GMSQUAD_SIZE * GMSQUAD_STOCKS_PER_FIGHTER)
++#define GMSQUAD_PORTS 4
++#define GMSQUAD_NONE 0xFF
++
++typedef struct GmSquadMember {
++    u8 ckind; ///< ::CharacterKind, or GMSQUAD_NONE
++    u8 color;
++} GmSquadMember;
++
++/// Squad members after the coin pick, per CSS port, packed from index 0.
++extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
++
++/// Squads may exist in the current game mode (VS, or LAN/Direct online).
++bool gmSquad_ModeAllowed(void);
++int gmSquad_Count(int port);
++bool gmSquad_Any(void);
++void gmSquad_Clear(int port);
++void gmSquad_ClearAll(void);
++/// Changes whenever any squad changes; the preloader compares it.
++u32 gmSquad_Key(void);
++/// Clears squads left over from another netplay session (or offline).
++void gmSquad_CheckSession(void);
++/// Sound banks of every squad member (lbAudioAx_80026E84 masks).
++u64 gmSquad_SoundMask(void);
++
++/// lbDvd_80017960: request squad members' files (and Kirby's copies).
++void gmSquad_AddPreloads(struct GameCache* cache);
++/// gmVsMelee_EnterVs: decide whether this match is a squad match and give
++/// everyone GMSQUAD_STOCKS stocks if it is.
++void gmSquad_OnEnterVs(StartMeleeData* start);
++/// Any other match (sudden death, other modes): squads off.
++void gmSquad_Disable(void);
++/// fn_8016E124 (end of VS setup, and after each swap): initialise every
++/// squad member's preloaded files while the match is still in its lockstep
++/// setup, so no archive is first parsed mid-match.
++void gmSquad_WarmFiles(void);
++/// fn_8016719C: true to hold this respawn because a squad member is due.
++bool gmSquad_HoldRespawn(s32 slot, s32 subchar);
++/// fn_8016A4C8 (every VS frame): swap held players and respawn them.
++void gmSquad_OnVsFrame(void);
++
++#endif
++
++#endif
+diff --git a/src/melee/gm/gmvs.c b/src/melee/gm/gmvs.c
+index e995e9b..4e81d2f 100644
+--- a/src/melee/gm/gmvs.c
++++ b/src/melee/gm/gmvs.c
+@@ -1,4 +1,7 @@
+ #include "gmvs.h"
++#ifdef TARGET_PC
++#include <melee/gm/gmsquad.h>
++#endif
+ 
+ #include <Runtime/platform.h>
+ 
+@@ -1897,6 +1900,9 @@ void fn_8016E124(void)
+             }
+         }
+     }
++#ifdef TARGET_PC
++    gmSquad_WarmFiles();
++#endif
+ }
+ 
+ /// @todo The loop's SFX flag load uses a different equivalent address form.
+diff --git a/src/melee/gm/gmvsmelee.c b/src/melee/gm/gmvsmelee.c
+index 711d8ee..a85e1e7 100644
+--- a/src/melee/gm/gmvsmelee.c
++++ b/src/melee/gm/gmvsmelee.c
+@@ -1,4 +1,7 @@
+ #include "gmvsmelee.h"
++#ifdef TARGET_PC
++#include <melee/gm/gmsquad.h>
++#endif
+ 
+ #include <Runtime/platform.h>
+ 
+@@ -141,6 +144,9 @@ void gmVsMelee_ExitCss(GameModeState* state, VsModeData* vs)
+         for (i = 0; i < GM_MAX_PLAYERS; i++) {
+             mask |= lbAudioAx_80026E84(css->vs.start.players[i].ckind);
+         }
++#ifdef TARGET_PC
++        mask |= gmSquad_SoundMask();
++#endif
+         lbAudioAx_80026F2C(20);
+         lbAudioAx_8002702C(4, mask);
+         lbAudioAx_80027168();
+@@ -199,6 +205,9 @@ void gmVsMelee_EnterVs(GameModeState* state, VsModeData* vs,
+         }
+     }
+ 
++#ifdef TARGET_PC
++    gmSquad_OnEnterVs(start);
++#endif
+     gm_SetupSubColors(start);
+     gm_LoadRumbleEnabled(start);
+     gm_LoadAnnouncer();
+@@ -236,6 +245,9 @@ void gmVsMelee_EnterSuddenDeath(GameModeState* state, VsModeData* vs,
+                                 gm_StartMeleeCallback start_cb,
+                                 gm_PlayerInitCallback player_cb)
+ {
++#ifdef TARGET_PC
++    gmSquad_Disable();
++#endif
+     StartMeleeData* start = gm_GetGameModeStateEnterData(state);
+     start->rules = vs->start.rules;
+ 
+diff --git a/src/melee/lb/lbaudio_ax.c b/src/melee/lb/lbaudio_ax.c
+index a3b4ca0..0674399 100644
+--- a/src/melee/lb/lbaudio_ax.c
++++ b/src/melee/lb/lbaudio_ax.c
+@@ -2508,6 +2508,10 @@ void lbAudioAx_8002838C(void)
+ 
+     fn_80023254(5);
+     lbl_804D6444 += offsets_arr_803BC4E4[lbl_80433B44[0]][0];
++#ifdef TARGET_PC
++    /* Squad Strike: room for eight fighters' sound banks, not four. */
++    lbl_804D6444 *= 2;
++#endif
+ 
+     lbl_804D6438 = lbl_804D643C + lbl_804D6440 + lbl_804D6444;
+     lbl_804D3870 = lbl_804D6438;
+diff --git a/src/melee/lb/lbdvd.c b/src/melee/lb/lbdvd.c
+index 588c0d0..84b21d0 100644
+--- a/src/melee/lb/lbdvd.c
++++ b/src/melee/lb/lbdvd.c
+@@ -1,4 +1,7 @@
+ #include "lbdvd.h"
++#ifdef TARGET_PC
++#include <melee/gm/gmsquad.h>
++#endif
+ 
+ #include <melee/ft/forward.h>
+ #include <melee/gm/forward.h>
+@@ -268,6 +271,9 @@ void lbDvd_80017960(void)
+             }
+         }
+     }
++#ifdef TARGET_PC
++    gmSquad_AddPreloads(game_cache);
++#endif
+ }
+ 
+ static void lbDvd_80017A80(u32 unused)
+@@ -400,7 +406,7 @@ void* lbDvd_GetPreloadedArchive(ssize_t entry_num)
+         }
+     }
+ 
+-    if (i == 80) {
++    if (i == (signed) ARRAY_SIZE(preloadCache.entries)) {
+         OSRestoreInterrupts(interrupt);
+         return 0;
+     }
+@@ -676,7 +682,7 @@ int lbDvd_80018A2C(u8 arg0)
+     bool enabled = OSDisableInterrupts();
+     int i;
+ 
+-    for (i = 0; i < 0x50; i++) {
++    for (i = 0; i < (signed) ARRAY_SIZE(preloadCache.entries); i++) {
+         entry = &preloadCache.entries[i];
+         if (entry->state == 0) {
+             continue;
+diff --git a/src/melee/lb/lbheap.c b/src/melee/lb/lbheap.c
+index 7ae704e..bdc1eea 100644
+--- a/src/melee/lb/lbheap.c
++++ b/src/melee/lb/lbheap.c
+@@ -314,6 +314,16 @@ void lbHeap_80015F3C(void)
+         if (pc_region_pal && (curr_idx == 3 || curr_idx == 4)) {
+             curr_heap->size *= 2;
+         }
++        /* Squad Strike (gm/gmsquad.c) preloads up to eight fighters for a
++         * 1v1 instead of two: their data and costumes (AllM) and animations
++         * (AllA, ARAM; see PC_ARAM_SIZE). 4x either heap covers the heaviest
++         * lineup with room to spare, and the preloaded files are read-only
++         * during a match, so netplay never snapshots these heaps. */
++        if (curr_idx == LbHeapKind_AllM) {
++            curr_heap->size = desc->size * 4;
++        } else if (curr_idx == LbHeapKind_AllA) {
++            curr_heap->size = desc->size * 4;
++        }
+ #endif
+         prev_idx = desc->prev_idx;
+         if (prev_idx == LbHeapKind_Count) {
+diff --git a/src/melee/lb/lbmemory.c b/src/melee/lb/lbmemory.c
+index ae9361e..7c2a7e7 100644
+--- a/src/melee/lb/lbmemory.c
++++ b/src/melee/lb/lbmemory.c
+@@ -307,7 +307,13 @@ void lbMemory_8001564C(void)
+ 
+     _p(a_arenaLo) = ARAlloc(0x20);
+     ARFree(&freed_size);
++#ifdef TARGET_PC
++    /* The 16MB cap is for development hardware; the PC's larger ARAM
++     * (PC_ARAM_SIZE) holds Squad Strike's enlarged animation heap. */
++    _p(a_arenaHi) = ARGetSize();
++#else
+     _p(a_arenaHi) = (ARGetSize() > 0x01000000U) ? 0x01000000U : ARGetSize();
++#endif
+ 
+     _p(free_mem) = &_p(mem)[0];
+     for (i = 0; i < (int) ARRAY_SIZE(_p(mem)) - 1; i++) {
+diff --git a/src/melee/lb/types.h b/src/melee/lb/types.h
+index c8b819c..a450f81 100644
+--- a/src/melee/lb/types.h
++++ b/src/melee/lb/types.h
+@@ -276,6 +276,11 @@ struct GameCache {
+     u8 x3;
+     StKind stkind;
+     PreloadCacheSceneEntry entries[8];
++#ifdef TARGET_PC
++    /// Squad Strike (gmsquad.c): changes when a squad does, so the preloader
++    /// (lbDvd_80018254 compares this struct) requests the new members.
++    u32 pc_squad_key;
++#endif
+ };
+ 
+ struct PreloadedGameModeState {
+@@ -288,7 +293,13 @@ struct PreloadCache {
+     s32 persistent_heaps;
+     PreloadedGameModeState scene;
+     PreloadedGameModeState new_scene;
++#ifdef TARGET_PC
++    /// 80 on the GameCube; Squad Strike preloads up to eight fighters plus
++    /// Kirby's copies of them.
++    PreloadEntry entries[160];
++#else
+     PreloadEntry entries[80];
++#endif
+     s32 persistent_heap;
+     bool preloaded;
+     UNK_T x974;
+diff --git a/src/melee/mn/mncharsel.c b/src/melee/mn/mncharsel.c
+index bd7e3cc..3d56ca1 100644
+--- a/src/melee/mn/mncharsel.c
++++ b/src/melee/mn/mncharsel.c
+@@ -75,6 +75,9 @@ static u8 mnCharSel_804D6CF6; ///< ::CSSPendingSceneChangeKind
+ static u8 mnCharSel_804D6CF7;
+ static u8 mnCharSel_804D6CF8;
+ static s8 mnCharSel_804D6CF9;
++#ifdef TARGET_PC
++static void mnCharSel_SquadReset(int canvas); /* mncharsel_squad.h */
++#endif
+ 
+ /// Can't be enum bc float, but reused values
+ #define ICONROWHT_TOP_TOP 20.0F
+@@ -4403,6 +4406,9 @@ s32 mnCharSel_802640A0(void)
+     gobj->gxlink_prios = 0x1F;
+     HSD_GObj_SetupProc(gobj, mn_8022BA1C, 5);
+     ctx = HSD_SisLib_803A611C(0, gobj, 7, 8, 0x80, 1, 0x80, 0);
++#ifdef TARGET_PC
++    mnCharSel_SquadReset(ctx);
++#endif
+ 
+     gobj = GObj_Create(3, 4, 0x80);
+     {
+@@ -5475,6 +5481,10 @@ void mnCharSel_Scene_OnEnter(void* arg0)
+     mnCharSel_802640A0();
+ }
+ 
++#ifdef TARGET_PC
++#include "mncharsel_squad.h"
++#endif
++
+ void mnCharSel_Scene_OnFrame(void)
+ {
+     int num_slots;
+@@ -5484,6 +5494,10 @@ void mnCharSel_Scene_OnFrame(void)
+ 
+     PAD_STACK(8);
+ 
++#ifdef TARGET_PC
++    mnCharSel_SquadFrame();
++#endif
++
+     mnCharSel_804D6CEC += 1;
+     if (mnCharSel_804D6CF6 <= 1) {
+         cache = &lbDvd_GetPreloadCacheScene()->game_cache;
+diff --git a/src/melee/mn/mncharsel_squad.h b/src/melee/mn/mncharsel_squad.h
+new file mode 100644
+index 0000000..c6b11c4
+--- /dev/null
++++ b/src/melee/mn/mncharsel_squad.h
+@@ -0,0 +1,403 @@
++/* Squad Strike on character select (PC only; included by mncharsel.c, whose
++ * statics it reads). See src/melee/gm/gmsquad.h.
++ *
++ *   - Drop your coin on your first fighter as usual.
++ *   - Point at another portrait and press Z to add it (up to three times).
++ *     Z on a fighter already in your squad changes its colour.
++ *   - Z on your own coin pick's portrait, or D-pad up (offline only: online
++ *     the D-pad is quick chat), removes the last fighter you added.
++ *   - Holding a CPU's coin, Z builds that CPU's squad.
++ *   - The error buzz: every other colour is taken, the squad is full, or
++ *     there are more than two players (squads are for 1v1s).
++ *
++ * Everything here runs on the synced pads in netplay, so both peers build
++ * the same squads. */
++
++#include <string.h>
++
++#include <melee/gm/gmsquad.h>
++#include "pc/net.h"
++
++static const char* const squad_names[ChKind_Max] = {
++    "FALCON", "DK",     "FOX",   "GNW",     "KIRBY", "BOWSER", "LINK",
++    "LUIGI",  "MARIO",  "MARTH", "MEWTWO",  "NESS",  "PEACH",  "PIKACHU",
++    "ICS",    "PUFF",   "SAMUS", "YOSHI",   "ZELDA", "SHEIK",  "FALCO",
++    "YLINK",  "DOC",    "ROY",   "PICHU",   "GANON",
++};
++
++/* Colour words per character and costume, from the costume file names
++ * (PlFxOr.dat = Fox, orange); "" for the default. Game & Watch's are tints. */
++static const char* const squad_colors[26][6] = {
++    { "", "GRY", "RED", "WHT", "GRN", "BLU" }, /* Falcon */
++    { "", "BLK", "RED", "BLU", "GRN" },        /* DK */
++    { "", "ORG", "PUR", "GRN" },               /* Fox */
++    { "", "RED", "BLU", "GRN" },               /* Game & Watch */
++    { "", "YEL", "BLU", "RED", "GRN", "WHT" }, /* Kirby */
++    { "", "RED", "BLU", "BLK" },               /* Bowser */
++    { "", "RED", "BLU", "BLK", "WHT" },        /* Link */
++    { "", "WHT", "CYN", "PNK" },               /* Luigi */
++    { "", "YEL", "BLK", "BLU", "GRN" },        /* Mario */
++    { "", "RED", "GRN", "BLK", "WHT" },        /* Marth */
++    { "", "RED", "BLU", "GRN" },               /* Mewtwo */
++    { "", "YEL", "BLU", "GRN" },               /* Ness */
++    { "", "YEL", "WHT", "BLU", "GRN" },        /* Peach */
++    { "", "RED", "BLU", "GRN" },               /* Pikachu */
++    { "", "GRN", "ORG", "RED" },               /* Ice Climbers */
++    { "", "RED", "BLU", "GRN", "YEL" },        /* Jigglypuff */
++    { "", "PNK", "BLK", "GRN", "PUR" },        /* Samus */
++    { "", "RED", "BLU", "YEL", "PNK", "CYN" }, /* Yoshi */
++    { "", "RED", "BLU", "GRN", "WHT" },        /* Zelda */
++    { "", "RED", "BLU", "GRN", "WHT" },        /* Sheik */
++    { "", "RED", "BLU", "GRN" },               /* Falco */
++    { "", "RED", "BLU", "WHT", "BLK" },        /* Young Link */
++    { "", "RED", "BLU", "GRN", "BLK" },        /* Dr. Mario */
++    { "", "RED", "BLU", "GRN", "YEL" },        /* Roy */
++    { "", "RED", "BLU", "GRN" },               /* Pichu */
++    { "", "RED", "BLU", "GRN", "PUR" },        /* Ganondorf */
++};
++
++static int squad_num_colors(u8 ck)
++{
++    int n = 0;
++    if (ck >= 26) {
++        return 1;
++    }
++    while (n < 6 && squad_colors[ck][n] != NULL) {
++        n++;
++    }
++    return n;
++}
++
++/* The canvas character select draws its text on (set in mnCharSel_802640A0)
++ * and our lineup banner per door. Both die with the screen. */
++static int squad_canvas = -1;
++static HSD_Text* squad_texts[4];
++static u32 squad_shown[4];
++
++static void mnCharSel_SquadReset(int canvas)
++{
++    int i;
++    squad_canvas = canvas;
++    for (i = 0; i < 4; i++) {
++        squad_texts[i] = NULL;
++        squad_shown[i] = 0;
++    }
++}
++
++static bool squad_door_open(int port)
++{
++    u8 type = mnCharSel_804D6CB0->vs.start.players[port].slot_type;
++    return type == Gm_PKind_Human || type == Gm_PKind_Cpu;
++}
++
++static int squad_players(void)
++{
++    int n = 0;
++    int p;
++    for (p = 0; p < 4; p++) {
++        if (squad_door_open(p)) {
++            n++;
++        }
++    }
++    return n;
++}
++
++/* Another port has this character in this colour (coin pick or member). */
++static bool squad_clash(int port, u8 ck, u8 color)
++{
++    int p, i;
++    for (p = 0; p < 4; p++) {
++        PlayerInitData* pl;
++        if (p == port || !squad_door_open(p)) {
++            continue;
++        }
++        pl = &mnCharSel_804D6CB0->vs.start.players[p];
++        if ((u8) pl->ckind == ck && pl->color == color) {
++            return true;
++        }
++        for (i = 0; i < GMSQUAD_EXTRA; i++) {
++            if (gmSquad_rows[p][i].ckind == ck &&
++                gmSquad_rows[p][i].color == color)
++            {
++                return true;
++            }
++        }
++    }
++    return false;
++}
++
++/* Give a member the first colour from its own (+step) on that nobody else
++ * has. Returns true if its colour changed; false if none is free. */
++static bool squad_fix_color(int port, int index, int step)
++{
++    GmSquadMember* m = &gmSquad_rows[port][index];
++    int n = squad_num_colors(m->ckind);
++    int tries;
++    if (m->ckind >= ChKind_Max) {
++        return false;
++    }
++    for (tries = 0; tries < n; tries++) {
++        u8 c = (u8) ((m->color + step + tries) % n);
++        if (!squad_clash(port, m->ckind, c)) {
++            if (c == m->color) {
++                return false;
++            }
++            m->color = c;
++            return true;
++        }
++    }
++    return false;
++}
++
++static bool squad_remove_last(int port)
++{
++    int i;
++    for (i = GMSQUAD_EXTRA - 1; i >= 0; i--) {
++        if (gmSquad_rows[port][i].ckind != GMSQUAD_NONE) {
++            gmSquad_rows[port][i].ckind = GMSQUAD_NONE;
++            gmSquad_rows[port][i].color = 0;
++            return true;
++        }
++    }
++    return false;
++}
++
++/* The portrait under the cursor's coin position, or -1. */
++static int squad_hovered(struct CSSCursorData* cursor)
++{
++    /* Where a coin dropped from the pointer would land. */
++    f32 x = cursor->xC + 2.7f;
++    f32 y = cursor->x10 - 2.0f;
++    int i;
++    for (i = 0; i < 25; i++) {
++        CSSIcon* icon = &icons[i];
++        if (icon->state < 1) {
++            continue;
++        }
++        if (x > icon->bound_l && x < icon->bound_r && y < icon->bound_u &&
++            y > icon->bound_d)
++        {
++            return icon->char_kind;
++        }
++    }
++    return -1;
++}
++
++static void squad_add(int target, u8 ck)
++{
++    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[target];
++    int i;
++
++    if ((u8) pl->ckind == ck) {
++        /* Your coin pick's portrait: take the last member back. */
++        if (squad_remove_last(target)) {
++            sfxBack();
++        } else {
++            lbAudioAx_80024030(3);
++        }
++        return;
++    }
++    for (i = 0; i < GMSQUAD_EXTRA; i++) {
++        if (gmSquad_rows[target][i].ckind == ck) {
++            if (squad_fix_color(target, i, 1)) {
++                sfxMove();
++            } else {
++                lbAudioAx_80024030(3); /* no other colour free */
++            }
++            return;
++        }
++    }
++    if (squad_players() > 2) {
++        lbAudioAx_80024030(3); /* squads are for 1v1s */
++        return;
++    }
++    for (i = 0; i < GMSQUAD_EXTRA; i++) {
++        if (gmSquad_rows[target][i].ckind == GMSQUAD_NONE) {
++            gmSquad_rows[target][i].ckind = ck;
++            gmSquad_rows[target][i].color = 0;
++            squad_fix_color(target, i, 0);
++            sfxForward();
++            return;
++        }
++    }
++    lbAudioAx_80024030(3); /* squad full */
++}
++
++static void squad_buttons(int port)
++{
++    struct CSSCursorData* cursor = mnCharSel_804A0BC0[port];
++    u32 pressed;
++    int target;
++
++    if (cursor == NULL) {
++        return;
++    }
++    pressed = HSD_PadCopyStatus[port].trigger;
++    if (!(pressed & (HSD_PAD_Z | HSD_PAD_DPADUP))) {
++        return;
++    }
++    if (cursor->x5 == 2) { /* free pointer: your own squad */
++        target = port;
++    } else if (cursor->x5 == 1 && cursor->x6 <= 3) {
++        target = cursor->x6; /* holding a coin: that coin's squad */
++    } else {
++        return;
++    }
++    if (!squad_door_open(target)) {
++        return;
++    }
++    if (pressed & HSD_PAD_DPADUP) {
++        /* Online the D-pad is quick chat (src/pc/net_chat.c). */
++        if (!pc_net_active()) {
++            if (squad_remove_last(target)) {
++                sfxBack();
++            } else {
++                lbAudioAx_80024030(3);
++            }
++        }
++        return;
++    }
++    {
++        int ck = squad_hovered(cursor);
++        if (ck >= 0 && ck < 26) {
++            squad_add(target, (u8) ck);
++        }
++    }
++}
++
++static void squad_line(int port, char* out, size_t size)
++{
++    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[port];
++    int i;
++    out[0] = '\0';
++    if (gmSquad_Count(port) == 0) {
++        return;
++    }
++    if ((u8) pl->ckind < 26) {
++        strncat(out, squad_names[(u8) pl->ckind], size - strlen(out) - 1);
++    } else {
++        strncat(out, "?", size - strlen(out) - 1);
++    }
++    for (i = 0; i < GMSQUAD_EXTRA; i++) {
++        GmSquadMember* m = &gmSquad_rows[port][i];
++        const char* word;
++        if (m->ckind >= 26) {
++            continue;
++        }
++        strncat(out, " ", size - strlen(out) - 1);
++        word = m->color < squad_num_colors(m->ckind)
++                   ? squad_colors[m->ckind][m->color]
++                   : "";
++        if (word[0] != '\0') {
++            strncat(out, word, size - strlen(out) - 1);
++            strncat(out, " ", size - strlen(out) - 1);
++        }
++        strncat(out, squad_names[m->ckind], size - strlen(out) - 1);
++    }
++}
++
++/* One banner per door, just under its nametag: "MARTH ORG FOX RED FALCO". */
++static void squad_banners(void)
++{
++    int p;
++
++    if (squad_canvas < 0 || mnCharSel_804D6CF5 == 1) {
++        return;
++    }
++    for (p = 0; p < 4; p++) {
++        char line[96];
++        u32 key;
++        size_t k;
++        HSD_Text* text = squad_texts[p];
++        if (text == NULL) {
++            CSSTagData* tag = mnCharSel_803F0E8C[p].data;
++            if (tag == NULL || tag->text == NULL) {
++                continue;
++            }
++            text = squad_texts[p] = HSD_SisLib_803A6754(0, squad_canvas);
++            if (text == NULL) {
++                continue;
++            }
++            text->pos_x = tag->text->pos_x - 1.86f;
++            text->pos_y = tag->text->pos_y - 2.6f;
++            text->pos_z = tag->text->pos_z;
++            text->box_size_x = 288.89f;
++            text->box_size_y = 36.0f;
++            text->font_size.x = 0.045f;
++            text->font_size.y = 0.045f;
++            text->default_fitting = 1;
++            text->default_alignment = 1;
++            text->x4C = 1;
++            text->bg_color.r = text->bg_color.g = text->bg_color.b = 0;
++            text->bg_color.a = 0;
++            HSD_SisLib_803A6B98(text, 144.44f, 0.0f, "");
++            squad_shown[p] = 0;
++        }
++        squad_line(p, line, sizeof(line));
++        key = 2166136261u;
++        for (k = 0; line[k] != '\0'; k++) {
++            key = (key ^ (u8) line[k]) * 16777619u;
++        }
++        key |= 1;
++        if (key == squad_shown[p]) {
++            continue;
++        }
++        squad_shown[p] = key;
++        if (line[0] != '\0') {
++            text->bg_color.r = text->bg_color.g = text->bg_color.b = 0x10;
++            text->bg_color.a = 0xB8;
++        } else {
++            text->bg_color.a = 0;
++        }
++        HSD_SisLib_803A70A0(text, 0, "%s", line);
++    }
++}
++
++/* Runs at the top of mnCharSel_Scene_OnFrame, before the game hands this
++ * frame's coin picks to the preloader. */
++static void mnCharSel_SquadFrame(void)
++{
++    int p, i;
++
++    if (mnCharSel_804D6CB0 == NULL) {
++        return;
++    }
++    gmSquad_CheckSession();
++    if (mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1 ||
++        !gmSquad_ModeAllowed())
++    {
++        return;
++    }
++
++    for (p = 0; p < 4; p++) {
++        if (!squad_door_open(p)) {
++            gmSquad_Clear(p); /* a closed door has no squad */
++            continue;
++        }
++        if (mnCharSel_804D6CF6 == 0) {
++            squad_buttons(p);
++        }
++    }
++
++    if (squad_players() > 2 && gmSquad_Any()) {
++        gmSquad_ClearAll(); /* a third player joined: squads are for 1v1s */
++        lbAudioAx_80024030(3);
++    }
++
++    /* No two fighters may share a character and colour: when a coin pick or
++     * another member moves onto a member's, that member's colour moves on. */
++    for (p = 0; p < 4; p++) {
++        for (i = 0; i < GMSQUAD_EXTRA; i++) {
++            squad_fix_color(p, i, 0);
++        }
++    }
++
++    lbDvd_GetPreloadCacheScene()->game_cache.pc_squad_key = gmSquad_Key();
++
++    if (gmSquad_Any() && gmMainLib_GetGameRules()->mode == Mode_Stock) {
++        /* One stock per fighter, as the match will give everyone. */
++        gmMainLib_GetGameRules()->stock_count = GMSQUAD_STOCKS;
++    }
++
++    squad_banners();
++}
+diff --git a/src/melee/pl/player.c b/src/melee/pl/player.c
+index f3cc38b..b671631 100644
+--- a/src/melee/pl/player.c
++++ b/src/melee/pl/player.c
+@@ -257,6 +257,20 @@ void Player_80031AD0(int slot)
+     }
+ }
+ 
++#ifdef TARGET_PC
++s32 Player_PcFighterKinds(CharacterKind kind, s32* extra)
++{
++    *extra = -1;
++    if ((unsigned) kind >= ChKind_Max) {
++        return -1;
++    }
++    if (hasExtraFighterId(&ftMapping_list[kind])) {
++        *extra = ftMapping_list[kind].extra_internal_id;
++    }
++    return ftMapping_list[kind].internal_id;
++}
++#endif
++
+ void Player_80031CB0(CharacterKind kind, u8 color)
+ {
+     if (ftMapping_list[kind].internal_id != -1) {
+diff --git a/src/melee/pl/player.h b/src/melee/pl/player.h
+index aa4149c..6c44b64 100644
+--- a/src/melee/pl/player.h
++++ b/src/melee/pl/player.h
+@@ -157,6 +157,11 @@ void Player_80031900(void);
+ bool Player_800319C4(int slot, bool arg1);
+ void Player_80031AD0(int slot);
+ void Player_80031CB0(CharacterKind kind, u8 color);
++#ifdef TARGET_PC
++/// Squad Strike: a character's fighter kind, and its partner or
++/// transformation in @p extra (-1 if none).
++s32 Player_PcFighterKinds(CharacterKind kind, s32* extra);
++#endif
+ void Player_80031D2C(CharacterKind kind, u8 color);
+ void Player_80031DA8(s32 param_1, s32 param_2);
+ void Player_80031DC8(void func_arg(s32, s32));
+diff --git a/src/pc/pc.h b/src/pc/pc.h
+index 2fcd795..4f0e8fe 100644
+--- a/src/pc/pc.h
++++ b/src/pc/pc.h
+@@ -12,7 +12,10 @@ extern "C" {
+ /* Game-visible memory. Runtime structs carry 64-bit pointers, so give the
+  * game's heaps more room than the GameCube's 24MB. */
+ #define PC_MEM1_SIZE (96u * 1024 * 1024)
+-#define PC_ARAM_SIZE (16u * 1024 * 1024)
++/* ARAM: 16MB on the GameCube. Squad Strike (src/melee/gm/gmsquad.c) keeps
++ * up to eight fighters' animations resident, so the AllA heap is enlarged
++ * (lbheap.c) and ARAM with it. */
++#define PC_ARAM_SIZE (64u * 1024 * 1024)
+ 
+ void pc_platform_init(void);
+ 
+-- 
+2.43.0
+
