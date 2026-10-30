@@ -1,4 +1,5 @@
 #include "grgreens.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -702,7 +703,9 @@ void grGreens_80214674(Ground_GObj* gobj)
     }
     grGr_804D6AAC = 0;
     grGreens_80214FA8(new_var);
-    Ground_801C10B8(new_var, fn_80214658);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        Ground_801C10B8(new_var, fn_80214658);
+    }
     gp->u.greens.xC = randrange(yakumono_param->x0_blockTimerMin,
                                 yakumono_param->x4_blockTimerMax);
     gp->u.greens.x0_flags.x0.b0 = 1;
@@ -877,7 +880,9 @@ void grGreens_80214FA8(Ground_GObj* gobj)
             switch (grGr_8049F9E0[j * 6 + col]) {
             case 1:
             case 2:
-                grGreens_80215358(gobj, col, j, grGr_8049F9E0[j * 6 + col], 3);
+                if (!grStageExp_On()) { /* Stage Expansion: off */
+                    grGreens_80215358(gobj, col, j, grGr_8049F9E0[j * 6 + col], 3);
+                }
                 break;
             }
         }
