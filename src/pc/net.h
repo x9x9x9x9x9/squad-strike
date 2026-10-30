@@ -84,6 +84,13 @@ int pc_net_handshake_state(void);
  * written all-unlocked (net_handshake.c), so this flag now agrees with them
  * instead of overriding them; the direct mask readers agree too. */
 bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
+/* RULES carries these in the byte that was the frozen-stadium flag (bit 0
+ * is still that): the host's switches, in force for both peers. */
+#define PC_RULE_FROZEN_STADIUM 0x01u
+#define PC_RULE_SQUAD_STRIKE 0x02u
+#define PC_RULE_STAGE_EXPANSION 0x04u
+/* The host's PC_RULE_* flags while a session's RULES are in force. */
+bool pc_net_rule_flags(unsigned* flags);
 
 /* Called once per simulation tick before the pad queue head is consumed.
  * Replaces the head sample's four ports with the synced inputs for this
