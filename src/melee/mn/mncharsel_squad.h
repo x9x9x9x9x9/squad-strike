@@ -100,6 +100,8 @@ static HSD_Archive* squad_icon_archive;
 static DynamicModelDesc* squad_icon_model;
 static HSD_GObj* squad_icons[4][SQUAD_ICONS_MAX];
 static u32 squad_icons_shown[4];
+/* squad_icons_load has run on this screen with Squad Strike on. */
+static bool squad_icons_tried;
 /* Per door, the hover squad_preview_member last handled. */
 static u8 squad_seen_icon[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
 static f32 squad_icon_dx, squad_icon_dy, squad_icon_dz;
@@ -122,12 +124,13 @@ static void squad_icons_load(void)
 
     squad_icon_archive = NULL;
     squad_icon_model = NULL;
-    if (off != NULL && off[0] == '0') {
-        return;
-    }
     if (mnCharSel_804D6CB0 == NULL ||
         mnCharSel_804D6CB0->match_type != VS_MELEE || !gmSquad_ModeAllowed())
     {
+        return; /* tried again once Squad Strike is switched on */
+    }
+    squad_icons_tried = true;
+    if (off != NULL && off[0] == '0') {
         return;
     }
     squad_icon_dx = squad_env("MELEE_SQUAD_ICON_X", 0.0f);
@@ -165,6 +168,7 @@ static void mnCharSel_SquadReset(int canvas)
             squad_icons[i][j] = NULL; /* freed with the last screen */
         }
     }
+    squad_icons_tried = false;
     squad_icons_load();
 }
 
@@ -578,6 +582,11 @@ static bool squad_icon_row(int p)
     Vec3 pos;
     f32 x0;
 
+    if (squad_icon_model == NULL && !squad_icons_tried) {
+        /* The screen opened with Squad Strike off (switched on since, from
+         * the in-game menu): load the icons now. */
+        squad_icons_load();
+    }
     if (squad_icon_model == NULL || mnCharSel_804D6CC0 == NULL) {
         return false;
     }
