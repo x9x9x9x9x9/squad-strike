@@ -1,4 +1,5 @@
 #include "grflatzone.h"
+#include "grstageexp.h"
 
 #include "grdynamicattr.h"
 #include "grmaterial.h"
@@ -221,6 +222,11 @@ void grFlatzone_802171D4(Ground_GObj* gobj)
     s32 sp24;
     s16 temp_r3;
 
+    if (grStageExp_On()) {
+        /* Stage Expansion: grFz_StageCallbacks[2].gobj_proc = lb_800115F4 */
+        lb_800115F4();
+        return;
+    }
     Ground* gp = GET_GROUND(gobj);
     if (!gp->u.flatzone.xC4 && gp->u.flatzone.xC7) {
         if (gp->u.flatzone.xC8 != 0) {
@@ -322,6 +328,9 @@ void grFlatzone_802174EC(Ground_GObj* gobj)
     s16 row_entry;
 
     Ground* gp = gobj->user_data;
+    if (grStageExp_On()) {
+        return; /* Stage Expansion: grFz_StageCallbacks[5].gobj_proc = NULL */
+    }
     if (gp->u.flatzone3.xC4 == 0 && gp->u.flatzone3.xC7 != 8 &&
         gp->u.flatzone3.xC9 != 0)
     {
@@ -698,7 +707,13 @@ void grFlatzone_80218060(s32 arg0)
             gp->u.flatzone.xC5 =
                 (u8) ((s16(*)[5]) grFz_803E7A68)[gp->u.flatzone.xC7]
                                                 [gp->u.flatzone3.xC9];
-            grAnime_801C8138(gobj, gp->map_id, gp->u.flatzone.xC5);
+            if (grStageExp_On()) {
+                /* Stage Expansion (its hook at 8021819C): always layout 0x14 */
+                grAnime_801C8138(gobj, gp->map_id, 0x14);
+                Ground_UpdateMapColl(gobj);
+            } else {
+                grAnime_801C8138(gobj, gp->map_id, gp->u.flatzone.xC5);
+            }
         }
     }
 }
