@@ -3,7 +3,10 @@
  *
  *   - Drop your coin on your first fighter as usual.
  *   - Point at another portrait and press Z to add it (up to three times).
- *     Z on a fighter already in your squad changes its colour.
+ *     Carrying a coin, the portrait previews the fighter: pick its colour
+ *     with X/Y first, and Z adds it in that colour (Z again on a member
+ *     already in the squad gives it the previewed colour). With a free
+ *     pointer, Z on a member already in your squad changes its colour.
  *   - X / Y while pointing at a squad member's portrait changes that
  *     member's colour (elsewhere they change your coin pick's, as usual).
  *   - Z on your own coin pick's portrait, or D-pad up (offline only: online
@@ -162,11 +165,38 @@ static void mnCharSel_SquadReset(int canvas)
     squad_icons_load();
 }
 
-/* A coin pick's colour as character select has it right now (X/Y change
- * the door's costume at once; players[].color only follows on leaving). */
+/* The character and colour a door's portrait shows right now. While a coin
+ * is carried, that is the portrait under it (X/Y recolour it there too), not
+ * the coin pick. Returns false if the door shows no character. */
+static bool squad_door_shows(int port, u8* ck, u8* color)
+{
+    struct CSSDoor* door = &mnCharSel_803F0DFC.doors[port];
+    if (door->sel_icon >= 0x19) {
+        return false;
+    }
+    *ck = icons[door->sel_icon].char_kind;
+    *color = door->costume;
+    return *ck < 26;
+}
+
+/* A coin pick's colour as character select has it right now: the door's
+ * costume when the door shows the coin pick (X/Y change it at once;
+ * players[].color only follows on leaving), else the last colour the game
+ * recorded. Always a colour that character has, so its stock icon is its
+ * own (an out-of-range colour picked another character's icon frame). */
 static u8 squad_coin_color(int port)
 {
-    return mnCharSel_803F0DFC.doors[port].costume;
+    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[port];
+    u8 ck = (u8) pl->ckind;
+    u8 shown_ck, shown_color;
+    u8 color = pl->color;
+    if (squad_door_shows(port, &shown_ck, &shown_color) && shown_ck == ck) {
+        color = shown_color;
+    }
+    if (ck < 26 && color >= squad_num_colors(ck)) {
+        color = 0;
+    }
+    return color;
 }
 
 static bool squad_door_open(int port)
@@ -335,6 +365,11 @@ static void squad_add(int target, u8 ck)
 {
     PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[target];
     int i;
+    u8 shown_ck, shown_color;
+    /* Carrying a coin over the portrait, the door previews this fighter in
+     * the colour X/Y chose: that is the colour Z adds it in. */
+    bool preview = squad_door_shows(target, &shown_ck, &shown_color) &&
+                   shown_ck == ck && shown_color < squad_num_colors(ck);
 
     if ((u8) pl->ckind == ck) {
         /* Your coin pick's portrait: take the last member back. */
@@ -347,7 +382,13 @@ static void squad_add(int target, u8 ck)
     }
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
         if (gmSquad_rows[target][i].ckind == ck) {
-            if (squad_fix_color(target, i, 1)) {
+            if (preview && gmSquad_rows[target][i].color != shown_color &&
+                !squad_clash(target, ck, shown_color))
+            {
+                /* Already in the squad: Z takes the previewed colour. */
+                gmSquad_rows[target][i].color = shown_color;
+                sfxMove();
+            } else if (squad_fix_color(target, i, 1)) {
                 sfxMove();
             } else {
                 lbAudioAx_80024030(3); /* no other colour free */
@@ -362,7 +403,7 @@ static void squad_add(int target, u8 ck)
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
         if (gmSquad_rows[target][i].ckind == GMSQUAD_NONE) {
             gmSquad_rows[target][i].ckind = ck;
-            gmSquad_rows[target][i].color = 0;
+            gmSquad_rows[target][i].color = preview ? shown_color : 0;
             squad_fix_color(target, i, 0);
             sfxForward();
             return;
