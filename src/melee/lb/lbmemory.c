@@ -22,7 +22,12 @@ struct LBMgr {
 struct Allocator {
     uintptr_t a_arenaLo;
     uintptr_t a_arenaHi;
+#ifdef TARGET_PC
+    /* Squad Strike preloads up to eight fighters: more files in the heaps. */
+    HSD_AllocEntry mem[0x200];
+#else
     HSD_AllocEntry mem[0x83];
+#endif
     HSD_AllocEntry* free_mem;
     s32 num_allocs;
     s32 max_num_allocs;

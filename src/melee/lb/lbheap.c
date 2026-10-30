@@ -316,13 +316,19 @@ void lbHeap_80015F3C(void)
         }
         /* Squad Strike (gm/gmsquad.c) preloads up to eight fighters for a
          * 1v1 instead of two: their data and costumes (AllM) and animations
-         * (AllA, ARAM; see PC_ARAM_SIZE). 4x either heap covers the heaviest
-         * lineup with room to spare, and the preloaded files are read-only
+         * (AllA, ARAM; see PC_ARAM_SIZE). That covers the heaviest lineup
+         * (about 15MB and 19MB), and the preloaded files are read-only
          * during a match, so netplay never snapshots these heaps. */
         if (curr_idx == LbHeapKind_AllM) {
             curr_heap->size = desc->size * 4;
         } else if (curr_idx == LbHeapKind_AllA) {
-            curr_heap->size = desc->size * 4;
+            /* Everything after the sound banks (PC_ARAM_SIZE): ARAM offsets
+             * can't pass 32MB, so this is about 2.4x the GameCube's. */
+            u32 rest = (u32) (lbHeap_80431FA0.aram_hi -
+                              lbHeap_80431FA0.aram_lo) & ~0x1FU;
+            if (rest > curr_heap->size) {
+                curr_heap->size = rest;
+            }
         }
 #endif
         prev_idx = desc->prev_idx;

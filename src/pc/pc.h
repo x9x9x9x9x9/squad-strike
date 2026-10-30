@@ -13,9 +13,11 @@ extern "C" {
  * game's heaps more room than the GameCube's 24MB. */
 #define PC_MEM1_SIZE (96u * 1024 * 1024)
 /* ARAM: 16MB on the GameCube. Squad Strike (src/melee/gm/gmsquad.c) keeps
- * up to eight fighters' animations resident, so the AllA heap is enlarged
- * (lbheap.c) and ARAM with it. */
-#define PC_ARAM_SIZE (64u * 1024 * 1024)
+ * up to eight fighters' animations resident, so ARAM is doubled and the AllA
+ * heap takes all of it after the sound banks (lbheap.c). ARAM offsets must
+ * stay below 0x02000000: slots from there up are tagged host pointers
+ * (pc_encode_dp, PC_IS_ARAM_ADDR in disc.h). */
+#define PC_ARAM_SIZE (32u * 1024 * 1024)
 
 void pc_platform_init(void);
 

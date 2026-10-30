@@ -235,7 +235,7 @@ bool preload_single_file(const char* name, int entryNum) {
 }
 
 #ifndef PC_IS_ARAM_ADDR
-#define PC_IS_ARAM_ADDR(a) ((uintptr_t)(a) < 0x01000000u)
+#define PC_IS_ARAM_ADDR(a) ((uintptr_t)(a) < 0x02000000u)
 #endif
 
 uint8_t* resolve_host_dst(void* dst, size_t size) {
@@ -248,7 +248,7 @@ uint8_t* resolve_host_dst(void* dst, size_t size) {
             return nullptr;
         }
         uintptr_t offset = reinterpret_cast<uintptr_t>(dst);
-        if (offset + size > 0x01000000u) {
+        if (offset + size > 0x02000000u) {
             return nullptr;
         }
         return aram + offset;
@@ -266,7 +266,7 @@ const uint8_t* resolve_host_src(const void* src, size_t size) {
             return nullptr;
         }
         uintptr_t offset = reinterpret_cast<uintptr_t>(src);
-        if (offset + size > 0x01000000u) {
+        if (offset + size > 0x02000000u) {
             return nullptr;
         }
         return aram + offset;

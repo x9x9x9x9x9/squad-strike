@@ -141,7 +141,7 @@ static void* AllocMEM1(u32 size) {
       auto pVirtualAlloc2 = reinterpret_cast<VirtualAlloc2_t>(GetProcAddress(kernelBase, "VirtualAlloc2"));
       if (pVirtualAlloc2) {
         MEM_ADDRESS_REQUIREMENTS reqs = {};
-        reqs.LowestStartingAddress = reinterpret_cast<PVOID>(0x01000000ULL);
+        reqs.LowestStartingAddress = reinterpret_cast<PVOID>(0x03000000ULL);
         reqs.HighestEndingAddress = reinterpret_cast<PVOID>(0xFFFFFFFFULL);
         MEM_EXTENDED_PARAMETER param = {};
         param.Type = MemExtendedParameterAddressRequirements;
@@ -156,7 +156,7 @@ static void* AllocMEM1(u32 size) {
     SYSTEM_INFO si;
     GetSystemInfo(&si);
     const uintptr_t gran = si.dwAllocationGranularity ? si.dwAllocationGranularity : 0x10000ULL;
-    uintptr_t current = 0x01000000ULL;
+    uintptr_t current = 0x03000000ULL;
     if (current < gran) current = gran;
     while (current + size <= 0x100000000ULL) {
       MEMORY_BASIC_INFORMATION mbi{};
@@ -165,7 +165,7 @@ static void* AllocMEM1(u32 size) {
       }
       if (mbi.State == MEM_FREE) {
         uintptr_t freeStart = reinterpret_cast<uintptr_t>(mbi.BaseAddress);
-        if (freeStart < 0x01000000ULL) freeStart = 0x01000000ULL;
+        if (freeStart < 0x03000000ULL) freeStart = 0x03000000ULL;
         if (freeStart < gran) freeStart = gran;
         freeStart = (freeStart + gran - 1) & ~(gran - 1);
         uintptr_t freeEnd = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
@@ -257,7 +257,7 @@ static void* AllocMEM1(u32 size) {
       void* want = reinterpret_cast<void*>(addr);
       void* res = mmap(want, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
       if (res != MAP_FAILED) {
-        if ((uintptr_t)res >= 0x01000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
+        if ((uintptr_t)res >= 0x03000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
           p = res;
           break;
         }
@@ -272,7 +272,7 @@ static void* AllocMEM1(u32 size) {
       void* want = reinterpret_cast<void*>(addr);
       void* res = mmap(want, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
       if (res != MAP_FAILED) {
-        if ((uintptr_t)res >= 0x01000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
+        if ((uintptr_t)res >= 0x03000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
           p = res;
           break;
         }
@@ -286,7 +286,7 @@ static void* AllocMEM1(u32 size) {
   if (!p) {
     void* res = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
     if (res != MAP_FAILED) {
-      if ((uintptr_t)res >= 0x01000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
+      if ((uintptr_t)res >= 0x03000000ULL && (uintptr_t)res + size <= 0x100000000ULL) {
         p = res;
       } else {
         munmap(res, size);
@@ -321,7 +321,7 @@ static void* AllocMEM1(u32 size) {
       // look like NULL, an ARAM offset (< 16MB) or the 0x02000000 external pointer tag.
       if ((reinterpret_cast<uintptr_t>(res) >> 32) ==
               ((reinterpret_cast<uintptr_t>(res) + size - 1) >> 32) &&
-          lo >= 0x01000000u && (lo & 0xFF000000u) != 0x02000000u) {
+          lo >= 0x03000000u && (lo & 0xFF000000u) != 0x02000000u) {
         p = res;
       } else {
         munmap(res, size);
