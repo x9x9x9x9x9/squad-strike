@@ -590,6 +590,7 @@ src/melee/gr/grpushon.c
 src/melee/gr/grrcruise.c
 src/melee/gr/grshrine.c
 src/melee/gr/grshrineroute.c
+src/melee/gr/grstageexp.c
 src/melee/gr/grstory.c
 src/melee/gr/grtcaptain.c
 src/melee/gr/grtclink.c
