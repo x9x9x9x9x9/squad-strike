@@ -2046,6 +2046,9 @@ void fn_8016E730(StartMeleeData* arg0)
     ftCo_800C06C0();
     mpColl_80041C78();
     Ground_801C0378(0x40);
+#ifdef TARGET_PC
+    grStageExp_Latch();
+#endif
     Stage_802251E8(arg0->rules.stkind, NULL);
 #ifdef TARGET_PC
     grStageExp_PatchStageFile(arg0->rules.stkind);
