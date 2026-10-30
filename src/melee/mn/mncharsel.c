@@ -77,6 +77,7 @@ static u8 mnCharSel_804D6CF8;
 static s8 mnCharSel_804D6CF9;
 #ifdef TARGET_PC
 static void mnCharSel_SquadReset(int canvas); /* mncharsel_squad.h */
+static bool mnCharSel_SquadTakesXY(int port); /* mncharsel_squad.h */
 #endif
 
 /// Can't be enum bc float, but reused values
@@ -2244,6 +2245,11 @@ void mnCharSel_CostumeChange(int door, u32 input)
     if (mnCharSel_803F0DFC.doors[door].sel_icon_prev >= 0x19) {
         return;
     }
+#ifdef TARGET_PC
+    if (mnCharSel_SquadTakesXY(door)) {
+        return; /* X/Y over a squad member recolours that member */
+    }
+#endif
 
     if (input & HSD_PAD_X) {
         do {
