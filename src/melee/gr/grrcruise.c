@@ -237,7 +237,7 @@ void grRCruise_801FF5B4(Ground_GObj* gobj)
     HSD_JObj* jobj = GET_JOBJ(gobj);
 
     Ground_InitMapColl(jobj, gp->map_id);
-    if (!grStageExp_On()) { /* Stage Expansion: off */
+    if (!grStageExp_RCruiseOn()) { /* Stage Expansion: off */
         grAnime_801C8138(gobj, gp->map_id, 0);
     }
     gp->u.rcruise.x10 = 1;
@@ -250,7 +250,7 @@ void grRCruise_801FF5B4(Ground_GObj* gobj)
     HSD_ASSERT(410, gp->u.rcruise.entries);
     grRCruise_80201410(gobj);
 #ifdef TARGET_PC
-    if (grStageExp_On()) {
+    if (grStageExp_RCruiseOn()) {
         /* Stage Expansion (its hook at 801FF62C): the ship holds still. */
         grAnime_801C7FF8(gobj, 0x10, 2, 2, 100.0f, 1.0f);
         mpJointListAdd(10);
@@ -282,7 +282,7 @@ void grRCruise_801FF6D4(Ground_GObj* gobj)
 {
     Ground* gp = GET_GROUND(gobj);
     if (gp->u.rcruise.x10 == 0) {
-        if (!grStageExp_On()) { /* Stage Expansion: off */
+        if (!grStageExp_RCruiseOn()) { /* Stage Expansion: off */
             grRCruise_80201588(gobj);
         }
         grRCruise_8020071C(gobj);
@@ -321,7 +321,7 @@ void grRCruise_801FF7A4(Ground_GObj* gobj)
     DynamicsTemplate* data;
 
     Ground_InitMapColl(jobj, gp->map_id);
-    if (!grStageExp_On()) { /* Stage Expansion: off */
+    if (!grStageExp_RCruiseOn()) { /* Stage Expansion: off */
         grAnime_801C8138(stage_gobj, gp->map_id, 0);
     }
     grAnime_801C752C(jobj, 1, 30628, HSD_AObjSetFlags, 3, AOBJ_LOOP);
@@ -375,7 +375,7 @@ void grRCruise_801FF924(Ground_GObj* gobj)
     HSD_JObj* jobj = GET_JOBJ(gobj);
     PAD_STACK(0x8);
 
-    if (grStageExp_On()) {
+    if (grStageExp_RCruiseOn()) {
         return; /* Stage Expansion: grRc_StageCallbacks[3].on_init = NULL */
     }
 
