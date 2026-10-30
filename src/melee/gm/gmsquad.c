@@ -33,6 +33,12 @@ static bool s_live;
 static bool s_held[GMSQUAD_PORTS];
 /* Set while gmSquad_OnVsFrame calls fn_8016719C itself. */
 static bool s_respawning;
+/* Stocks everyone started this squad match with: the biggest squad's size,
+ * one per fighter (a smaller squad's last fighter keeps the spare ones). */
+static s8 s_stocks;
+/* Each player's lineup for the stock icons: coin pick, then members. */
+static GmSquadMember s_lineup[GMSQUAD_PORTS][GMSQUAD_SIZE];
+static u8 s_lineup_count[GMSQUAD_PORTS];
 
 static void init(void)
 {
@@ -70,6 +76,18 @@ int gmSquad_Count(int port)
         }
     }
     return n;
+}
+
+int gmSquad_StocksFor(void)
+{
+    int need = 0;
+    int p;
+    for (p = 0; p < GMSQUAD_PORTS; p++) {
+        if (gmSquad_Count(p) + 1 > need) {
+            need = gmSquad_Count(p) + 1;
+        }
+    }
+    return need * GMSQUAD_STOCKS_PER_FIGHTER;
 }
 
 bool gmSquad_Any(void)
@@ -231,11 +249,55 @@ void gmSquad_OnEnterVs(StartMeleeData* start)
         return;
     }
     s_live = true;
+    s_stocks = (s8) gmSquad_StocksFor();
+    memset(s_lineup, GMSQUAD_NONE, sizeof(s_lineup));
+    memset(s_lineup_count, 0, sizeof(s_lineup_count));
     for (i = 0; i < GM_MAX_PLAYERS; i++) {
-        if (start->players[i].slot_type != Gm_PKind_NA) {
-            start->players[i].stocks = GMSQUAD_STOCKS;
+        int k;
+        if (start->players[i].slot_type == Gm_PKind_NA) {
+            continue;
+        }
+        start->players[i].stocks = s_stocks;
+        if (i >= GMSQUAD_PORTS) {
+            continue;
+        }
+        s_lineup[i][0].ckind = (u8) start->players[i].ckind;
+        s_lineup[i][0].color = start->players[i].color;
+        s_lineup_count[i] = 1;
+        for (k = 0; k < GMSQUAD_EXTRA; k++) {
+            if (gmSquad_rows[i][k].ckind < ChKind_Max) {
+                s_lineup[i][s_lineup_count[i]++] = gmSquad_rows[i][k];
+            }
         }
     }
+}
+
+bool gmSquad_StockIconFrame(int slot, int i, f32* frame)
+{
+    StaticPlayer* ps;
+    int index;
+    GmSquadMember* m;
+
+    if (!s_live || slot < 0 || slot >= GMSQUAD_PORTS || i <= 0 ||
+        s_lineup_count[slot] <= 1)
+    {
+        return false; /* the fighter out now: the game's own icon */
+    }
+    ps = Player_GetPtrForSlot(slot);
+    /* Stock i from the left is lost after i more KOs: whoever fights then. */
+    index = (s_stocks - ps->stocks) / GMSQUAD_STOCKS_PER_FIGHTER + i;
+    if (index >= s_lineup_count[slot]) {
+        index = s_lineup_count[slot] - 1;
+    }
+    if (index < 0) {
+        return false;
+    }
+    m = &s_lineup[slot][index];
+    if (m->ckind >= ChKind_Max) {
+        return false;
+    }
+    *frame = gm_80168B34(m->ckind, 0, m->color);
+    return true;
 }
 
 /* What Fighter_Create loads for this fighter, so its archives are parsed now
@@ -331,7 +393,7 @@ static GmSquadMember* due_member(s32 slot)
     if (ps->player_state != 2 || ps->stocks <= 0) {
         return NULL;
     }
-    lost = GMSQUAD_STOCKS - ps->stocks;
+    lost = s_stocks - ps->stocks;
     if (lost <= 0 || lost % GMSQUAD_STOCKS_PER_FIGHTER != 0) {
         return NULL;
     }
