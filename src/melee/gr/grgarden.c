@@ -1,4 +1,5 @@
 #include "grgarden.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -84,6 +85,9 @@ void grGarden_80202B70(void)
 
 void grGarden_80202C24(void)
 {
+    if (grStageExp_On()) {
+        return; /* Stage Expansion: grGd_StageData.on_load is a bare blr */
+    }
     Ground_801C53EC(0x64193);
 }
 
