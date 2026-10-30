@@ -13,9 +13,18 @@
  * Everything here runs on the synced pads in netplay, so both peers build
  * the same squads. */
 
+#include <stdlib.h>
 #include <string.h>
 
+#include <melee/gm/gm_1601.h>
 #include <melee/gm/gmsquad.h>
+#include <melee/lb/lb_00B0.h>
+#include <melee/lb/lbarchive.h>
+#include <melee/lb/lbspdisplay.h>
+#include <melee/sc/types.h>
+#include <sysdolphin/baselib/aobj.h>
+#include <sysdolphin/baselib/gobjplink.h>
+#include <sysdolphin/baselib/tobj.h>
 #include "pc/net.h"
 
 static const char* const squad_names[ChKind_Max] = {
@@ -74,14 +83,81 @@ static int squad_canvas = -1;
 static HSD_Text* squad_texts[4];
 static u32 squad_shown[4];
 
+/* Stock icons for the lineup, from the in-match HUD file (IfAll.dat), one
+ * row per door where the text banner would be. If the file can't be loaded
+ * (or MELEE_SQUAD_ICONS=0), the text banner is shown instead. Layout knobs,
+ * settable in melee-env.txt next to melee.exe while it's being tuned:
+ *   MELEE_SQUAD_ICON_X, _Y, _Z   offset of the row from its default place
+ *   MELEE_SQUAD_ICON_SCALE       icon size (1 = the HUD's size)
+ *   MELEE_SQUAD_ICON_GAP         distance between icon centres */
+#define SQUAD_ICONS_MAX GMSQUAD_SIZE
+static HSD_Archive* squad_icon_archive;
+static DynamicModelDesc* squad_icon_model;
+static HSD_GObj* squad_icons[4][SQUAD_ICONS_MAX];
+static u32 squad_icons_shown[4];
+static f32 squad_icon_dx, squad_icon_dy, squad_icon_dz;
+static f32 squad_icon_scale = 1.0f;
+static f32 squad_icon_gap = 2.6f;
+
+static f32 squad_env(const char* name, f32 fallback)
+{
+    const char* v = getenv(name);
+    if (v == NULL || v[0] == '\0') {
+        return fallback;
+    }
+    return (f32) atof(v);
+}
+
+static void squad_icons_load(void)
+{
+    const char* off = getenv("MELEE_SQUAD_ICONS");
+    DiscU32* scene_models = NULL;
+
+    squad_icon_archive = NULL;
+    squad_icon_model = NULL;
+    if (off != NULL && off[0] == '0') {
+        return;
+    }
+    if (mnCharSel_804D6CB0 == NULL ||
+        mnCharSel_804D6CB0->match_type != VS_MELEE || !gmSquad_ModeAllowed())
+    {
+        return;
+    }
+    squad_icon_dx = squad_env("MELEE_SQUAD_ICON_X", 0.0f);
+    squad_icon_dy = squad_env("MELEE_SQUAD_ICON_Y", 0.0f);
+    squad_icon_dz = squad_env("MELEE_SQUAD_ICON_Z", 0.0f);
+    squad_icon_scale = squad_env("MELEE_SQUAD_ICON_SCALE", 1.0f);
+    squad_icon_gap = squad_env("MELEE_SQUAD_ICON_GAP", 2.6f);
+    /* Returns whether it was preloaded, not whether it loaded. */
+    lbArchive_80016F80(&squad_icon_archive, "IfAll");
+    if (squad_icon_archive == NULL) {
+        squad_icon_archive = NULL;
+        OSReport("squad: IfAll not loaded, using the text banner\n");
+        return;
+    }
+    lbArchive_LoadSections(squad_icon_archive, &scene_models, "Stc_scemdls",
+                           0);
+    if (scene_models != NULL) {
+        squad_icon_model = DP(DynamicModelDesc, scene_models[0].v);
+    }
+    if (squad_icon_model == NULL) {
+        OSReport("squad: no stock icon model, using the text banner\n");
+    }
+}
+
 static void mnCharSel_SquadReset(int canvas)
 {
-    int i;
+    int i, j;
     squad_canvas = canvas;
     for (i = 0; i < 4; i++) {
         squad_texts[i] = NULL;
         squad_shown[i] = 0;
+        squad_icons_shown[i] = 0;
+        for (j = 0; j < SQUAD_ICONS_MAX; j++) {
+            squad_icons[i][j] = NULL; /* freed with the last screen */
+        }
     }
+    squad_icons_load();
 }
 
 static bool squad_door_open(int port)
@@ -296,7 +372,126 @@ static void squad_line(int port, char* out, size_t size)
     }
 }
 
-/* One banner per door, just under its nametag: "MARTH ORG FOX RED FALCO". */
+/* One stock icon, as the HUD makes them (ifStock_802F96D0), drawn by the
+ * character select camera with the character models. */
+static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z)
+{
+    HSD_GObj* gobj;
+    HSD_JObj* jobj;
+    HSD_JObj* icon = NULL;
+    HSD_TObj* tobj;
+
+    gobj = GObj_Create(4, 5, 0x80);
+    if (gobj == NULL) {
+        return NULL;
+    }
+    jobj = HSD_JObjLoadJoint(DP(HSD_Joint, squad_icon_model->joint));
+    HSD_GObjObject_80390A70(gobj, HSD_GObj_JObjKind, jobj);
+    GObj_SetupGXLink(gobj, HSD_GObj_JObjCallback, 2, 0x80);
+    gm_8016895C(jobj, squad_icon_model, 0);
+    lb_80011E24(jobj, &icon, 1, -1);
+    HSD_JObjSetTranslateX(jobj, x);
+    HSD_JObjSetTranslateY(jobj, y);
+    HSD_JObjSetTranslateZ(jobj, z);
+    HSD_JObjSetScaleX(jobj, squad_icon_scale);
+    HSD_JObjSetScaleY(jobj, squad_icon_scale);
+    HSD_JObjSetScaleZ(jobj, squad_icon_scale);
+    HSD_JObjSetFlagsAll(jobj, JOBJ_HIDDEN);
+    HSD_JObjReqAnimAll(jobj, 0.0f);
+    if (icon != NULL) {
+        HSD_JObjClearFlags(icon, JOBJ_HIDDEN);
+        if (icon->u.dobj != NULL && icon->u.dobj->mobj != NULL &&
+            (tobj = icon->u.dobj->mobj->tobj) != NULL)
+        {
+            HSD_TObjReqAnimAll(tobj, gm_80168B34(ck, 0, color));
+            if (tobj->aobj != NULL) {
+                HSD_AObjSetRate(tobj->aobj, 0.0f);
+            }
+        }
+    }
+    HSD_JObjAnimAll(jobj);
+    return gobj;
+}
+
+/* A row of stock icons above door p's nametag: coin pick, then members. */
+static bool squad_icon_row(int p)
+{
+    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[p];
+    u8 cks[SQUAD_ICONS_MAX];
+    u8 colors[SQUAD_ICONS_MAX];
+    int n = 0;
+    int i;
+    u32 key = 2166136261u;
+    HSD_JObj* name_jobj = NULL;
+    Vec3 pos;
+    f32 x0;
+
+    if (squad_icon_model == NULL || mnCharSel_804D6CC0 == NULL) {
+        return false;
+    }
+    if (gmSquad_Count(p) != 0) {
+        cks[n] = (u8) pl->ckind < 26 ? (u8) pl->ckind : GMSQUAD_NONE;
+        colors[n] = pl->color;
+        n++;
+        for (i = 0; i < GMSQUAD_EXTRA; i++) {
+            if (gmSquad_rows[p][i].ckind < 26) {
+                cks[n] = gmSquad_rows[p][i].ckind;
+                colors[n] = gmSquad_rows[p][i].color;
+                n++;
+            }
+        }
+    }
+    for (i = 0; i < n; i++) {
+        key = (key ^ cks[i]) * 16777619u;
+        key = (key ^ colors[i]) * 16777619u;
+    }
+    key = (key ^ (u32) n) * 16777619u;
+    key |= 1;
+    if (key == squad_icons_shown[p]) {
+        return true;
+    }
+    squad_icons_shown[p] = key;
+
+    for (i = 0; i < SQUAD_ICONS_MAX; i++) {
+        if (squad_icons[p][i] != NULL) {
+            HSD_GObjFree(squad_icons[p][i]);
+            squad_icons[p][i] = NULL;
+        }
+    }
+    if (n == 0) {
+        return true;
+    }
+
+    /* Centre the row where the text banner sat: just above the nametag. */
+    lb_80011E24(mnCharSel_804D6CC0, &name_jobj,
+                mnCharSel_803F0E8C[p].name_jointl, -1);
+    if (name_jobj == NULL) {
+        return false;
+    }
+    lb_8000B1CC(name_jobj, NULL, &pos);
+    x0 = pos.x + 5.1f + squad_icon_dx - squad_icon_gap * (n - 1) / 2.0f;
+    for (i = 0; i < n; i++) {
+        if (cks[i] == GMSQUAD_NONE) {
+            continue; /* no coin pick yet: leave its place empty */
+        }
+        squad_icons[p][i] = squad_icon_create(
+            cks[i], colors[i], x0 + squad_icon_gap * i,
+            pos.y + 2.2f + squad_icon_dy, pos.z + 0.5f + squad_icon_dz);
+    }
+    {
+        static int logged;
+        if (logged < 4) {
+            logged++;
+            OSReport("squad: icons for door %d at nametag (%.2f, %.2f, %.2f)"
+                     "\n",
+                     p, pos.x, pos.y, pos.z);
+        }
+    }
+    return true;
+}
+
+/* One banner per door, just under its nametag: "MARTH ORG FOX RED FALCO".
+ * With stock icons available, the icons replace it. */
 static void squad_banners(void)
 {
     int p;
@@ -309,6 +504,9 @@ static void squad_banners(void)
         u32 key;
         size_t k;
         HSD_Text* text = squad_texts[p];
+        if (squad_icon_row(p)) {
+            continue; /* icons drawn: no text banner */
+        }
         if (text == NULL) {
             CSSTagData* tag = mnCharSel_803F0E8C[p].data;
             if (tag == NULL || tag->text == NULL) {
