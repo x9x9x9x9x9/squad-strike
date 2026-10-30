@@ -43,6 +43,14 @@ bool pc_is_unlock_all_enabled(void) {
 bool pc_is_frozen_stadium_enabled(void) {
     return false;
 }
+bool pc_is_squad_strike_enabled(void) {
+    const char* env = getenv("MELEE_SQUAD_STRIKE");
+    return env == NULL || env[0] != '0';
+}
+bool pc_is_stage_expansion_enabled(void) {
+    const char* env = getenv("MELEE_STAGE_EXPANSION");
+    return env == NULL || env[0] != '0';
+}
 bool pc_is_free_camera_enabled(void) {
     return false;
 }
