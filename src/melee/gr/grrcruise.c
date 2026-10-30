@@ -1,4 +1,5 @@
 #include "grrcruise.h"
+#include "grstageexp.h"
 
 #include <Runtime/platform.h>
 
@@ -236,7 +237,9 @@ void grRCruise_801FF5B4(Ground_GObj* gobj)
     HSD_JObj* jobj = GET_JOBJ(gobj);
 
     Ground_InitMapColl(jobj, gp->map_id);
-    grAnime_801C8138(gobj, gp->map_id, 0);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grAnime_801C8138(gobj, gp->map_id, 0);
+    }
     gp->u.rcruise.x10 = 1;
     /* Retail allocated this through the `map` view (a 0x198-byte blob, which
      * is exactly 17 * 0x18) and read it back as `rcruise.entries`. Both the
@@ -246,6 +249,15 @@ void grRCruise_801FF5B4(Ground_GObj* gobj)
         HSD_MemAlloc(GRRCRUISE_ENTRY_COUNT * sizeof(*gp->u.rcruise.entries));
     HSD_ASSERT(410, gp->u.rcruise.entries);
     grRCruise_80201410(gobj);
+#ifdef TARGET_PC
+    if (grStageExp_On()) {
+        /* Stage Expansion (its hook at 801FF62C): the ship holds still. */
+        grAnime_801C7FF8(gobj, 0x10, 2, 2, 100.0f, 1.0f);
+        mpJointListAdd(10);
+        mpLib_80055E9C(10);
+        mpLib_80057424(10);
+    }
+#endif
     Ground_801C10B8(gobj, grRCruise_801FF444);
     grRCruise_80200540(gobj);
     grRCruise_80200B48(gobj);
@@ -270,7 +282,9 @@ void grRCruise_801FF6D4(Ground_GObj* gobj)
 {
     Ground* gp = GET_GROUND(gobj);
     if (gp->u.rcruise.x10 == 0) {
-        grRCruise_80201588(gobj);
+        if (!grStageExp_On()) { /* Stage Expansion: off */
+            grRCruise_80201588(gobj);
+        }
         grRCruise_8020071C(gobj);
         grRCruise_80200C04(gobj);
     }
@@ -307,7 +321,9 @@ void grRCruise_801FF7A4(Ground_GObj* gobj)
     DynamicsTemplate* data;
 
     Ground_InitMapColl(jobj, gp->map_id);
-    grAnime_801C8138(stage_gobj, gp->map_id, 0);
+    if (!grStageExp_On()) { /* Stage Expansion: off */
+        grAnime_801C8138(stage_gobj, gp->map_id, 0);
+    }
     grAnime_801C752C(jobj, 1, 30628, HSD_AObjSetFlags, 3, AOBJ_LOOP);
     archive = grDatFiles_GetArchive();
     if (archive != NULL &&
@@ -358,6 +374,10 @@ void grRCruise_801FF924(Ground_GObj* gobj)
     Ground* gp = GET_GROUND(gobj);
     HSD_JObj* jobj = GET_JOBJ(gobj);
     PAD_STACK(0x8);
+
+    if (grStageExp_On()) {
+        return; /* Stage Expansion: grRc_StageCallbacks[3].on_init = NULL */
+    }
 
     gp->u.scroll.x38[0] = Ground_801C3FA4(gobj, 4);
     gp->u.scroll.x38[1] = Ground_801C3FA4(gobj, 5);
