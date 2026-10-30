@@ -1,6 +1,8 @@
 #include "gmvsmelee.h"
 #ifdef TARGET_PC
+#include <stdlib.h>
 #include <melee/gm/gmsquad.h>
+#include "pc/net.h"
 #endif
 
 #include <Runtime/platform.h>
@@ -127,6 +129,24 @@ void gmVsMelee_EnterCss(GameModeState* state, VsModeData* vs,
     css->ko_counts = ko_counts;
     css->vs = *vs;
     lbDvd_SetupVsPreloadCache();
+#ifdef TARGET_PC
+    {
+        /* VS Melee starts on 4 stocks instead of the 2-minute timer, once
+         * per launch (changes made after that stay, and are saved as
+         * usual). MELEE_DEFAULT_STOCK=0 keeps the saved rules. Netplay has
+         * its own rules handling: left alone there. */
+        static bool done;
+        const char* v = getenv("MELEE_DEFAULT_STOCK");
+        if (!done && match_type == VS_MELEE && !pc_net_active()) {
+            done = true;
+            if (v == NULL || v[0] != '0') {
+                GameRules* rules = gmMainLib_GetGameRules();
+                rules->mode = Mode_Stock;
+                rules->stock_count = 4;
+            }
+        }
+    }
+#endif
 }
 
 void gmVsMelee_ExitCss(GameModeState* state, VsModeData* vs)
