@@ -4,6 +4,8 @@
  *   - Drop your coin on your first fighter as usual.
  *   - Point at another portrait and press Z to add it (up to three times).
  *     Z on a fighter already in your squad changes its colour.
+ *   - X / Y while pointing at a squad member's portrait changes that
+ *     member's colour (elsewhere they change your coin pick's, as usual).
  *   - Z on your own coin pick's portrait, or D-pad up (offline only: online
  *     the D-pad is quick chat), removes the last fighter you added.
  *   - Holding a CPU's coin, Z builds that CPU's squad.
@@ -96,8 +98,8 @@ static DynamicModelDesc* squad_icon_model;
 static HSD_GObj* squad_icons[4][SQUAD_ICONS_MAX];
 static u32 squad_icons_shown[4];
 static f32 squad_icon_dx, squad_icon_dy, squad_icon_dz;
-static f32 squad_icon_scale = 1.0f;
-static f32 squad_icon_gap = 2.6f;
+static f32 squad_icon_scale = 0.8f;
+static f32 squad_icon_gap = 2.1f;
 
 static f32 squad_env(const char* name, f32 fallback)
 {
@@ -126,8 +128,8 @@ static void squad_icons_load(void)
     squad_icon_dx = squad_env("MELEE_SQUAD_ICON_X", 0.0f);
     squad_icon_dy = squad_env("MELEE_SQUAD_ICON_Y", 0.0f);
     squad_icon_dz = squad_env("MELEE_SQUAD_ICON_Z", 0.0f);
-    squad_icon_scale = squad_env("MELEE_SQUAD_ICON_SCALE", 1.0f);
-    squad_icon_gap = squad_env("MELEE_SQUAD_ICON_GAP", 2.6f);
+    squad_icon_scale = squad_env("MELEE_SQUAD_ICON_SCALE", 0.8f);
+    squad_icon_gap = squad_env("MELEE_SQUAD_ICON_GAP", 2.1f);
     /* Returns whether it was preloaded, not whether it loaded. */
     lbArchive_80016F80(&squad_icon_archive, "IfAll");
     if (squad_icon_archive == NULL) {
@@ -225,6 +227,26 @@ static bool squad_fix_color(int port, int index, int step)
     return false;
 }
 
+/* Move a member to the next (dir 1) or previous (dir -1) colour nobody else
+ * has. Returns false if no other colour is free. */
+static bool squad_cycle_color(int port, int index, int dir)
+{
+    GmSquadMember* m = &gmSquad_rows[port][index];
+    int n = squad_num_colors(m->ckind);
+    int t;
+    if (m->ckind >= ChKind_Max) {
+        return false;
+    }
+    for (t = 1; t < n; t++) {
+        u8 c = (u8) (((int) m->color + dir * t + n * t) % n);
+        if (!squad_clash(port, m->ckind, c)) {
+            m->color = c;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool squad_remove_last(int port)
 {
     int i;
@@ -257,6 +279,39 @@ static int squad_hovered(struct CSSCursorData* cursor)
         }
     }
     return -1;
+}
+
+/* Which member of this port's squad the free pointer is on, or -1. */
+static int squad_member_under_cursor(int port)
+{
+    struct CSSCursorData* cursor;
+    int ck, i;
+    if (port < 0 || port >= 4 || mnCharSel_804D6CB0 == NULL ||
+        mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1 ||
+        !gmSquad_ModeAllowed())
+    {
+        return -1;
+    }
+    cursor = mnCharSel_804A0BC0[port];
+    if (cursor == NULL || cursor->x5 != 2) {
+        return -1;
+    }
+    ck = squad_hovered(cursor);
+    if (ck < 0) {
+        return -1;
+    }
+    for (i = 0; i < GMSQUAD_EXTRA; i++) {
+        if (gmSquad_rows[port][i].ckind == (u8) ck) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* mnCharSel_CostumeChange asks: is this port's X/Y ours this frame? */
+static bool mnCharSel_SquadTakesXY(int port)
+{
+    return squad_member_under_cursor(port) >= 0;
 }
 
 static void squad_add(int target, u8 ck)
@@ -309,6 +364,21 @@ static void squad_buttons(int port)
         return;
     }
     pressed = HSD_PadCopyStatus[port].trigger;
+    if (pressed & (HSD_PAD_X | HSD_PAD_Y)) {
+        /* Pointing at one of your members: X/Y recolour it, like the coin
+         * pick (mnCharSel_CostumeChange leaves these presses to us). */
+        int index = squad_member_under_cursor(port);
+        if (index >= 0) {
+            if (squad_cycle_color(port, index,
+                                  (pressed & HSD_PAD_X) ? 1 : -1))
+            {
+                sfxMove();
+            } else {
+                lbAudioAx_80024030(3);
+            }
+            return;
+        }
+    }
     if (!(pressed & (HSD_PAD_Z | HSD_PAD_DPADUP))) {
         return;
     }
@@ -410,6 +480,15 @@ static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z)
         }
     }
     HSD_JObjAnimAll(jobj);
+    /* The icon sits off its model's origin (the HUD lays several out in a
+     * row from one origin): move the model sideways so the icon itself is
+     * centred on x. Its height stays where the model puts it. */
+    if (icon != NULL) {
+        Vec3 at;
+        lb_8000B1CC(icon, NULL, &at);
+        HSD_JObjSetTranslateX(jobj, x + (x - at.x));
+        HSD_JObjAnimAll(jobj);
+    }
     return gobj;
 }
 
