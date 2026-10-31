@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftluigispecialn.h"
 
 #include <Runtime/platform.h>
@@ -118,8 +119,10 @@ void ftLg_SpecialAirN_Coll(HSD_GObj* gobj)
 
     if (ft_80081D0C(gobj) != false) {
         fp = GET_FIGHTER(gobj);
-        ftCommon_AirToGroundStateChange(gobj, fp, ftLg_MS_SpecialN,
-                                        ftLg_MF_SpecialN_Coll);
+        /* SD Remix: the fireball lands into Landing */
+        ftCommon_AirToGroundStateChange(
+            gobj, fp, FT_SDR ? ftCo_MS_Landing : ftLg_MS_SpecialN,
+            ftLg_MF_SpecialN_Coll);
         fp->accessory4_cb = &ftLg_SpecialN_FireSpawn;
     }
 }
