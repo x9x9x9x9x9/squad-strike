@@ -293,7 +293,14 @@ bool begin_frame() noexcept {
 #ifdef AURORA_ENABLE_GX
   {
     if (!window::is_presentable()) {
-      webgpu::release_surface();
+      /* Release only when the platform took the surface away. A desktop
+       * window that is merely minimized or hidden keeps it: recreating it on
+       * restore makes a second DXGI swapchain for the same window while the
+       * old one may still be alive, which Windows refuses (E_ACCESSDENIED)
+       * and Dawn turns into a lost device, i.e. a crash. */
+      if (window::surface_lost()) {
+        webgpu::release_surface();
+      }
       return false;
     }
     if (window::is_paused()) {
@@ -505,7 +512,9 @@ void end_frame() noexcept {
         break;
       default:
         if (!window::is_presentable()) {
-          webgpu::release_surface();
+          if (window::surface_lost()) {
+            webgpu::release_surface();
+          }
         } else {
           Log.error("Failed to get surface texture: {}", magic_enum::enum_name(surfaceStatus));
         }
