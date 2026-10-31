@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftyoshiguard.h"
 
 #include <melee/ft/forward.h>
@@ -141,6 +142,12 @@ void ftYs_GuardOn_0_Anim(HSD_GObj* gobj)
 
 void ftYs_GuardOn_0_IASA(HSD_GObj* gobj)
 {
+    if (FT_SDR) {
+        /* SD Remix: Yoshi's shield takes everyone's options, jumping
+         * out of it included */
+        ftCo_GuardOn_IASA(gobj);
+        return;
+    }
     RETURN_IF(ftCo_80093694(gobj));
     RETURN_IF(ftCo_8009515C(gobj));
     RETURN_IF(ftCo_80099794(gobj));
