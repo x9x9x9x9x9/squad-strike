@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftkoopaspecialn.h"
 
 #include <melee/ft/forward.h>
@@ -380,7 +381,9 @@ void ftKp_SpecialAirNStart_Coll(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
     if (ft_80081D0C(gobj) != GA_Ground) {
-        ftCommon_AirToGroundStateChange(gobj, fp, 0x155,
+        /* SD Remix: v1.00's flame cancel (lands into the flame, not its
+         * start) */
+        ftCommon_AirToGroundStateChange(gobj, fp, FT_SDR ? 0x156 : 0x155,
                                         ftCommon_GroundAirColl_MF);
     }
 }
