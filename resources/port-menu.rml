@@ -120,6 +120,11 @@
               </span>
               <button id="stage-expansion" class="value">On</button>
             </div>
+            <div class="row" data-desc="SD Remix's character changes. Takes effect the next time the game starts.">
+              <span class="name">SD Remix characters<span class="detail">SD Remix's character changes. Takes effect the next time the game starts.</span>
+              </span>
+              <button id="sd-remix" class="value">Off</button>
+            </div>
             <div class="row" data-desc="Unlock 360° orbital rotation and zoom distance in pause mode.">
               <span class="name">Free camera<span class="detail">Unlock 360° orbital rotation and zoom distance in pause mode.</span>
               </span>
