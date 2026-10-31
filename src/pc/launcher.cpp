@@ -585,6 +585,7 @@ class Launcher final : public Rml::EventListener {
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         text("squad-strike", prefs.squad_strike ? "On" : "Off");
         text("stage-expansion", prefs.stage_expansion ? "On" : "Off");
+        text("sd-remix", prefs.sd_remix ? "On" : "Off");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -823,6 +824,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("stage-expansion")->Focus();
+        } else if (id == "sd-remix") {
+            prefs.sd_remix = !prefs.sd_remix;
+            save();
+            refresh_settings();
+            element("sd-remix")->Focus();
         } else if (id == "free-camera") {
             prefs.free_camera = !prefs.free_camera;
             save();
@@ -1720,6 +1726,10 @@ public:
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         label("squad-strike", prefs.squad_strike ? "On" : "Off");
         label("stage-expansion", prefs.stage_expansion ? "On" : "Off");
+        /* Taken at boot (sdremix.cpp): say so when the switch differs. */
+        label("sd-remix", prefs.sd_remix == pc_sdremix_active() ? (prefs.sd_remix ? "On" : "Off") :
+                          prefs.sd_remix                        ? "On (after restart)" :
+                                                                  "Off (after restart)");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
         label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -1988,6 +1998,8 @@ public:
             prefs.squad_strike = !prefs.squad_strike;
         } else if (id == "stage-expansion") {
             prefs.stage_expansion = !prefs.stage_expansion;
+        } else if (id == "sd-remix") {
+            prefs.sd_remix = !prefs.sd_remix;
         } else if (id == "free-camera") {
             prefs.free_camera = !prefs.free_camera;
         } else if (id == "ucf") {
@@ -2364,6 +2376,10 @@ extern "C" bool pc_is_stage_expansion_enabled(void) {
     }
     static const char* env = std::getenv("MELEE_STAGE_EXPANSION");
     return env ? env[0] != '0' : prefs.stage_expansion;
+}
+extern "C" bool pc_sdremix_wanted(void) {
+    static const char* env = std::getenv("MELEE_SD_REMIX");
+    return env ? env[0] != '0' : prefs.sd_remix;
 }
 extern "C" bool pc_is_frozen_stadium_enabled(void) {
     bool unlock_all, frozen;
