@@ -2793,6 +2793,10 @@ send_get_peers(const struct sockaddr *sa, int salen,
     return -1;
 }
 
+/* melee-pc: 1 asks the node to store the port it sees (the NAT mapping);
+ * 0 stores `port` as given, for a port the router forwards (net_upnp.c). */
+int dht_announce_implied_port = 1;
+
 int
 send_announce_peer(const struct sockaddr *sa, int salen,
                    unsigned char *tid, int tid_len,
@@ -2812,7 +2816,8 @@ send_announce_peer(const struct sockaddr *sa, int salen,
 
     rc = snprintf(buf + i, 512 - i, "d1:ad2:id20:"); INC(i, rc, 512);
     COPY(buf, i, myid, 20, 512);
-    rc = snprintf(buf + i, 512 - i, "12:implied_porti1e9:info_hash20:"); INC(i, rc, 512);
+    rc = snprintf(buf + i, 512 - i, "12:implied_porti%de9:info_hash20:",
+                  dht_announce_implied_port ? 1 : 0); INC(i, rc, 512);
     COPY(buf, i, infohash, 20, 512);
     rc = snprintf(buf + i, 512 - i, "4:porti%ue5:token%d:", (unsigned)port,
                   token_len);

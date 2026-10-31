@@ -34,6 +34,10 @@ bool pc_dht_topic(
 /* After pc_dht_start: also search and announce this topic every round
  * (up to 16, cleared by the next start). */
 bool pc_dht_add_topic(const unsigned char hash[20]);
+/* After pc_dht_start: announce this port (one the router forwards to the
+ * socket, net_upnp.h) instead of the port the DHT nodes observe. 0 goes back
+ * to the observed one. Cleared by the next start. */
+void pc_dht_set_announce_port(uint16_t port);
 #ifdef __cplusplus
 }
 #endif

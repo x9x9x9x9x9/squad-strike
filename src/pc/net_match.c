@@ -6,6 +6,7 @@
 #include "net.h"
 #include "net_lan.h"
 #include "net_rank_session.h"
+#include "net_upnp.h"
 #include "pc.h"
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_filesystem.h>
@@ -21,6 +22,8 @@
 typedef SOCKET MatchSocket;
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 typedef int MatchSocket;
@@ -63,6 +66,15 @@ typedef struct MatchOffer {
     uint32_t seed;
     uint8_t signature[64];
 } MatchOffer;
+/* Direct Connect on one network (net_match.c, "LAN beacon"): who is calling
+ * whom, and the pairing socket's port to send the Hello to. */
+typedef struct MatchBeacon {
+    uint32_t magic;
+    uint8_t version, mode;
+    uint16_t port; /* network order */
+    uint8_t compatibility[20];
+    char from[18], to[18]; /* to: "" when waiting for a call */
+} MatchBeacon;
 typedef struct MatchAck {
     uint32_t magic;
     uint8_t version, type, mode, reserved;
@@ -282,7 +294,9 @@ static bool signed_ok(const uint8_t key[32], const uint8_t sig[64], const void* 
 static void sign_packet(void* p, size_t n) {
     pc_identity_sign(&identity, (uint8_t*)p + n - 64, p, n - 64);
 }
+static void beacon_close(void);
 static void fail(const char* why) {
+    beacon_close();
     state = PC_MATCH_FAIL;
     failure = why;
     pc_dht_stop();
@@ -412,7 +426,144 @@ void pc_net_match_progress(PcNetMatchProgress* p) {
     p->calling = mode == PC_MATCH_DIRECT && target_code[0];
 }
 
+/* ---- Direct Connect on one network ------------------------------------
+ * Two PCs behind the same router reach each other's public address only if
+ * the router loops it back (many do not), and a phone hotspot with no data
+ * has no internet to search at all. So while a direct call is running both
+ * sides also shout who they are calling on the local network, by multicast
+ * and broadcast, and a match sends its Hello straight to the other PC's
+ * local address. Everything after that is the ordinary signed pairing. */
+#define BEACON_MAGIC 0x4d504231u /* MPB1 */
+#define BEACON_GROUP "239.255.77.1"
+#define BEACON_PORT 41010
+static MatchSocket beacon_fd = (MatchSocket)-1;
+static uint64_t beacon_next;
+static bool lan_seen; /* a beacon matched: this call has a local route */
+
+static bool beacon_valid(void) {
+#ifdef _WIN32
+    return beacon_fd != INVALID_SOCKET && beacon_fd != (MatchSocket)-1;
+#else
+    return beacon_fd >= 0;
+#endif
+}
+static void beacon_close(void) {
+    if (beacon_valid()) {
+#ifdef _WIN32
+        closesocket(beacon_fd);
+#else
+        close(beacon_fd);
+#endif
+    }
+    beacon_fd = (MatchSocket)-1;
+}
+static uint16_t beacon_port(void) {
+    const char* v = getenv("MELEE_DIRECT_BEACON_PORT");
+    int p = v ? atoi(v) : BEACON_PORT;
+    return p > 0 && p < 65536 ? (uint16_t)p : BEACON_PORT;
+}
+static void beacon_open(void) {
+    beacon_close();
+    lan_seen = false;
+    beacon_next = 0;
+    if (getenv("MELEE_DIRECT_BEACON") && getenv("MELEE_DIRECT_BEACON")[0] == '0')
+        return;
+    MatchSocket s = socket(AF_INET, SOCK_DGRAM, 0);
+#ifdef _WIN32
+    if (s == INVALID_SOCKET)
+        return;
+#else
+    if (s < 0)
+        return;
+#endif
+    int on = 1;
+    /* Every copy on this PC (and every test instance) shares the port. */
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char*)&on, sizeof on);
+#ifdef SO_REUSEPORT
+    setsockopt(s, SOL_SOCKET, SO_REUSEPORT, (const char*)&on, sizeof on);
+#endif
+    setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char*)&on, sizeof on);
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(beacon_port());
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (bind(s, (struct sockaddr*)&addr, sizeof addr) != 0) {
+        beacon_fd = s;
+        beacon_close();
+        pc_log_line("match: local-network beacon unavailable (port %u busy)", beacon_port());
+        return;
+    }
+    struct ip_mreq group;
+    memset(&group, 0, sizeof group);
+    inet_pton(AF_INET, BEACON_GROUP, &group.imr_multiaddr);
+    group.imr_interface.s_addr = htonl(INADDR_ANY);
+    setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, (const char*)&group, sizeof group);
+    unsigned char loop = 1;
+    setsockopt(s, IPPROTO_IP, IP_MULTICAST_LOOP, (const char*)&loop, sizeof loop);
+#ifdef _WIN32
+    u_long nb = 1;
+    ioctlsocket(s, FIONBIO, &nb);
+#else
+    fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK);
+#endif
+    beacon_fd = s;
+}
+static void beacon_poll(uint64_t now) {
+    if (!beacon_valid() || mode != PC_MATCH_DIRECT)
+        return;
+    if (now >= beacon_next) {
+        MatchBeacon b = {0};
+        b.magic = htonl(BEACON_MAGIC);
+        b.version = MATCH_VERSION;
+        b.mode = (uint8_t)mode;
+        b.port = htons(pc_dht_port());
+        memcpy(b.compatibility, compatibility, 20);
+        memcpy(b.from, identity.code, sizeof b.from);
+        memcpy(b.to, target_code, sizeof b.to);
+        struct sockaddr_in to = {0};
+        to.sin_family = AF_INET;
+        to.sin_port = htons(beacon_port());
+        inet_pton(AF_INET, BEACON_GROUP, &to.sin_addr);
+        sendto(beacon_fd, (const char*)&b, sizeof b, 0, (struct sockaddr*)&to, sizeof to);
+        to.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+        sendto(beacon_fd, (const char*)&b, sizeof b, 0, (struct sockaddr*)&to, sizeof to);
+        beacon_next = now + 1000;
+    }
+    for (int i = 0; i < 32; i++) {
+        MatchBeacon b;
+        struct sockaddr_in from;
+#ifdef _WIN32
+        int len = sizeof from;
+#else
+        socklen_t len = sizeof from;
+#endif
+        int n = (int)recvfrom(beacon_fd, (char*)&b, sizeof b, 0, (struct sockaddr*)&from, &len);
+        if (n < 0)
+            break;
+        if (n != (int)sizeof b || ntohl(b.magic) != BEACON_MAGIC || b.version != MATCH_VERSION ||
+            b.mode != (uint8_t)mode || memcmp(b.compatibility, compatibility, 20) ||
+            !memchr(b.from, 0, sizeof b.from) || !memchr(b.to, 0, sizeof b.to) ||
+            !strcmp(b.from, identity.code) || !ntohs(b.port))
+            continue;
+        /* Calling us, or the one we are calling. */
+        bool for_us = !strcmp(b.to, identity.code) || (target_code[0] && !strcmp(b.from, target_code));
+        if (!for_us || have_peer)
+            continue;
+        struct pc_dht_endpoint ep = {from.sin_addr.s_addr, ntohs(b.port)};
+        if (!lan_seen) {
+            uint32_t ip = ntohl(ep.address);
+            pc_log_line("match: %s is on this network at %u.%u.%u.%u:%u", b.from, ip >> 24,
+                (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, ep.port);
+        }
+        lan_seen = true;
+        candidates_tried++;
+        for (int p = 0; p < 3; p++)
+            send_packet(&hello, sizeof hello, &ep);
+    }
+}
+
 static void ready(void) {
+    beacon_close();
     state = PC_MATCH_READY;
     pc_net_set_datagram_handler(NULL);
     contacts_note(opponent);
@@ -648,6 +799,11 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
     memcpy(hello.code, identity.code, sizeof hello.code);
     sign_packet(&hello, sizeof hello);
     pc_dht_set_datagram_callback(receive, NULL);
+    if (m == PC_MATCH_DIRECT)
+        beacon_open();
+    /* A strict NAT on the other side (a phone hotspot) can only get in if
+     * our router forwards the port; ask it to (net_upnp.h). */
+    pc_upnp_map_start(pc_dht_port());
     state = PC_MATCH_SEARCH;
     deadline = 0;
     next_send = 0;
@@ -688,8 +844,25 @@ void pc_net_match_poll(void) {
         {
             failure = NULL;
         }
-        struct pc_dht_endpoint ep;
+        beacon_poll(now);
+        if (state != PC_MATCH_SEARCH)
+            return;
+        /* The router forwards our port: announce it outright, but only when
+         * that router is the one facing the internet (its public address is
+         * the one the DHT sees), not one behind another NAT. */
+        uint32_t forwarded_ip;
+        uint16_t forwarded_port;
+        struct pc_dht_endpoint seen;
+        if (pc_upnp_mapped(&forwarded_ip, &forwarded_port) && pc_dht_external_endpoint(&seen) &&
+            forwarded_ip == seen.address)
+            pc_dht_set_announce_port(forwarded_port);
+        struct pc_dht_endpoint ep, self;
+        bool know_self = pc_dht_external_endpoint(&self);
         while (pc_dht_next_candidate(&ep)) {
+            /* Someone behind our own router, already found on the local
+             * network: its public address would only loop back. */
+            if (lan_seen && know_self && ep.address == self.address)
+                continue;
             /* Paired already: a Hello now would lock that player onto us while
              * receive() ignores their answer, costing them TIMEOUT_MS. The DHT
              * rediscovers them if this attempt expires. */
@@ -777,6 +950,8 @@ void pc_net_match_poll(void) {
     }
 }
 void pc_net_match_stop(void) {
+    beacon_close();
+    pc_upnp_unmap();
     pc_dht_stop();
     publication = 0;
     publication_reason = NULL;

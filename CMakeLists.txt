@@ -242,6 +242,7 @@ set(PC_SOURCES
         src/pc/net_dht_item.c
         src/pc/net_identity.c
         src/pc/net_match.c
+        src/pc/net_upnp.c
         src/pc/net_rank.c
         src/pc/net_rank_store.c
         src/pc/net_rank_session.c

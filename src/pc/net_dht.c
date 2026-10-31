@@ -30,6 +30,8 @@
 #include "../../extern/dht/sha1.h"
 static intptr_t fd = -1;
 static uint16_t bound_port;
+static uint16_t announce_port; /* a router-forwarded port to announce, or 0 */
+extern int dht_announce_implied_port;
 static unsigned char local_node_id[20];
 static enum pc_dht_mode mode;
 static char direct_code[32];
@@ -497,6 +499,8 @@ bool pc_dht_start(enum pc_dht_mode m, const char* code, int band, uint16_t port)
     memcpy(local_node_id, id, 20);
     mode = m;
     rating_band = band;
+    announce_port = 0;
+    dht_announce_implied_port = 1;
     snprintf(direct_code, sizeof(direct_code), "%s", code ? code : "");
     started = SDL_GetTicks();
     next_search = next_periodic = 0;
@@ -595,15 +599,25 @@ void pc_dht_poll(void) {
                                                                          0) :
                                             0;
         int64_t minute = (int64_t)time(NULL) / 60;
+        uint16_t port = announce_port ? announce_port : bound_port;
+        dht_announce_implied_port = announce_port ? 0 : 1;
         for (int offset = -width; offset <= width; offset++)
             for (int age = 0; age < (mode == PC_DHT_DIRECT ? 1 : 2); age++) {
                 unsigned char hash[20];
                 if (pc_dht_topic(mode, direct_code, rating_band + offset, minute - age, hash))
-                    dht_search(hash, age == 0 ? bound_port : 0, AF_INET, values, NULL);
+                    dht_search(hash, age == 0 ? port : 0, AF_INET, values, NULL);
             }
         for (unsigned i = 0; i < extra_count; i++)
-            dht_search(extra_topics[i], bound_port, AF_INET, values, NULL);
+            dht_search(extra_topics[i], port, AF_INET, values, NULL);
         next_search = now + 5000;
+    }
+}
+
+void pc_dht_set_announce_port(uint16_t port) {
+    if (fd >= 0 && port != announce_port) {
+        announce_port = port;
+        next_search = 0; /* re-announce with it now */
+        pc_log_line("dht: announcing forwarded port %u", (unsigned)port);
     }
 }
 

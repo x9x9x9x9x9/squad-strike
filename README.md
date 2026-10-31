@@ -277,7 +277,16 @@ pick your own: 1-4 letters, `#`, then 1-3 digits, like `CHRS#123` (launcher or
 F1 → Online → Your connect code). Until you choose one you get a default made
 from your old player name and your key, like `PLAY#417`. Codes are not registered anywhere, so two people
 can pick the same one; the lobby shows who you reached, and every pairing
-message is still signed by that player's key. UNRANKED searches for
+message is still signed by that player's key. Direct Connect also works when both
+PCs are on the same network (home Wi-Fi or one phone hotspot): while calling,
+each PC announces the call on the local network (UDP 41010, multicast and
+broadcast), so the two connect directly even when the router does not loop
+back its public address or the hotspot has no data. For a PC on a phone
+hotspot calling a friend at home, the game asks the home router to forward its
+port (UPnP; `MELEE_UPNP=0` turns this off), which lets the hotspot's stricter
+carrier NAT get through. Two PCs each on a different phone hotspot still
+usually cannot connect: that needs a relay server, which this build does not
+have. UNRANKED searches for
 an opponent; RANKED runs a rated best-of-three set. PROFILE shows your code
 and locally verified rating. Internet discovery may take about 30 seconds to
 bootstrap and some NATs cannot support a direct peer connection. Legacy

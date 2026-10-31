@@ -46,6 +46,11 @@ def run():
             ).stdout.strip())
         assert codes == ["P#0", "P#1"], codes
         processes = []
+        if os.getenv("MATCH_LAN"):
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.bind(("", 0))
+            os.environ["MELEE_DIRECT_BEACON_PORT"] = str(probe.getsockname()[1])
+            probe.close()
         try:
             for player in range(2):
                 profile = Path(work) / f"p{player}"
@@ -56,6 +61,8 @@ def run():
                     # leading zero: it is still the same code.
                     theirs = codes[1 - player]
                     env["MATCH_DIAL"] = theirs if player else "p#0" + theirs[2:]
+                    if os.getenv("MATCH_WAIT") and player == 0:
+                        env["MATCH_DIAL"] = ""  # direct, waiting for the call
                 processes.append(subprocess.Popen(
                     [executable, str(ports[player]), str(ports[1-player])],
                     env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
@@ -85,6 +92,8 @@ def run():
         detail = "dual-signed durable set, immutable publication and mutable retry"
     elif os.getenv("MATCH_PROOF_TIMEOUT") or os.getenv("MATCH_PROOF_MISMATCH"):
         detail = "unverified peer state refused before socket handoff"
+    elif os.getenv("MATCH_LAN"):
+        detail = "direct call found on the local network with no internet candidates"
     elif os.getenv("MATCH_DIRECT"):
         detail = "mutual direct dial by TAG#NUM code (one typed loosely), contact saved"
     elif os.getenv("MATCH_RANKED"):

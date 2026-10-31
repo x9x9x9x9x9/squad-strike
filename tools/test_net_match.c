@@ -118,8 +118,10 @@ bool pc_dht_start(enum pc_dht_mode m, const char* c, int b, uint16_t p) {
     (void)b;
     (void)p;
     dht_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    /* MATCH_LAN: reachable on every local address, as a real one is, since
+     * the beacon's Hello goes to whichever address the beacon came from. */
     struct sockaddr_in a = {.sin_family = AF_INET,
-        .sin_addr.s_addr = htonl(INADDR_LOOPBACK),
+        .sin_addr.s_addr = htonl(getenv("MATCH_LAN") ? INADDR_ANY : INADDR_LOOPBACK),
         .sin_port = htons(local_port)};
     return bind(dht_fd, (void*)&a, sizeof a) == 0;
 }
@@ -144,8 +146,29 @@ void pc_dht_set_datagram_callback(pc_dht_datagram_fn f, void* c) {
 intptr_t pc_dht_socket(void) {
     return dht_fd;
 }
+uint16_t pc_dht_port(void) {
+    return local_port;
+}
+bool pc_dht_external_endpoint(struct pc_dht_endpoint* out) {
+    (void)out;
+    return false;
+}
+void pc_dht_set_announce_port(uint16_t port) {
+    (void)port;
+}
+void pc_upnp_map_start(uint16_t port) {
+    (void)port;
+}
+bool pc_upnp_mapped(uint32_t* address, uint16_t* port) {
+    (void)address;
+    (void)port;
+    return false;
+}
+void pc_upnp_unmap(void) {}
 bool pc_dht_next_candidate(struct pc_dht_endpoint* out) {
-    if (!candidate)
+    /* MATCH_LAN: the internet search finds nobody (no data on the hotspot,
+     * or a router that does not loop back); only the beacon can pair. */
+    if (!candidate || getenv("MATCH_LAN"))
         return false;
     candidate = 0;
     out->address = htonl(INADDR_LOOPBACK);

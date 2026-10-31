@@ -5,7 +5,9 @@ Downloaded 2026-09-20 from:
 - https://github.com/jech/dht (`master`, `dht.c`, `dht.h`), MIT license retained in both files.
 - https://github.com/clibs/sha1 (`master`, `sha1.c`, `sha1.h`), Steve Reid public-domain SHA-1, notice retained.
 
-Local patches: outgoing `announce_peer` includes canonical `implied_port=1`;
+Local patches: outgoing `announce_peer` includes canonical `implied_port=1`
+(`implied_port=0` with an explicit port while `dht_announce_implied_port` is
+0, for a UPnP-forwarded port);
 SHA1 endian preprocessor checks require defined macros before comparing them.
 
 `src/pc/net_dht.c` owns the IPv4 nonblocking UDP socket until `take_socket`.
