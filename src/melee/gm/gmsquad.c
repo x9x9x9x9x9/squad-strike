@@ -2,6 +2,7 @@
 
 #ifdef TARGET_PC
 
+#include <stdio.h>
 #include <string.h>
 
 #include "gm_1601.h"
@@ -272,6 +273,17 @@ void gmSquad_OnEnterVs(StartMeleeData* start)
             if (gmSquad_rows[i][k].ckind < ChKind_Max) {
                 s_lineup[i][s_lineup_count[i]++] = gmSquad_rows[i][k];
             }
+        }
+        {
+            /* Which fighters this match loads, for a log that ends in a
+             * crash: character kind:colour, in lineup order. */
+            char line[96];
+            int n = snprintf(line, sizeof line, "squad: P%d", i + 1);
+            for (k = 0; k < s_lineup_count[i] && n > 0 && n < (int) sizeof line; k++) {
+                n += snprintf(line + n, sizeof line - (size_t) n, " %d:%d",
+                              s_lineup[i][k].ckind, s_lineup[i][k].color);
+            }
+            pc_log_line("%s (%d stocks)", line, s_stocks);
         }
     }
 }

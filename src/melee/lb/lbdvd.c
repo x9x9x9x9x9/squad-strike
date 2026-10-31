@@ -421,6 +421,16 @@ void* lbDvd_GetPreloadedArchive(ssize_t entry_num)
         PreloadEntry* entry = &preloadCache.entries[i];
         type = entry->type;
 
+#ifdef TARGET_PC
+        {
+            char name[64];
+            if (DVDConvertEntrynumToPath((s32) entry_num, name, sizeof name)) {
+                lbArchive_PcName(name);
+            } else {
+                lbArchive_PcName("(preloaded file)");
+            }
+        }
+#endif
         switch (type) {
         case 2:
             lbArchive_InitializeDAT(entry->archive->addr,

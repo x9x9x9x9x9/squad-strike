@@ -49,4 +49,9 @@ int lbArchiveRelocate(HSD_Archive*, u8*, size_t file_size, intptr_t base_addr);
     })
 #endif
 
+#ifdef TARGET_PC
+/// The file the next lbArchive_InitializeDAT parses, named in its failure log.
+void lbArchive_PcName(const char* name);
+#endif
+
 #endif

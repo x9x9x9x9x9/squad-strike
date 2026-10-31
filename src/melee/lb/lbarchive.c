@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "lbdvd.h"
@@ -11,7 +12,17 @@
 #include <sysdolphin/baselib/archive.h>
 #include <sysdolphin/baselib/debug.h>
 #ifdef TARGET_PC
+#include "pc/pc.h"
 #include "pc/region.h"
+
+/* The file the next lbArchive_InitializeDAT parses, for its failure report
+ * (lbArchive_PcName). Set by the loaders that know the name. */
+static char pc_archive_name[64];
+
+void lbArchive_PcName(const char* name)
+{
+    snprintf(pc_archive_name, sizeof pc_archive_name, "%s", name ? name : "");
+}
 #endif
 
 void lbArchive_InitializeDAT(HSD_Archive* archive, void* data, size_t length)
@@ -20,6 +31,18 @@ void lbArchive_InitializeDAT(HSD_Archive* archive, void* data, size_t length)
     int i = 0;
 
     if (HSD_ArchiveParse(archive, data, length) == -1) {
+#ifdef TARGET_PC
+        {
+            /* Name the file in the log: the PANIC below says only where. */
+            const u8* b = data;
+            unsigned header = data != NULL && length >= 4 ?
+                                  (unsigned) (b[0] << 24 | b[1] << 16 | b[2] << 8 | b[3]) :
+                                  0;
+            pc_log_line("archive: %s failed to parse (%u bytes read, header says %u)",
+                        pc_archive_name[0] ? pc_archive_name : "(unnamed file)",
+                        (unsigned) length, header);
+        }
+#endif
         OSReport("HSD_ArchiveParse error!\n");
         HSD_ASSERT(73, 0);
     }
@@ -121,6 +144,9 @@ static inline void readArchive(const char* filename, void* data,
 
     lbFile_8001668C(filename, data, &length);
     pc_archive_check(filename, data, length);
+#ifdef TARGET_PC
+    lbArchive_PcName(filename);
+#endif
     lbArchive_InitializeDAT(archive, data, length);
 }
 
@@ -145,6 +171,9 @@ static inline HSD_Archive* lbArchive_LoadArchive_inline(const char* filename)
     archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
     lbFile_8001668C(filename, data, &length);
     pc_archive_check(filename, data, length);
+#ifdef TARGET_PC
+    lbArchive_PcName(filename);
+#endif
     lbArchive_InitializeDAT(archive, data, length);
     return archive;
 }
