@@ -1,3 +1,4 @@
+#include "ftsdremix.h"
 #include "ftcoll.h"
 
 #include <Runtime/platform.h>
@@ -102,6 +103,23 @@ static int getEnvDmg(float dmg)
 {
     if (dmg) {
         return (int) dmg ? (int) dmg : 1;
+    }
+    return 0;
+}
+
+/* What a hit of less than 1 damage counts as for hitlag and DI: 1, or with
+ * SD Remix 0 (its "v1.00 Hitlag Behavior": no hitlag, no DI, so moves such
+ * as Young Link's up-B and Zelda's forward smash connect as in v1.00). */
+static inline int ftColl_MinHitDmg(void)
+{
+    return FT_SDR ? 0 : 1;
+}
+
+/* getEnvDmg for the hits SD Remix's change covers. */
+static int getEnvDmgHit(float dmg)
+{
+    if (dmg) {
+        return (int) dmg ? (int) dmg : ftColl_MinHitDmg();
     }
     return 0;
 }
@@ -235,7 +253,7 @@ bool ftColl_8007699C(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
     {
         float dmg = hit1->damage;
         if ((int) dmg - p_ftCommonData->x3CC < (int) hit0->damage) {
-            int int_dmg = getEnvDmg(dmg);
+            int int_dmg = getEnvDmgHit(dmg);
             ftColl_80076808(fp1, hit1, 3, fp0, true);
             updateClankDamage(fp1, hit1, int_dmg, &fp0->cur_pos, false);
             efSync_Spawn(1052, NULL, &midpoint);
@@ -245,7 +263,7 @@ bool ftColl_8007699C(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
     {
         float dmg = hit0->damage;
         if ((int) dmg - p_ftCommonData->x3CC < (int) hit1->damage) {
-            int int_dmg = getEnvDmg(dmg);
+            int int_dmg = getEnvDmgHit(dmg);
             ftColl_80076808(fp0, hit0, 3, fp1, false);
             updateClankDamage(fp0, hit0, int_dmg, &fp1->cur_pos, true);
             efSync_Spawn(1052, NULL, &midpoint);
@@ -262,7 +280,7 @@ void ftColl_80076CBC(Fighter* fp0, HitCapsule* hit0, Fighter* fp1)
     ftColl_80076808(fp0, hit0, 1, fp1, false);
 
     {
-        int int_dmg = getEnvDmg(hit0->damage);
+        int int_dmg = getEnvDmgHit(hit0->damage);
         if (int_dmg > fp0->dmg.x1924) {
             fp0->dmg.x1924 = int_dmg;
             if (fp0->ground_or_air == GA_Ground) {
@@ -453,7 +471,7 @@ bool ftColl_80076ED8(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
             if ((int) dmg) {
                 int_dmg.v = dmg;
             } else {
-                int_dmg.v = 1;
+                int_dmg.v = ftColl_MinHitDmg();
             }
         } else {
             int_dmg.v = 0;
@@ -482,7 +500,7 @@ bool ftColl_80076ED8(Fighter* fp0, HitCapsule* hit0, Fighter* fp1,
                 if ((int) dmg) {
                     dmg_count.v = dmg;
                 } else {
-                    dmg_count.v = 1;
+                    dmg_count.v = ftColl_MinHitDmg();
                 }
             } else {
                 dmg_count.v = 0;
@@ -684,7 +702,7 @@ void ftColl_80077688(Item* item, HitCapsule* hurt, Fighter* fp, Vec3* pos,
         if ((int) hurt->damage) {
             dmg = hurt->damage;
         } else {
-            dmg = 1;
+            dmg = ftColl_MinHitDmg();
         }
     } else {
         dmg = 0;
@@ -797,7 +815,7 @@ void ftColl_80077688(Item* item, HitCapsule* hurt, Fighter* fp, Vec3* pos,
 static inline void recordItemClank(Item* item, HitCapsule* hit, Fighter* fp,
                                    Vec3* effect_pos, float dmg)
 {
-    int int_dmg = getEnvDmg(dmg);
+    int int_dmg = getEnvDmgHit(dmg);
     int mode;
 
     if (hit->x41_b5) {
@@ -846,7 +864,7 @@ void ftColl_80077970(Item* item, HitCapsule* hit1, Fighter* fp,
     {
         float dmg = hit2->damage;
         if ((int) dmg - p_ftCommonData->x3CC < (int) hit1->damage) {
-            int int_dmg = getEnvDmg(dmg);
+            int int_dmg = getEnvDmgHit(dmg);
             ftColl_80076808(fp, hit2, 3, item, true);
             updateClankDamage(fp, hit2, int_dmg, &item->pos, false);
             efSync_Spawn(0x41C, NULL, &midpoint);
@@ -1034,7 +1052,7 @@ bool ftColl_80077C60(Item* item, HitCapsule* hit, Fighter* fp,
                     if ((int) scaled_dmg) {
                         dmg_count = scaled_dmg;
                     } else {
-                        dmg_count = 1;
+                        dmg_count = ftColl_MinHitDmg();
                     }
                 } else {
                     dmg_count = 0;
