@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "itnesspkthunderball.h"
 
 #include <math.h>
@@ -261,6 +262,9 @@ bool itNesspkthunderball_UnkMotion0_Anim(Item_GObj* gobj)
                 return true;
             }
         } else {
+            if (FT_SDR) { /* SD Remix: as in v1.00, it keeps going */
+                return it_80273130(gobj);
+            }
             it_802AB90C(gobj);
             return true;
         }
