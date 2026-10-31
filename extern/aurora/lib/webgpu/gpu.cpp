@@ -1254,7 +1254,7 @@ bool refresh_surface(bool recreate) {
     return false;
   }
   if (!window::is_presentable()) {
-    {
+    if (window::surface_lost()) { /* see begin_frame: desktop keeps it */
       window::SurfaceLock surfaceLock;
       release_surface_locked();
     }
