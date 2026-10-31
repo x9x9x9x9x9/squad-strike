@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include <melee/ft/forward.h>
 #include <melee/ft/kinds/ftLuigi/forward.h>
 
@@ -98,8 +99,10 @@ void ftKb_LgSpecialAirN_Coll(Fighter_GObj* gobj)
 {
     if (ft_80081D0C(gobj) != GA_Ground) {
         Fighter* fp = gobj->user_data;
-        ftCommon_AirToGroundStateChange(gobj, fp, ftKb_MS_LgSpecialN,
-                                        ftLg_MF_SpecialN_Coll);
+        /* SD Remix: the fireball lands into Landing */
+        ftCommon_AirToGroundStateChange(
+            gobj, fp, FT_SDR ? ftCo_MS_Landing : ftKb_MS_LgSpecialN,
+            ftLg_MF_SpecialN_Coll);
         fp->accessory4_cb = fn_800F98F4;
     }
 }
