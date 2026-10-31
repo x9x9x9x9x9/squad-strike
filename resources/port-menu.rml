@@ -204,6 +204,11 @@
               </span>
               <button id="net-delay" class="value">Auto</button>
             </div>
+            <div class="row" data-desc="Shows the ping to your opponent in the top left corner during online matches.">
+              <span class="name">Ping display<span class="detail">Shows the ping to your opponent in the top left corner during online matches.</span>
+              </span>
+              <button id="show-ping" class="value">On</button>
+            </div>
             <div class="row">
               <div class="note">
                 <p>Internet discovery can take a few minutes. Some home networks cannot connect without a relay.</p>

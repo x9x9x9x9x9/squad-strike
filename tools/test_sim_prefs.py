@@ -26,6 +26,7 @@ PINNED = {
 PRESENTATION = {
     "pc_get_hud_mode": "widescreen HUD placement (ifall.c)",
     "pc_get_net_target": "prefills the connect-code entry (gmonlinemode.c)",
+    "pc_is_ping_display_enabled": "draws the ping text in a netplay match (ifnet.c)",
 }
 
 found = {}

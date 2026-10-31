@@ -94,6 +94,8 @@ bool pc_is_frozen_stadium_enabled(void);
 /* Squad Strike / Stage Expansion: launcher Gameplay settings (and the
  * in-game menu), synced through netplay RULES. */
 bool pc_is_squad_strike_enabled(void);
+/* Online "Ping: 34ms" in the top left of a match (launcher Online page). */
+bool pc_is_ping_display_enabled(void);
 bool pc_is_stage_expansion_enabled(void);
 /* SD Remix characters (sdremix.cpp): its fighter files over the disc's and
  * its code changes. Decided once at boot; both netplay peers must match. */

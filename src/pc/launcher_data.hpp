@@ -53,6 +53,7 @@ struct Preferences {
     bool frozen_stadium = false;
     bool free_camera = false;
     bool ucf = false;
+    bool show_ping = true;        // online: "Ping: 34ms" in the top left of a match
     bool squad_strike = true;     // Squad Strike on VS character select
     bool stage_expansion = true;  // UnclePunch's Stage Expansion layouts
     bool sd_remix = false;        // SD Remix characters (needs its files; at boot)

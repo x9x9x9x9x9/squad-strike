@@ -11,6 +11,7 @@
 #include "pc/net.h"
 #include "pc/net_match.h"
 #include "pc/net_chat.h"
+#include "pc/pc.h"
 #include "pc/widescreen.h"
 
 #include <stdlib.h>
@@ -52,16 +53,25 @@ static void ifNet_Think(HSD_GObj* gobj)
     int ping, delay;
     unsigned rollbacks;
     if (!pc_net_stats(&ping, &delay, &rollbacks)) return;
-    char line[160], opponent[32], debug[32] = "";
-    const char* code = pc_net_match_state(NULL) == PC_MATCH_READY ?
-                       pc_net_match_opponent_code() : NULL;
-    if (code && code[0]) snprintf(opponent, sizeof opponent, "%s", code);
-    else snprintf(opponent, sizeof opponent, "P%d", 2 - pc_net_local_player());
-    if (ifNet.debug) snprintf(debug, sizeof debug, "  rb %u", rollbacks);
-    snprintf(line, sizeof line, "P%d vs %s  delay %d  ping %dms%s%s%s",
-             pc_net_local_player() + 1, opponent, delay, ping, debug,
-             pc_net_desync() ? "  DESYNC" : "",
-             ifNet_Marker(pc_net_quality()));
+    /* "Ping: 34ms", Slippi-style: the round trip to the opponent, with the
+     * link-quality marks and a desync warning. The launcher / F1 Online
+     * page's "Ping display" turns it off; the desync warning stays, since
+     * a desynced match is no longer a match. MELEE_NET_DEBUG adds the input
+     * delay and the rollback count. */
+    char line[160], debug[48] = "", ping_text[16];
+    bool show = pc_is_ping_display_enabled();
+    if (ifNet.debug)
+        snprintf(debug, sizeof debug, "  delay %d  rb %u", delay, rollbacks);
+    if (ping >= 0)
+        snprintf(ping_text, sizeof ping_text, "%dms", ping);
+    else
+        snprintf(ping_text, sizeof ping_text, "--");
+    if (show || ifNet.debug) {
+        snprintf(line, sizeof line, "Ping: %s%s%s%s", ping_text, debug,
+                 pc_net_desync() ? "  DESYNC" : "", ifNet_Marker(pc_net_quality()));
+    } else {
+        snprintf(line, sizeof line, "%s", pc_net_desync() ? "DESYNC" : " ");
+    }
     if (strcmp(line, ifNet.line)) {
         HSD_SisLib_803A70A0(ifNet.text, ifNet.entry, "%s", line);
         memcpy(ifNet.line, line, strlen(line) + 1);

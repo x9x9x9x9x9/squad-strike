@@ -75,6 +75,9 @@ const char* pc_get_net_name(void) {
 const char* pc_get_net_code(void) {
     return "";
 }
+bool pc_is_ping_display_enabled(void) {
+    return false;
+}
 const char* pc_get_net_target(void) {
     return "";
 }

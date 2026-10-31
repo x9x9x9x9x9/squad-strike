@@ -276,6 +276,9 @@ void ifAll_802F390C(void)
     un_802FD4C8();
     un_802FF1B4();
     un_802FF498();
+#ifdef TARGET_PC
+    ifNet_Create(); /* netplay ping and quick chat; nothing offline */
+#endif
 }
 
 void ifAll_802F3A64(void)
