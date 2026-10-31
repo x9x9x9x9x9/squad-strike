@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftkirbyspecialgamewatch.h"
 
 #include <melee/ft/forward.h>
@@ -181,7 +182,9 @@ void ftKb_SpecialNGw_8010D188(Fighter_GObj* gobj)
 void ftKb_SpecialNGw_8010D204(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    fp->self_vel.y = 0;
+    if (!FT_SDR) { /* SD Remix: the chef keeps Kirby's momentum */
+        fp->self_vel.y = 0;
+    }
     Fighter_ChangeMotionState(gobj, ftKb_MS_GwSpecialAirN, Ft_MF_None, 0, 1, 0,
                               NULL);
     ftAnim_8006EBA4(gobj);
@@ -293,8 +296,10 @@ void ftKb_SpecialNGw_8010D580(Fighter_GObj* gobj)
 void ftKb_SpecialNGw_8010D5F0(Fighter_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    ftCommon_AirToGroundStateChange(gobj, fp, ftKb_MS_GwSpecialN,
-                                    ftKb_MF_GwSpecialN_Coll);
+    /* SD Remix: landing during the chef cancels it into Landing */
+    ftCommon_AirToGroundStateChange(
+        gobj, fp, FT_SDR ? ftCo_MS_Landing : ftKb_MS_GwSpecialN,
+        ftKb_MF_GwSpecialN_Coll);
 
     fp = GET_FIGHTER(gobj);
     fp->accessory4_cb = fn_8010CE5C;
