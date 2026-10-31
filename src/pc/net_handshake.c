@@ -312,11 +312,15 @@ static void unlock_restore(void) {
  * wire images, so tampering with it fails the payload hash first. */
 static uint32_t unlock_hash_now(void) {
     uint64_t s = pc_unlock_state_get();
-    uint8_t be[8];
+    uint8_t be[9];
     for (int i = 0; i < 8; i++) {
         be[i] = (uint8_t)(s >> (56 - 8 * i));
     }
-    return fnv1a(2166136261u, be, sizeof be);
+    /* SD Remix characters change fighter files and code: a peer without
+     * them would desync on the first move, so it rides in this hash and a
+     * mismatch is refused like an unlock mismatch. */
+    be[8] = pc_sdremix_active() ? 1 : 0;
+    return fnv1a(2166136261u, be, pc_sdremix_active() ? sizeof be : 8);
 }
 
 void rules_restore(void) {
