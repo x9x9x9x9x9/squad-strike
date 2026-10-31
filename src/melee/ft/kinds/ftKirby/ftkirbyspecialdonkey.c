@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftkirbyspecialdonkey.h"
 
 #include <melee/ft/forward.h>
@@ -603,6 +604,8 @@ void ftKb_DkSpecialAirNFull_Coll(Fighter_GObj* gobj)
 void ftKb_SpecialNPr_80100DE0(Fighter_GObj* gobj)
 {
     Fighter* ft = GET_FIGHTER(gobj);
-    ft->u.kb.xBC = 0;
+    if (!FT_SDR) { /* SD Remix: up-B keeps the Giant Punch charge */
+        ft->u.kb.xBC = 0;
+    }
     efLib_DestroyAll(gobj);
 }
