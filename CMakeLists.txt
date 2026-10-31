@@ -288,7 +288,13 @@ target_include_directories(melee PRIVATE extern/monocypher)
 
 target_compile_options(melee PRIVATE
         ${MELEE_FP_FLAGS}
-        $<$<AND:$<COMPILE_LANGUAGE:C>,$<NOT:$<BOOL:${WIN32}>>,$<NOT:$<BOOL:${ANDROID}>>,$<NOT:$<BOOL:${APPLE}>>>:-fno-pie>)
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<NOT:$<BOOL:${WIN32}>>,$<NOT:$<BOOL:${ANDROID}>>,$<NOT:$<BOOL:${APPLE}>>>:-fno-pie>
+        # The PC layer's C reads game structs (net.c, net_snapshot.c, slp.c), so
+        # it must lay out their bitfields as melee_game does. MinGW's default
+        # (ms_struct) put StartMeleeRules.game_speed at 0x3c instead of 0x34:
+        # net.c read the wrong word, saw "not game speed 1" and ran every
+        # online fight in lockstep. C++ here only sees aurora's headers.
+        $<$<AND:$<COMPILE_LANGUAGE:C>,$<BOOL:${WIN32}>>:-mno-ms-bitfields>)
 target_link_libraries(melee PRIVATE melee_game aurora::main ${MELEE_CRYPTO_LIBS} ${MELEE_NETWORK_LIBS})
 
 if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")

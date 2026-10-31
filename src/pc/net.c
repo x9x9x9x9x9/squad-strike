@@ -1,3 +1,4 @@
+#include <stddef.h>
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* Netplay prototype: two instances exchange one PADStatus per frame over UDP
  * and run in rollback lockstep modelled on Slippi (docs/netcode-plan.md §4):
@@ -85,6 +86,14 @@ static bool s_no_progress; /* the wait ended on a talking peer that never advanc
 /* Session-local seed history must not survive a reconnect. */
 static uint32_t s_seed_after_tick;
 static bool s_seed_have;
+/* This file reads game structs (StartMeleeRules, Fighter) that melee_game
+ * compiles with GCC's bitfield layout. A build that laid them out another
+ * way (MinGW's default ms_struct did) reads the wrong words: game_speed came
+ * back as a different field and every Windows online fight ran in lockstep.
+ * Fail the build instead. */
+_Static_assert(offsetof(StartMeleeRules, game_speed) == 0x34,
+    "game structs laid out differently from melee_game (Windows: -mno-ms-bitfields)");
+
 static bool s_lockstep;      /* snapshot failure: stop predicting, retain older corrections */
 static PADStatus s_raw_last; /* newest physical sample (port 0) */
 static int s_status;         /* pc_net_peer_status(); kept until the next connect */
@@ -3044,6 +3053,7 @@ static void fresh_tick(PADStatus* head, bool raw) {
          * (gmslomo.c sets game_speed 0.5 and declares itself GS_VS), so
          * after a rollback of odd depth the two peers advance the scene on
          * opposite ticks -- one simulates a frame the other skips. */
+        /* Read across the game/PC boundary: see the layout check below. */
         bool speed_1 = gmVsMelee_StartData.rules.game_speed == 1.0F;
         bool lockstep = s_lockstep || !in_fight() || net.frame <= net.rb_barrier || !speed_1;
         /* The last lockstep frames before this fight can predict: size and
