@@ -696,6 +696,7 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
     pc_android_set_launcher_active(false);
 
     pc_menu_init(info.window);
+    pc_sdremix_init(); /* before the game opens any fighter file */
     pc_platform_init();
     aurora_card_set_present(card);
     int rc = melee_main();
