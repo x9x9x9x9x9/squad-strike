@@ -539,6 +539,18 @@ static void beacon_poll(uint64_t now) {
         int n = (int)recvfrom(beacon_fd, (char*)&b, sizeof b, 0, (struct sockaddr*)&from, &len);
         if (n < 0)
             break;
+        if (n == (int)sizeof b && ntohl(b.magic) == BEACON_MAGIC &&
+            memchr(b.from, 0, sizeof b.from) && memchr(b.to, 0, sizeof b.to) &&
+            strcmp(b.from, identity.code) &&
+            (!strcmp(b.to, identity.code) || (target_code[0] && !strcmp(b.from, target_code))) &&
+            (b.version != MATCH_VERSION || memcmp(b.compatibility, compatibility, 20)))
+        {
+            static char mismatch[96];
+            snprintf(mismatch, sizeof mismatch,
+                "%s has a different version of the game. Both need the same download.", b.from);
+            failure = mismatch;
+            continue;
+        }
         if (n != (int)sizeof b || ntohl(b.magic) != BEACON_MAGIC || b.version != MATCH_VERSION ||
             b.mode != (uint8_t)mode || memcmp(b.compatibility, compatibility, 20) ||
             !memchr(b.from, 0, sizeof b.from) || !memchr(b.to, 0, sizeof b.to) ||
@@ -626,6 +638,23 @@ static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep
     if (n == sizeof(MatchHello)) {
         const MatchHello* h = data;
         const char* terminator = memchr(h->code, '\0', sizeof h->code);
+        /* The friend we are calling (or someone calling us) on another build:
+         * say so instead of "still trying" forever. Both must run the same
+         * download, since the simulations would part on the first frame. */
+        if (ntohl(h->magic) == MATCH_MAGIC && h->type == 'H' && mode == PC_MATCH_DIRECT &&
+            h->mode == (uint8_t)mode && terminator && pc_identity_code_valid(h->code) &&
+            (!target_code[0] || !strcmp(h->code, target_code)) &&
+            (h->version != MATCH_VERSION || memcmp(h->compatibility, compatibility, 20)))
+        {
+            static char mismatch[96];
+            snprintf(mismatch, sizeof mismatch,
+                "%s has a different version of the game. Both need the same download.", h->code);
+            if (failure != mismatch)
+                pc_log_line("match: %s answered on another build (version %u); ignoring", h->code,
+                    (unsigned)h->version);
+            failure = mismatch;
+            return;
+        }
         if (ntohl(h->magic) != MATCH_MAGIC || h->version != MATCH_VERSION || h->type != 'H' ||
             h->mode != (uint8_t)mode || h->nonce == local_nonce ||
             memcmp(h->compatibility, compatibility, 20) || memcmp(h->topic, topic, 20) ||
