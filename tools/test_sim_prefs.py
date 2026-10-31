@@ -20,6 +20,8 @@ PINNED = {
     "pc_is_free_camera_enabled": "forced off in launcher.cpp",
     "pc_is_unlock_all_enabled": "RULES (pc_net_rules)",
     "pc_is_frozen_stadium_enabled": "RULES (pc_net_rules)",
+    "pc_is_squad_strike_enabled": "RULES (pc_net_rules)",
+    "pc_is_stage_expansion_enabled": "RULES (pc_net_rules)",
 }
 PRESENTATION = {
     "pc_get_hud_mode": "widescreen HUD placement (ifall.c)",
