@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftcaptainspecials.h"
 
 #include <Runtime/platform.h>
@@ -280,7 +281,8 @@ void ftCa_SpecialAirS_Anim(HSD_GObj* gobj)
     }
     if (!ftAnim_IsFramesRemaining(gobj)) {
         ftCommon_8007D60C(fp);
-        if (captainAttrs->specials_hit_landing_lag == 0) {
+        /* SD Remix: a side-B that hit ends in a normal fall */
+        if (FT_SDR || captainAttrs->specials_hit_landing_lag == 0) {
             ftCo_Fall_Enter(gobj);
         } else {
             ftCo_80096900(gobj, 1, 1, 0, 1,
