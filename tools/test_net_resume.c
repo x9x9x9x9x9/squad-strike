@@ -250,6 +250,10 @@ uint32_t jitter_us(void) {
     return 0;
 }
 void time_sync(void) {}
+void delay_tick(void) {}
+bool pc_is_rumble_enabled(void) {
+    return true;
+}
 void sync_reset(void) {}
 
 /* The pad-slip detector (net.c head_note/head_check) reads the retrace count

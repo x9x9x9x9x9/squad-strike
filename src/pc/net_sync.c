@@ -19,6 +19,7 @@
 #include <dolphin/os.h>
 #include <sysdolphin/baselib/controller.h>
 
+#include <SDL3/SDL_timer.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +28,22 @@
 #define DELAY_LEAD 120    /* frames between announcing a delay and applying it */
 #define DELAY_EVERY 60    /* frames between auto-delay decisions */
 #define DELAY_HOLDOFF 300 /* frames between link-driven delay changes */
+/* Menus (lockstep) decide on the wall clock instead. A lockstep pair on a
+ * slow link advances only `delay` frames per round trip: at 450 ms of ping
+ * and delay 2 that is about four frames a second, so the frame counts above
+ * became 15 s to decide, 30 s to apply and over a minute between changes,
+ * and a phone hotspot sat out the whole post-connect hand-off at 4 fps. */
+#define LOCKSTEP_DELAY_EVERY_MS 1000 /* between decisions */
+/* Frames from announcing to applying, past the current delay: in lockstep the
+ * guest cannot get further ahead than that before the message lands, and an
+ * announcement that does arrive late is applied at once (net_delay_rel). */
+#define LOCKSTEP_DELAY_LEAD 4
+#define LOCKSTEP_RAISE_HOLDOFF_MS 1000 /* before another raise */
+#define LOCKSTEP_LOWER_HOLDOFF_MS 5000 /* before coming back down */
+/* Menus can carry far more delay than a fight: a quarter second of cursor
+ * lag is nothing, a menu at 4 fps is. 15 frames cover a 250 ms one-way trip
+ * and stay well inside the 32-frame unacked input window. */
+#define LOCKSTEP_DELAY_MAX 15
 /* A fight predicts and rolls back, so the frames of the trip covered here are
  * paid by the rollback window instead of by the player's hands. Menus are
  * lockstep and pay all of it. */
@@ -69,11 +86,13 @@ static uint32_t s_rtt_prev;            /* last RTT sample, for the jitter ring *
 static uint32_t s_jit[JITTER_SAMPLES]; /* |dRTT| ring; its mean scales the thresholds */
 static int s_jit_n, s_jit_i;
 static uint64_t s_jit_sum;
-static int64_t s_nudge_ns;    /* slow-down carried by every frame's pacing wait */
-static int s_delay_base;      /* frames of delay the link needs while lockstep */
-static int s_delay_seen;      /* last window's measurement, for confirm-twice */
-static int32_t s_delay_acted; /* frame of the last delay announcement */
-static bool s_delay_fight;    /* in_fight() when that announcement was made */
+static int64_t s_nudge_ns;         /* slow-down carried by every frame's pacing wait */
+static int s_delay_base;           /* frames of delay the link needs while lockstep */
+static int s_delay_seen;           /* last window's measurement, for confirm-twice */
+static int32_t s_delay_acted;      /* frame of the last delay announcement */
+static uint64_t s_delay_acted_ms;  /* and its wall clock (lockstep holdoff) */
+static uint64_t s_delay_window_ms; /* wall clock of the last lockstep decision */
+static bool s_delay_fight;         /* in_fight() when that announcement was made */
 
 /* One phase sample (on_inputs, per input packet): the peer's frame advantage
  * against ours, in frames. Positive means we are the one running ahead.
@@ -183,33 +202,49 @@ static void delay_auto(void) {
     if (!net.delay_auto || !announcer || net.delay_at != 0) {
         return;
     }
-    if ((net.frame % DELAY_EVERY) != 0 || net.ping_us == 0) {
+    bool fight = in_fight();
+    uint64_t now_ms = SDL_GetTicks();
+    if (net.ping_us == 0) {
         return;
     }
-    uint32_t trip = net.ping_us / 2 + jitter_us();
-    int need = (int)((trip + FRAME_US - 1) / FRAME_US);
-    /* Hysteresis: a trip sitting on a frame boundary would otherwise flip
-     * between two delays for the rest of the match, one announcement per
-     * holdoff. Coming down wants a quarter frame of room below the boundary;
-     * going up is immediate, because the frames above it are the ones that
-     * stall. */
-    if (need < s_delay_base && trip + (uint32_t)(FRAME_US / 4) > (uint32_t)(need * FRAME_US)) {
-        need = s_delay_base;
+    /* Crossing between menu and fight re-picks at once from the base the
+     * link already confirmed: a menu at 15 frames must not carry that into
+     * the fight while a frame-counted window comes round. */
+    bool crossing = fight != s_delay_fight && s_delay_base != 0;
+    if (!crossing) {
+        if (fight ? (net.frame % DELAY_EVERY) != 0 :
+                    now_ms - s_delay_window_ms < LOCKSTEP_DELAY_EVERY_MS)
+        {
+            return;
+        }
+        s_delay_window_ms = now_ms;
+        uint32_t trip = net.ping_us / 2 + jitter_us();
+        int need = (int)((trip + FRAME_US - 1) / FRAME_US);
+        /* Hysteresis: a trip sitting on a frame boundary would otherwise flip
+         * between two delays for the rest of the match, one announcement per
+         * holdoff. Coming down wants a quarter frame of room below the boundary;
+         * going up is immediate, because the frames above it are the ones that
+         * stall. */
+        if (need < s_delay_base && trip + (uint32_t)(FRAME_US / 4) > (uint32_t)(need * FRAME_US)) {
+            need = s_delay_base;
+        }
+        if (need == s_delay_seen || (!fight && need > s_delay_base)) {
+            /* Two windows agree: not a jitter spike. A menu that needs more takes
+             * it at once; being a frame high costs nothing there, being low
+             * stalls every frame. */
+            s_delay_base = need;
+        }
+        s_delay_seen = need;
     }
-    if (need == s_delay_seen) {
-        s_delay_base = need; /* two windows agree: not a jitter spike */
-    }
-    s_delay_seen = need;
     if (s_delay_base == 0) {
         return;
     }
-    bool fight = in_fight();
     int d = fight ? s_delay_base - ROLLBACK_COVER : s_delay_base + LOCKSTEP_PROCESSING;
     bool lan = net.ping_us < LAN_PING_US && jitter_us() < LAN_JITTER_US;
     int lo = !fight ? 1 : lan ? FIGHT_DELAY_LAN : FIGHT_DELAY_MIN;
     /* Lockstep must cover the trip; a 200 ms link needs about seven frames.
      * Fights still cap delay at four and use rollback for the rest. */
-    int hi = fight ? 4 : 8;
+    int hi = fight ? 4 : LOCKSTEP_DELAY_MAX;
     d = d < lo ? lo : d > hi ? hi : d;
     if (d == net.delay) {
         return;
@@ -220,16 +255,32 @@ static void delay_auto(void) {
      * variable 5-20 frames, found that was the thing players complained
      * about, and replaced it with a fixed 3 (Stallone, GDC 2017). So the
      * link only gets to re-decide between matches. */
-    if (fight == s_delay_fight && (fight || net.frame - s_delay_acted < DELAY_HOLDOFF)) {
-        return;
+    if (fight == s_delay_fight) {
+        if (fight) {
+            return;
+        }
+        uint64_t since = now_ms - s_delay_acted_ms;
+        if (since < (d > net.delay ? LOCKSTEP_RAISE_HOLDOFF_MS : LOCKSTEP_LOWER_HOLDOFF_MS)) {
+            return;
+        }
     }
-    DelayMsg m = {htonl((uint32_t)d), htonl((uint32_t)(net.frame + DELAY_LEAD))};
+    /* Into a fight: switch where rollback takes over (the barrier), not
+     * before -- the fight's first frames are still lockstep while its loads
+     * settle, and on a slow link they would crawl at the fight's low delay. */
+    int quick = net.delay + LOCKSTEP_DELAY_LEAD;
+    int barrier_lead = net.rb_barrier - net.frame + 1;
+    int lead = !fight               ? quick :
+               !crossing            ? DELAY_LEAD :
+               barrier_lead > quick ? barrier_lead :
+                                      quick;
+    DelayMsg m = {htonl((uint32_t)d), htonl((uint32_t)(net.frame + lead))};
     if (!pc_net_send_reliable(REL_DELAY, &m, sizeof m)) {
         return; /* lane full: the next window announces again */
     }
     net.delay_next = d;
-    net.delay_at = net.frame + DELAY_LEAD;
+    net.delay_at = net.frame + lead;
     s_delay_acted = net.frame;
+    s_delay_acted_ms = now_ms;
     s_delay_fight = fight;
     pc_log_line("net: auto delay %d -> %d at frame %d (%s, ping %u ms, jitter %u ms)", net.delay, d,
         net.delay_at, fight ? "fight" : "lockstep", net.ping_us / 1000, jitter_us() / 1000);
@@ -299,8 +350,13 @@ void net_delay_rel(const void* payload, int len) {
  * only correction that is bounded -- a frame can always be made longer,
  * never arbitrarily shorter. The peer behind needs no correction of its own:
  * the other one slowing is what closes the gap. */
-void time_sync(void) {
+/* Every fresh tick: apply a pending delay on its frame, and let the host
+ * decide (on its own cadence, frames in a fight, wall clock in menus). */
+void delay_tick(void) {
     delay_auto();
+}
+
+void time_sync(void) {
     net.offset_last = offset_us();
     if (net.sync_mode == SYNC_OFF) {
         s_nudge_ns = 0;
@@ -494,6 +550,8 @@ void sync_reset(void) {
     s_nudge_ns = 0;
     s_delay_base = s_delay_seen = 0;
     s_delay_acted = -DELAY_HOLDOFF;
+    s_delay_acted_ms = 0;
+    s_delay_window_ms = 0;
     s_delay_fight = false;
     s_rtt_prev = 0;
     s_jit_n = s_jit_i = 0;

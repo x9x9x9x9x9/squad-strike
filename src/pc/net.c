@@ -3071,6 +3071,9 @@ static void fresh_tick(PADStatus* head, bool raw) {
             snaps_reserve();
             pure_loads_fetch();
         }
+        /* Before the wait: a menu crawling on a slow link must be able to
+         * raise its delay without first finishing the frame it is stuck on. */
+        delay_tick();
         int32_t need = lockstep ? net.frame : (net.frame >= WINDOW ? net.frame - WINDOW : 0);
         if (!wait_input(need, lockstep ? "lockstep" : "window")) {
             return;

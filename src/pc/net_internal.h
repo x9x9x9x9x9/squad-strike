@@ -495,6 +495,7 @@ void adv_note(int remote_adv, int local_adv);
 void jitter_note(uint32_t rtt); /* one RTT sample, for the |dRTT| mean */
 uint32_t jitter_us(void);
 void time_sync(void);
+void delay_tick(void); /* net_sync.c: auto input delay, every fresh tick */
 /* The host's REL_DELAY announcement (on_rel dispatches it here, like
  * REL_RESUME); game thread. */
 void net_delay_rel(const void* payload, int len);
