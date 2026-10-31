@@ -96,6 +96,8 @@ mkdir -p "${STAGE_DIR}"
 cp "${BUILD_DIR}/melee.exe" "${STAGE_DIR}/"
 cp "${LIBUSB_DIR}/COPYING" "${STAGE_DIR}/LICENSE.libusb.txt"
 cp -r "${ROOT_DIR}/resources" "${STAGE_DIR}/"
+# SD Remix's fighter files, for the "SD Remix characters" setting.
+bash "${ROOT_DIR}/tools/fetch_sdremix.sh" "${STAGE_DIR}"
 # A double-clicked run loses its console on exit, so ship a launcher that
 # turns on verbose logging, records the environment, and stays open.
 cp "${ROOT_DIR}/tools/windows/RUN-AND-LOG.bat" "${STAGE_DIR}/"
