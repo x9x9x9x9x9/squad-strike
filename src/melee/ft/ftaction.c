@@ -1,3 +1,4 @@
+#include "ftsdremix.h"
 #include <stdlib.h>
 #include "ftaction.h"
 
@@ -1381,6 +1382,9 @@ void ftAction_80073240(Fighter_GObj* fighter_gobj)
             }
         } while (F32_MAX != ftCommand->timer);
     }
+#ifdef TARGET_PC
+    ftSdr_ApplyFsm(fighter_gobj); /* SD Remix: animation speeds */
+#endif
 }
 
 void ftAction_80073354(Fighter_GObj* gobj)
