@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftCo_DamageFall.h"
 
 #include <Runtime/platform.h>
@@ -102,7 +103,13 @@ void ftCo_80090780(HSD_GObj* gobj)
     if (ftGetParasolStatus(gobj) != -1) {
         ftCo_800CF4DC(gobj);
     } else {
-        Fighter_ChangeMotionState(gobj, 0x26, 0x18001U, 0.0f, 1.0f, 0.0f,
+        /* SD Remix: let go by Mewtwo's side-B, foes stumble (MissFoot) */
+        FtMotionId msid =
+            FT_SDR && (fp->motion_id == ftCo_MS_ThrownMewtwo ||
+                       fp->motion_id == ftCo_MS_ThrownMewtwoAir)
+                ? ftCo_MS_MissFoot
+                : 0x26;
+        Fighter_ChangeMotionState(gobj, msid, 0x18001U, 0.0f, 1.0f, 0.0f,
                                   NULL);
         ftCommon_ClampAirDrift(fp);
         ftCommon_8007EBAC(fp, 8U, 0U);
