@@ -576,6 +576,11 @@ bool is_presentable() noexcept {
   return true;
 }
 
+bool surface_lost() noexcept {
+  return g_window == nullptr || g_backgrounded.load(std::memory_order_acquire) ||
+         !g_surfaceReady.load(std::memory_order_acquire);
+}
+
 void set_surface_ready(bool ready) noexcept {
   g_surfaceReady.store(ready, std::memory_order_release);
   time::internal::set_pause_reason(time::internal::PauseReason::Surface, !ready);
