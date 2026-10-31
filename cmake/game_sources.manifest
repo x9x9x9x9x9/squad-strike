@@ -56,6 +56,7 @@ src/melee/ft/ft_0DF0.c
 src/melee/ft/ft_0DF1.c
 src/melee/ft/ft_3C61.c
 src/melee/ft/ftaction.c
+src/melee/ft/ftsdremix.c
 src/melee/ft/ftafterimage.c
 src/melee/ft/ftanim.c
 src/melee/ft/ftattacks4combo.c
