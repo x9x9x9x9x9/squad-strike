@@ -387,7 +387,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
                 prefs.scale = value;
         } else if (key == "check_updates" || key == "custom_textures" || key == "unlock_all" ||
                    key == "frozen_stadium" || key == "free_camera" || key == "ucf" ||
-                   key == "reverb" || key == "squad_strike" || key == "stage_expansion")
+                   key == "reverb" || key == "squad_strike" || key == "stage_expansion" ||
+                   key == "sd_remix")
         {
             int value;
             if (row >> value && (value == 0 || value == 1)) {
@@ -409,6 +410,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
                     prefs.squad_strike = value;
                 else if (key == "stage_expansion")
                     prefs.stage_expansion = value;
+                else if (key == "sd_remix")
+                    prefs.sd_remix = value;
             }
         } else if (key == "hud_mode") {
             int value;
@@ -452,6 +455,7 @@ bool save_preferences(
     text << "reverb " << prefs.reverb << '\n'
          << "squad_strike " << prefs.squad_strike << '\n'
          << "stage_expansion " << prefs.stage_expansion << '\n'
+         << "sd_remix " << prefs.sd_remix << '\n'
          << "menu_button " << prefs.menu_button << '\n'
          << "keys";
     for (int code : prefs.keys)
