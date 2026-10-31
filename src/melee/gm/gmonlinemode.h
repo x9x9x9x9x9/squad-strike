@@ -20,6 +20,11 @@ typedef enum OnlineKind {
 
 void gmOnline_SetKind(OnlineKind kind);
 OnlineKind gmOnline_GetKind(void);
+/* Online stage select (mnstagesel.c): the port (0 = P1, 1 = P2) whose
+ * controller picks the stage. P1 for a session's first game, then the
+ * loser of the last one. A function of synced match results, so both peers
+ * agree. */
+int gmOnline_StageChooser(void);
 
 void gm_Scene_OnlineLobby_OnFrame(void);
 void gm_Scene_OnlineLobby_OnEnter(void*);

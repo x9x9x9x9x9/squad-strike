@@ -156,6 +156,13 @@ OnlineKind gmOnline_GetKind(void)
     return online_kind;
 }
 
+static int stage_chooser; /* see gmOnline_StageChooser */
+
+int gmOnline_StageChooser(void)
+{
+    return stage_chooser;
+}
+
 void onEnterLobby(UNUSED GameModeState* state)
 {
 #ifdef TARGET_PC
@@ -174,6 +181,8 @@ void onEnterLobby(UNUSED GameModeState* state)
         gmVsMelee_DefaultStockOnce();
     }
 #endif
+    /* A new session: P1 picks the first stage. */
+    stage_chooser = 0;
     /* Same CSS start state on both peers: two human doors, nothing picked. */
     gm_InitVsMode(&online_vs);
     online_vs.start.players[0].slot_type = Gm_PKind_Human;
@@ -367,6 +376,19 @@ void onExitResults(GameModeState* state)
     if (pc_net_peer_status() != PC_NET_PEER_OK) {
         gm_SetNextGameModeStateId(state_lobby);
         return;
+    }
+#endif
+#ifdef TARGET_PC
+    {
+        /* The loser picks the next stage. A tie or a cancelled game leaves
+         * the last chooser picking again. */
+        MatchEnd* end = &gmVsMelee_ResultsEnterData.match_end;
+        if (!rankedMode() && !gm_WasMatchCanceled(end->outcome) && end->n_winners == 1 &&
+            end->winners[0] < 2)
+        {
+            stage_chooser = 1 - end->winners[0];
+        }
+        pc_log_line("online: P%d picks the next stage", stage_chooser + 1);
     }
 #endif
     gmVsMelee_ExitResults(state, &online_vs, state_css);

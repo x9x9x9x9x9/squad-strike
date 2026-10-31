@@ -101,6 +101,7 @@ struct StageSelUserData {
 #include "pc/net.h"
 #include "pc/net_lan.h"
 #include "pc/net_rank_session.h"
+#include <melee/gm/gmonlinemode.h>
 #include <sysdolphin/baselib/sislib.h>
 #include "pc/pc.h"
 
@@ -164,14 +165,15 @@ static void rankStageFrame(void)
     rankStageDraw();
 }
 
-/* Online: each player picks a stage on their own port (the SSS otherwise
- * merges every port into one cursor), picks are exchanged over the reliable
- * channel, and the stage is one of the two chosen by a coin flip from the
- * shared seed, so both peers agree without another message. Values are
- * table indices (mnStageSel_803F06D0), 30 = random. */
-#define NET_MSG_STAGE_PICK 0x20
-static int net_local_pick = -1;
-static int net_remote_pick = -1;
+/* Online (not ranked, which has its own list): one player picks the stage
+ * for both -- P1 for a session's first game, then the loser of the last one
+ * (gmOnline_StageChooser). Menus run on synced pads, so the chooser's cursor
+ * moves and confirms on the same frame on both peers and nothing needs to be
+ * exchanged. Cell values are table indices (mnStageSel_803F06D0), 30 =
+ * random. */
+static int net_chooser;
+static u32 net_games; /* stage selects this session, so random varies */
+static u32 net_games_session;
 
 static bool netStageSel_Active(void)
 {
@@ -180,50 +182,36 @@ static bool netStageSel_Active(void)
 
 static void netStageSel_Reset(void)
 {
-    net_local_pick = net_remote_pick = -1;
-}
-
-static void netStageSel_Poll(void)
-{
-    u8 type;
-    u8 buf[4];
-    while (pc_net_recv_reliable(&type, buf, sizeof buf) >= 0) {
-        if (type == NET_MSG_STAGE_PICK) {
-            net_remote_pick = buf[0];
-            pc_log_line("sss: opponent picked %d", net_remote_pick);
-        }
+    if (net_games_session != pc_net_seed()) {
+        net_games_session = pc_net_seed();
+        net_games = 0;
     }
+    net_games++;
+    net_chooser = gmOnline_StageChooser();
+    if (net_chooser < 0 || net_chooser > 1) {
+        net_chooser = 0;
+    }
+    pc_log_line("sss: P%d picks the stage", net_chooser + 1);
 }
 
-static void netStageSel_SendPick(int idx)
-{
-    u8 b = (u8) idx;
-    net_local_pick = idx;
-    pc_net_send_reliable(NET_MSG_STAGE_PICK, &b, 1);
-    pc_log_line("sss: we picked %d", idx);
-}
-
-/* Both peers have picked: order the picks by port so the expression is the
- * same on both sides, then let the shared seed flip the coin. */
+/* Shared by both peers: the session seed, which game this is and the cell. */
 static u32 netStageSel_Mix(void)
 {
-    int local = pc_net_local_player();
-    int p0 = local == 0 ? net_local_pick : net_remote_pick;
-    int p1 = local == 0 ? net_remote_pick : net_local_pick;
-    if (p0 < 0 || p1 < 0) {
-        return pc_net_seed() * 2654435761u + (u32) mnStageSel_804D6CAE;
-    }
-    return pc_net_seed() * 2654435761u + (u32) (p0 * 31 + p1);
+    return pc_net_seed() * 2654435761u + net_games * 40503u + (u32) mnStageSel_804D6CAE;
 }
 
-static int netStageSel_Resolve(void)
+/* "Who picks" under the stage grid. */
+static HSD_Text* net_text;
+static void netStageSel_TextCreate(void)
 {
-    int local = pc_net_local_player();
-    int p0 = local == 0 ? net_local_pick : net_remote_pick;
-    int p1 = local == 0 ? net_remote_pick : net_local_pick;
-    int pick = (netStageSel_Mix() >> 16) & 1 ? p1 : p0;
-    pc_log_line("sss: picks P1=%d P2=%d -> %d", p0, p1, pick);
-    return pick;
+    HSD_SisLib_803A62A0(0, lbLang_IsSavedLanguageUS() ? "SdMenu.usd" : "SdMenu.dat",
+                       "SIS_MenuData");
+    HSD_SisLib_803A611C(0, NULL, 9, 0xD, 0, 0xE, 0, 0x13);
+    net_text = HSD_SisLib_803A6754(0, 0);
+    net_text->default_kerning = 1;
+    int line = HSD_SisLib_803A6B98(net_text, 40.0f, 30.0f, "P%d PICKS THE STAGE%s",
+        net_chooser + 1, net_chooser == pc_net_local_player() ? " - YOU" : "");
+    HSD_SisLib_803A7548(net_text, line, 0.5f, 0.5f);
 }
 
 /* "Random" online: the offline roll uses the live RNG and a per-machine
@@ -353,11 +341,6 @@ void mnStageSel_80259C28(void)
         if (mnStageSel_804D6CAE < 0x1E &&
             mnStageSel_803F06D0[mnStageSel_804D6CAE].x8 >= 2)
         {
-#ifdef TARGET_PC
-            if (netStageSel_Active() && !pc_rank_session_active()) {
-                netStageSel_SendPick(mnStageSel_804D6CAE);
-            }
-#endif
             goto skip_randomize;
         }
         lbAudioAx_80024030(3);
@@ -365,9 +348,8 @@ void mnStageSel_80259C28(void)
     }
 #ifdef TARGET_PC
     if (netStageSel_Active() && !pc_rank_session_active()) {
-        /* Send the cell (30 = random) and defer the roll to the resolve so
-         * both peers roll from the same RNG state. */
-        netStageSel_SendPick(mnStageSel_804D6CAE);
+        /* Defer the roll to the resolve, which draws from the shared seed:
+         * the live RNG's cooldown table differs per machine. */
         goto skip_randomize;
     }
 #endif
@@ -727,8 +709,8 @@ void mnStageSel_Scene_OnEnter(void* arg0)
 #ifdef TARGET_PC
         if (netStageSel_Active()) {
             if (!pc_rank_session_active()) {
-                mnStageSel_804D50A0 = pc_net_local_player();
                 netStageSel_Reset();
+                mnStageSel_804D50A0 = net_chooser;
             } else {
                 mnStageSel_804D50A0 = -1;
             }
@@ -1052,6 +1034,7 @@ void mnStageSel_Scene_OnEnter(void* arg0)
         lbAudioAx_80023F28(gmMainLib_8015ECB0());
 #ifdef TARGET_PC
         if (pc_rank_session_active()) rankStageCreate();
+        else if (netStageSel_Active()) netStageSel_TextCreate();
 #endif
     }
 }
@@ -1146,15 +1129,10 @@ void mnStageSel_Scene_OnFrame(void)
     if (mnStageSel_804D6CAF == 2) {
 #ifdef TARGET_PC
         if (netStageSel_Active() && !pc_rank_session_active()) {
-            netStageSel_Poll();
             if (pc_net_peer_status() != 0) {
                 gm_801A4B60();
                 return;
             }
-            if (net_remote_pick < 0) {
-                return; /* opponent still choosing; keep showing our pick */
-            }
-            mnStageSel_804D6CAE = netStageSel_Resolve();
             if (mnStageSel_804D6CAE >= NUM_STAGES) {
                 mnStageSel_804D6CAE = netStageSel_Random();
             }
@@ -1179,6 +1157,7 @@ void mnStageSel_Scene_OnExit(UNUSED void* exit_data)
 {
 #ifdef TARGET_PC
     if (rank_text) { HSD_SisLib_803A5CC4(rank_text); rank_text = NULL; }
+    if (net_text) { HSD_SisLib_803A5CC4(net_text); net_text = NULL; }
 #endif
     if (mnStageSel_804D6C94 != NULL) {
         lbArchive_80016EFC(mnStageSel_804D6C94);

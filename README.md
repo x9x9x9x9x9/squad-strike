@@ -286,7 +286,9 @@ hotspot calling a friend at home, the game asks the home router to forward its
 port (UPnP; `MELEE_UPNP=0` turns this off), which lets the hotspot's stricter
 carrier NAT get through. Two PCs each on a different phone hotspot still
 usually cannot connect: that needs a relay server, which this build does not
-have. UNRANKED searches for
+have. Online stage select
+(LAN, Direct and Unranked) is picked by one player for both: P1 for the first
+game, then whoever lost the last one; the screen says who. UNRANKED searches for
 an opponent; RANKED runs a rated best-of-three set. PROFILE shows your code
 and locally verified rating. Internet discovery may take about 30 seconds to
 bootstrap and some NATs cannot support a direct peer connection. Legacy
