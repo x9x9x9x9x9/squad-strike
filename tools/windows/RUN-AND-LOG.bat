@@ -8,6 +8,9 @@ cd /d "%~dp0"
 set MELEE_DEBUG=1
 set MELEE_LOG_FILE=melee-pc.log
 set MELEE_FPS=1
+REM Netplay timing: every input wait over 33 ms, with why (lockstep,
+REM window, snapshot fallback), so a stall can be told from a local freeze.
+set MELEE_NET_DEBUG=1
 
 REM Workaround for audio thread startup race: use DirectSound instead of WASAPI
 set SDL_AUDIO_DRIVER=directsound
