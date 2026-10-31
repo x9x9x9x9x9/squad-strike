@@ -40,6 +40,10 @@ SDL_Window* get_sdl_window();
 SDL_Renderer* get_sdl_renderer();
 bool is_paused() noexcept;
 bool is_presentable() noexcept;
+/// The platform took the surface away (mobile backgrounding, Android window
+/// gone): it must be released. A desktop window that is only minimized or
+/// hidden keeps its surface; it just skips presenting.
+bool surface_lost() noexcept;
 void set_surface_ready(bool ready) noexcept;
 void set_title(const char* title);
 void set_fullscreen(bool fullscreen);
