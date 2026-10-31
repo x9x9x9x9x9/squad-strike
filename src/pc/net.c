@@ -911,6 +911,10 @@ static bool packet_shape(const void* buf, int n) {
  * the last command actually emitted, not the interpreter's rewound status. */
 void pc_net_rumble_command(unsigned port, unsigned command) {
     static int motor[4] = {-1, -1, -1, -1};
+    /* Rumble switched off: keep the motor stopped (PAD_MOTOR_STOP), but let
+     * a hard stop through so a motor already running is brought to rest. */
+    if (command == 1 && !pc_is_rumble_enabled())
+        command = 0;
     if (port >= 4 || net.resim || motor[port] == (int)command)
         return;
     PADControlMotor(port, command);

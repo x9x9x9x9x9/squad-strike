@@ -78,6 +78,9 @@ const char* pc_get_net_code(void) {
 bool pc_is_ping_display_enabled(void) {
     return false;
 }
+bool pc_is_rumble_enabled(void) {
+    return true;
+}
 const char* pc_get_net_target(void) {
     return "";
 }

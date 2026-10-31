@@ -390,8 +390,13 @@ void pc_gcadapter_apply(void) {
     memcpy(present, s_published_present, sizeof(present));
     unlock_snapshot();
     for (int i = 0; i < GC_SLOTS; i++) {
-        atomic_store_explicit(
-            &s_motor_request[i], HSD_Rumble_804C22E0[i].last_status, memory_order_relaxed);
+        /* Rumble switched off (launcher / F1): ask for "stop" (1) where the
+         * game asks for "rumble" (2). */
+        unsigned char want = HSD_Rumble_804C22E0[i].last_status;
+        if (want == 2 && !pc_is_rumble_enabled()) {
+            want = 1;
+        }
+        atomic_store_explicit(&s_motor_request[i], want, memory_order_relaxed);
         if (i != 0) {
             if (present[i]) {
                 PADSetVirtualStatus((u32)i, &status[i]);

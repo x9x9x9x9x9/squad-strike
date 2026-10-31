@@ -135,6 +135,11 @@
               </span>
               <button id="ucf" class="value">Off</button>
             </div>
+            <div class="row" data-desc="Controller vibration. Off keeps every controller still, online too.">
+              <span class="name">Rumble<span class="detail">Controller vibration. Off keeps every controller still, online too.</span>
+              </span>
+              <button id="rumble" class="value">On</button>
+            </div>
           </div>
           <div id="page-audio" class="page">
             <div class="row" data-desc="Left/right or drag to adjust.">

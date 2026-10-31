@@ -94,6 +94,7 @@
           <div class="row" data-desc="SD Remix's character changes (sdremix.games), from its fighter files in an sdremix folder. Takes effect when the game starts; both online players need it."><span class="name">SD Remix characters</span><button id="sd-remix" class="value">Off</button></div>
           <div class="row" data-desc="Free the pause camera's rotation and zoom."><span class="name">Free camera</span><button id="free-camera" class="value">Normal</button></div>
           <div class="row" data-desc="UCF 0.8x dashback and shield-drop consistency on any controller. MELEE_UCF overrides."><span class="name">Universal Controller Fix</span><button id="ucf" class="value">Off</button></div>
+          <div class="row" data-desc="Controller vibration. Off keeps every controller still, online too."><span class="name">Rumble</span><button id="rumble" class="value">On</button></div>
         </div>
         <div id="page-controls" class="page">
           <div class="info no-mobile">

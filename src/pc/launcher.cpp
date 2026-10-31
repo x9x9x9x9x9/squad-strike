@@ -335,7 +335,7 @@ class Launcher final : public Rml::EventListener {
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf", "rumble"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         case 5:
@@ -601,6 +601,7 @@ class Launcher final : public Rml::EventListener {
         text("sd-remix", prefs.sd_remix ? "On" : "Off");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
+        text("rumble", prefs.rumble ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
         text("backend", backend_name(prefs.backend));
         slider("volume", prefs.volume * 100.0f);
@@ -854,6 +855,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("ucf")->Focus();
+        } else if (id == "rumble") {
+            prefs.rumble = !prefs.rumble;
+            save();
+            refresh_settings();
+            element("rumble")->Focus();
         } else if (id == "unlock-all") {
             prefs.unlock_all = !prefs.unlock_all;
             save();
@@ -1538,7 +1544,7 @@ public:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale",
                 "port-check-update"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
+            return {"unlock-all", "frozen-stadium", "free-camera", "ucf", "rumble"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         default: {
@@ -1747,6 +1753,7 @@ public:
                                                                   "Off (after restart)");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
         label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
+        label("rumble", prefs.rumble ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
         label("backend", backend_name(prefs.backend));
         slider("volume", prefs.volume * 100.0f);
@@ -2025,6 +2032,8 @@ public:
             prefs.free_camera = !prefs.free_camera;
         } else if (id == "ucf") {
             prefs.ucf = !prefs.ucf;
+        } else if (id == "rumble") {
+            prefs.rumble = !prefs.rumble;
         } else if (id == "unlock-all") {
             prefs.unlock_all = !prefs.unlock_all;
         } else if (id == "backend") {
@@ -2455,6 +2464,11 @@ extern "C" const char* pc_get_net_name(void) {
     return prefs.net_name.c_str();
 }
 /* Presentation only: whether a netplay match shows its ping (ifnet.c). */
+/* Hardware output only: the game's rumble state still runs (and rolls back)
+ * as usual; this just keeps the motors still (net.c, gcadapter.c). */
+extern "C" bool pc_is_rumble_enabled(void) {
+    return prefs.rumble;
+}
 extern "C" bool pc_is_ping_display_enabled(void) {
     return prefs.show_ping;
 }
