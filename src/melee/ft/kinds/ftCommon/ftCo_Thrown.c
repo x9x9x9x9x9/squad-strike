@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftCo_Thrown.h"
 
 #include <melee/ft/forward.h>
@@ -73,7 +74,9 @@ void ftCo_800DE5A4(Fighter_GObj* arg0)
         ftCommon_8007E3EC(arg0);
     }
     if (fp->grab_timer) {
-        fp->grab_timer -= p_ftCommonData->grab_timer_decrement;
+        if (!FT_SDR) { /* SD Remix: Kirby's throws don't run out by themselves */
+            fp->grab_timer -= p_ftCommonData->grab_timer_decrement;
+        }
         ftCommon_GrabMash(fp, p_ftCommonData->x3C8);
         if (fp->grab_timer <= 0.0f) {
             if (fp->mv.co.thrown.xC || fn_800DC044(arg0)) {
