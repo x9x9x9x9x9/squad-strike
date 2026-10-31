@@ -1,3 +1,7 @@
+#include <melee/ft/ftsdremix.h>
+#include <melee/ft/kinds/ftCommon/forward.h>
+#include <melee/ft/kinds/ftCommon/ftCo_JumpAerial.h>
+#include <melee/ft/kinds/ftCommon/ftCo_Jump.h>
 #include "ftnessspeciallw.h"
 
 #include <Runtime/platform.h>
@@ -300,6 +304,9 @@ void ftNs_SpecialAirLwHold_Anim(
 void ftNs_SpecialLwHold_IASA(
     HSD_GObj* gobj) // Ness's grounded PSI Magnet Hold IASA callback
 {
+    if (FT_SDR) { /* SD Remix: jump out of the magnet */
+        fn_800CAF78(gobj);
+    }
     return;
 }
 
@@ -307,6 +314,9 @@ void ftNs_SpecialLwHold_IASA(
 void ftNs_SpecialAirLwHold_IASA(
     HSD_GObj* gobj) // Ness's aerial PSI Magnet Hold IASA callback
 {
+    if (FT_SDR) { /* SD Remix: jump out of the magnet */
+        ftCo_800CB870(gobj);
+    }
     return;
 }
 
@@ -1021,14 +1031,17 @@ void ftNs_SpecialAirLwEnd_AirToGround(
 void ftNs_SpecialLwEnd_Enter(
     HSD_GObj* gobj) // Ness's grounded PSI Magnet End Motion State handler
 {
-    Fighter_ChangeMotionState(gobj, ftNs_MS_SpecialLwEnd, Ft_MF_None, 0.0f,
-                              1.0f, 0.0f, NULL);
+    /* SD Remix: the magnet ends straight into Wait */
+    Fighter_ChangeMotionState(gobj, FT_SDR ? ftCo_MS_Wait : ftNs_MS_SpecialLwEnd,
+                              Ft_MF_None, 0.0f, 1.0f, 0.0f, NULL);
 }
 
 /// 0x8011B4E4
 void ftNs_SpecialAirLwEnd_Enter(
     HSD_GObj* gobj) // Ness's aerial PSI Magnet End Motion State handler
 {
-    Fighter_ChangeMotionState(gobj, ftNs_MS_SpecialAirLwEnd, Ft_MF_None, 0.0f,
-                              1.0f, 0.0f, NULL);
+    /* SD Remix: the magnet ends straight into Fall */
+    Fighter_ChangeMotionState(gobj,
+                              FT_SDR ? ftCo_MS_Fall : ftNs_MS_SpecialAirLwEnd,
+                              Ft_MF_None, 0.0f, 1.0f, 0.0f, NULL);
 }
