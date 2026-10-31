@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include <melee/ft/forward.h>
 #include <sysdolphin/baselib/forward.h>
 
@@ -115,7 +116,9 @@ void ftKb_NsSpecialNStart_Anim(HSD_GObj* gobj)
     if (!ftAnim_IsFramesRemaining(gobj)) {
         Fighter_ChangeMotionState(gobj, 436, Ft_MF_None, 0, 1, 0, NULL);
         ftKb_NsSpecialNStart_Anim_inline(gobj, &flash_pos);
-        fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        if (!FT_SDR) { /* SD Remix: keeps its jump */
+            fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        }
     }
 }
 
@@ -181,7 +184,9 @@ void ftKb_NsSpecialAirNStart_Anim(Fighter_GObj* gobj)
         Fighter_ChangeMotionState(gobj, ftKb_MS_NsSpecialAirNHold0, Ft_MF_None,
                                   0, 1, 0, NULL);
         ftKb_NsSpecialNStart_Anim_inline(gobj, &flash_pos);
-        fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        if (!FT_SDR) { /* SD Remix: keeps its jump */
+            fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        }
     }
 }
 
