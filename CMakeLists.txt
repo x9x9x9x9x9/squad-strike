@@ -230,6 +230,7 @@ set(PC_SOURCES
         src/pc/launcher.cpp
         src/pc/launcher_data.cpp
         src/pc/music_stream.cpp
+        src/pc/sdremix.cpp
         src/pc/textures.cpp
         src/pc/updater.cpp
         src/pc/version.cpp
