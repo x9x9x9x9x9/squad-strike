@@ -32,6 +32,8 @@ if not defined DISC (
 
 echo Running melee.exe %DISC% with logging enabled...
 echo.
+REM Keep the last run's frame log (melee-pc.log keeps its own .prev.log).
+if exist melee-frames.log move /y melee-frames.log melee-frames.prev.log >nul
 melee.exe %DISC% %* 2>melee-frames.log
 set RC=%ERRORLEVEL%
 
@@ -42,5 +44,6 @@ echo Send back these two files from this folder:
 echo    melee-pc.log
 echo    melee-pc-env.log
 echo    melee-frames.log
+echo (after a crash and a restart: melee-pc.prev.log and melee-frames.prev.log)
 echo.
 pause
