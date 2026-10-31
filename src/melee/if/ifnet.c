@@ -36,7 +36,37 @@ static struct {
     int chat_entry;
     bool debug;
     char line[160], chat[80];
+    /* The ping shown: the average of every sample over the last second, so
+     * it reads like Slippi's instead of flickering each frame. Wall clock,
+     * since a rollback re-runs frames without time passing. */
+    uint64_t window_start;
+    int64_t window_sum;
+    int window_count;
+    int shown_ping;
 } ifNet;
+
+/* Folds this frame's ping in; the value to display (-1 until known). */
+static int ifNet_SmoothPing(int ping)
+{
+    uint64_t now = pc_monotonic_ns() / 1000000u;
+    if (ping >= 0) {
+        ifNet.window_sum += ping;
+        ifNet.window_count++;
+    }
+    if (ifNet.shown_ping < 0 && ifNet.window_count > 0) {
+        ifNet.shown_ping = (int) (ifNet.window_sum / ifNet.window_count);
+    }
+    if (now - ifNet.window_start >= 1000) {
+        if (ifNet.window_count > 0) {
+            ifNet.shown_ping = (int) ((ifNet.window_sum + ifNet.window_count / 2) /
+                                      ifNet.window_count);
+        }
+        ifNet.window_start = now;
+        ifNet.window_sum = 0;
+        ifNet.window_count = 0;
+    }
+    return ifNet.shown_ping;
+}
 
 /* pc_net_quality() 0/1/2 -> nothing / "!" / "!!". The SIS ASCII encoder
  * (HSD_SisLib_803A67EC) has no '!', so spell the fullwidth SJIS pair. */
@@ -60,6 +90,7 @@ static void ifNet_Think(HSD_GObj* gobj)
      * delay and the rollback count. */
     char line[160], debug[48] = "", ping_text[16];
     bool show = pc_is_ping_display_enabled();
+    ping = ifNet_SmoothPing(ping);
     if (ifNet.debug)
         snprintf(debug, sizeof debug, "  delay %d  rb %u", delay, rollbacks);
     if (ping >= 0)
@@ -93,6 +124,10 @@ void ifNet_Create(void)
     const char* debug = getenv("MELEE_NET_DEBUG");
     ifNet.debug = debug && debug[0] && strcmp(debug, "0");
     ifNet.line[0] = ifNet.chat[0] = 0;
+    ifNet.window_start = pc_monotonic_ns() / 1000000u;
+    ifNet.window_sum = 0;
+    ifNet.window_count = 0;
+    ifNet.shown_ping = -1;
     int canvas = HSD_SisLib_803A611C(2, ifAll_GetHUDGObj(), HSD_GOBJ_CLASS_UI, 15,
                                   0, 11, 0, 19);
     ifNet.text = HSD_SisLib_803A6754(2, canvas);
