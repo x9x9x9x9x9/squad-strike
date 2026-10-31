@@ -48,4 +48,9 @@ gmVsMelee_EnterVs(GameModeState*, struct VsModeData*,
 /* 479D98 */ extern MatchExitInfo gmVsMelee_VsExitInfo;
 /* 480668 */ extern SSSData gmVsMelee_SssData;
 
+#ifdef TARGET_PC
+/// 4 stocks instead of the timer, once per launch (gmvsmelee.c).
+void gmVsMelee_DefaultStockOnce(void);
+#endif
+
 #endif
