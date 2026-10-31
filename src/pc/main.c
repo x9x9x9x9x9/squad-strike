@@ -133,6 +133,18 @@ static FILE* log_file(void) {
         }
 #endif
         if (path != NULL && path[0] != '\0') {
+            /* Keep the last run's log as <name>.prev.log: after a crash the
+             * player usually starts the game again, and "w" would wipe the
+             * one log that says why. */
+            static char prev[4200];
+            const size_t n = strlen(path);
+            if (n > 4 && strcmp(path + n - 4, ".log") == 0) {
+                snprintf(prev, sizeof prev, "%.*s.prev.log", (int)(n - 4), path);
+            } else {
+                snprintf(prev, sizeof prev, "%s.prev", path);
+            }
+            remove(prev);
+            rename(path, prev);
             fp = fopen(path, "w");
         }
     }
