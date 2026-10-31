@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftzeldaspecials.h"
 
 #include <Runtime/platform.h>
@@ -119,7 +120,9 @@ void ftZd_SpecialSStart_Anim(HSD_GObj* gobj)
         temp_f1 = 0;
         Fighter_ChangeMotionState(gobj, 344, Ft_MF_None, temp_f1, 1.0, temp_f1,
                                   NULL);
-        fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        if (!FT_SDR) { /* SD Remix: keeps its jump */
+            fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        }
     }
 }
 
@@ -245,7 +248,9 @@ void ftZd_SpecialAirSStart_Anim(HSD_GObj* gobj)
         temp_f1 = 0;
         Fighter_ChangeMotionState(gobj, 347, Ft_MF_None, temp_f1, 1.0, temp_f1,
                                   NULL);
-        fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        if (!FT_SDR) { /* SD Remix: keeps its jump */
+            fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+        }
     }
 }
 
