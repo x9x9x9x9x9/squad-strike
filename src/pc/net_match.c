@@ -633,8 +633,29 @@ static bool after_handoff(const void* data, size_t n, uint32_t address, uint16_t
     }
     return false;
 }
+/* MELEE_NET_DEBUG: every pairing datagram that arrives, so a log can tell
+ * "nothing reached this PC" (a router or firewall in the way) from "it
+ * arrived and was turned down". At most 40 lines per search. */
+static unsigned rx_logged;
+static void rx_note(const struct pc_dht_endpoint* ep, size_t n, const char* what) {
+    static int debug = -1;
+    if (debug < 0)
+        debug = getenv("MELEE_NET_DEBUG") != NULL;
+    if (!debug || rx_logged >= 40)
+        return;
+    rx_logged++;
+    uint32_t ip = ntohl(ep->address);
+    pc_log_line("match: %zu-byte datagram from %u.%u.%u.%u:%u: %s", n, ip >> 24, (ip >> 16) & 0xFF,
+        (ip >> 8) & 0xFF, ip & 0xFF, ep->port, what);
+}
+
 static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep, void* unused) {
     (void)unused;
+    rx_note(ep, n,
+        n == sizeof(MatchHello) ? "hello" :
+        n == sizeof(MatchOffer) ? "offer" :
+        n == sizeof(MatchAck)   ? "ack" :
+                                  "not a pairing message");
     if (n == sizeof(MatchHello)) {
         const MatchHello* h = data;
         const char* terminator = memchr(h->code, '\0', sizeof h->code);
@@ -661,7 +682,18 @@ static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep
             !terminator || !pc_identity_code_valid(h->code) ||
             (mode == PC_MATCH_DIRECT && target_code[0] && strcmp(h->code, target_code)) ||
             !signed_ok(h->public_key, h->signature, h, sizeof *h))
+        {
+            rx_note(ep, n,
+                h->version != MATCH_VERSION || memcmp(h->compatibility, compatibility, 20) ?
+                    "hello refused: other build or disc" :
+                memcmp(h->topic, topic, 20) || h->mode != (uint8_t)mode ?
+                    "hello refused: other mode" :
+                mode == PC_MATCH_DIRECT && target_code[0] && terminator &&
+                        strcmp(h->code, target_code) ?
+                    "hello refused: not the code we are calling" :
+                    "hello refused: bad code or signature");
             return;
+        }
         bool fresh = !have_peer;
         if (have_peer && (h->nonce != peer_nonce || memcmp(h->public_key, peer_key, 32) ||
                              ep->address != peer.address || ep->port != peer.port))
@@ -786,6 +818,7 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
     proof_step = 0;
     identity_loaded = false; /* Reload display code from the same persistent key. */
     target_code[0] = 0;
+    rx_logged = 0;
     if (code && *code && !pc_identity_parse_code(code, target_code)) {
         fail("invalid connect code");
         return false;
