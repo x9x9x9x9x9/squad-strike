@@ -338,9 +338,8 @@ bool pc_dht_topic(
     if (m == PC_DHT_DIRECT) {
         if (!code || !*code || strlen(code) >= sizeof(direct_code))
             return false;
-        /* v2: the code's key suffix alone (net_match.c passes it), so a
-         * renamed player or a typo in the name still reaches the doorbell. */
-        n = snprintf(topic, sizeof(topic), "meleepc/v2/direct/%s", code);
+        /* v3: the whole TAG#NUM code the player chose (net_identity.c). */
+        n = snprintf(topic, sizeof(topic), "meleepc/v3/direct/%s", code);
     } else if (m == PC_DHT_UNRANKED)
         n = snprintf(topic, sizeof(topic), "meleepc/v1/unranked/%lld", (long long)minute);
     else if (m == PC_DHT_RANKED && band >= 0)

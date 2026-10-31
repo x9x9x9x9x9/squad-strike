@@ -52,7 +52,7 @@ typedef enum OnlineLobbyPhase {
 /* Direct connect's own screens, drawn in place of the player list. */
 #define ONLINE_LOBBY_MENU_ROWS 8
 #define ONLINE_LOBBY_KEY_ROWS 4
-#define ONLINE_LOBBY_KEY_COLS 8
+#define ONLINE_LOBBY_KEY_COLS 9 /* A-Z and 0-9: four rows of nine */
 
 typedef enum OnlineLobbyScreen {
     LOBBY_SCREEN_PLAYERS, /* the player list (LAN, searching, connecting) */

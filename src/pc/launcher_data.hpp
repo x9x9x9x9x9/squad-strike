@@ -26,7 +26,8 @@ struct Preferences {
     std::array<int, 22> keys = default_keys;
     int menu_button = SDL_GAMEPAD_BUTTON_BACK;
     std::string disc;
-    std::string net_name = "PLAYER";
+    std::string net_name = "PLAYER";  // pre-TAG#NUM builds; only a default-code hint now
+    std::string net_code;    // the TAG#NUM connect code chosen; empty: a default from the key
     std::string net_target;  // empty hosts our own connect code
     int net_delay = -1;      // auto; otherwise 0..4 frames
     int net_port = 0;        // operating-system allocated
@@ -62,6 +63,7 @@ struct Preferences {
 DiscInfo inspect_disc(const std::string& path);
 Verification verify_disc(
     const std::string& path, std::atomic_bool& cancel, std::atomic_uint& progress);
+bool connect_code_valid(const std::string& code);
 Preferences load_preferences(const std::filesystem::path& path);
 bool save_preferences(
     const std::filesystem::path& path, const Preferences& prefs, std::string& error);

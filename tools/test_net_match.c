@@ -86,6 +86,9 @@ bool pc_dht_item_send(const void* data, size_t length, const struct pc_dht_endpo
 bool pc_net_resim(void) {
     return false;
 }
+const char* pc_get_net_code(void) {
+    return getenv("MATCH_CODE");
+}
 const char* pc_get_net_name(void) {
     return getenv("MATCH_NAME");
 }
@@ -271,14 +274,13 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (argc == 2 && !strcmp(argv[1], "parse")) {
-        char suffix[9], name[9];
-        assert(pc_identity_parse_code("sian#k3xq-2m7a", suffix, name));
-        assert(!strcmp(suffix, "K3XQ2M7A") && !strcmp(name, "SIAN"));
-        assert(pc_identity_parse_code("FOX#AB0DE1G8", suffix, name) && !strcmp(suffix, "ABODEIGB"));
-        assert(pc_identity_parse_code("just k3xq2m7a", suffix, name) && !name[0]);
-        assert(!pc_identity_parse_code("FOX#ABCDEFG", suffix, name));
-        assert(!pc_identity_parse_code("FOX#ABCDEFGHJ", suffix, name));
-        assert(!pc_identity_parse_code("hello there", suffix, name));
+        char code[PC_CODE_SIZE];
+        assert(pc_identity_parse_code("sian#042", code) && !strcmp(code, "SIAN#42"));
+        assert(!pc_identity_parse_code("SIAN#K3XQ2M7A", code));
+        assert(!pc_identity_parse_code("hello there", code));
+        /* an invalid target is refused before anything is sent */
+        local_port = 0;
+        assert(!pc_net_match_start(PC_MATCH_DIRECT, "not a code"));
         /* dialling our own code is refused before anything is sent */
         local_port = 0;
         assert(!pc_net_match_start(PC_MATCH_DIRECT, pc_net_match_local_code()));
@@ -291,11 +293,13 @@ int main(int argc, char** argv) {
             pc_net_match_start(getenv("MATCH_RANKED") ? PC_MATCH_RANKED : PC_MATCH_UNRANKED, ""));
         uint8_t key[32];
         memcpy(key, identity.public_key, 32);
-        setenv("MATCH_NAME", "NEWNAME", 1);
+        /* a code changed between searches is in force on the next one,
+         * with the same key behind it */
+        setenv("MATCH_CODE", "NEW#5", 1);
         pc_net_match_stop();
         assert(pc_net_match_start(PC_MATCH_UNRANKED, ""));
         assert(!memcmp(key, identity.public_key, 32));
-        assert(!strncmp(identity.code, "NEWNAME#", 8));
+        assert(!strcmp(identity.code, "NEW#5"));
         pc_net_match_stop();
         assert(pc_net_match_state(NULL) == PC_MATCH_FAIL && !pc_net_active() && dht_fd < 0);
         return 0;
@@ -413,7 +417,7 @@ int main(int argc, char** argv) {
     memcpy(h.code, identity.code, sizeof h.code);
     sign_packet(&h, sizeof h);
     assert(sizeof h < 512 && sizeof(MatchOffer) < 512 && sizeof(MatchAck) < 512);
-    assert(key_code_matches(h.public_key, h.code));
+    assert(pc_identity_code_valid(h.code));
     assert(signed_ok(h.public_key, h.signature, &h, sizeof h));
 
     h.mode = PC_MATCH_DIRECT; /* mode is inside the authenticated transcript */
@@ -422,13 +426,13 @@ int main(int argc, char** argv) {
     h.nonce++; /* stale/cross-session substitution is authenticated too */
     assert(!signed_ok(h.public_key, h.signature, &h, sizeof h));
     h.nonce--;
-    h.code[strlen(h.code) - 1] ^= 1;
-    assert(!key_code_matches(h.public_key, h.code));
+    h.code[0] ^= 1; /* the code is inside the signed transcript too */
+    assert(!signed_ok(h.public_key, h.signature, &h, sizeof h));
 
     char file[512];
     snprintf(file, sizeof file, "%s/identity.key", path);
     unlink(file);
     rmdir(path);
-    puts("pairing transcript signature, nonce/mode binding, code binding and packet bounds passed");
+    puts("pairing transcript signature, nonce/mode/code binding and packet bounds passed");
     return 0;
 }

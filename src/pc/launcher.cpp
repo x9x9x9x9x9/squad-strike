@@ -7,6 +7,7 @@
 #include "version.hpp"
 #include "updater.hpp"
 #include "net_match.h"
+#include "net_identity.h"
 #include "net.h"
 #include "pc.h"
 #include "android_hooks.h"
@@ -77,26 +78,34 @@ void ensure_rmlui_input_layer() {
 
 void refresh_online(Rml::ElementDocument* doc) {
     pc_net_set_input_delay(prefs.net_delay);
-    for (const auto& pair :
-        {std::pair{"net-name", prefs.net_name}, std::pair{"net-target", prefs.net_target}})
-    {
-        if (auto* e = dynamic_cast<Rml::ElementFormControl*>(doc->GetElementById(pair.first)))
-            e->SetValue(pair.second);
-    }
+    if (auto* e = dynamic_cast<Rml::ElementFormControl*>(doc->GetElementById("net-target")))
+        e->SetValue(prefs.net_target);
     if (auto* e = doc->GetElementById("net-delay"))
         e->SetInnerRML(prefs.net_delay < 0 ? "Auto" : std::to_string(prefs.net_delay) + " frames");
-    if (auto* e = doc->GetElementById("net-code"))
-        e->SetInnerRML(pc_net_match_local_code());
+    /* The code in force: the one chosen, or the default this profile was
+     * given until one is. Not while it is being typed in. */
+    if (auto* e = dynamic_cast<Rml::ElementFormControl*>(doc->GetElementById("net-code"));
+        e && doc->GetFocusLeafNode() != e)
+        e->SetValue(prefs.net_code.empty() ? pc_net_match_local_code() : prefs.net_code);
 }
 bool change_online(Rml::Event& event) {
     auto* target = event.GetTargetElement();
     if (!target)
         return false;
     auto id = target->GetId();
+    if (id == "net-code") {
+        /* Taken once it is a whole code (CHRS#123, any case, spaces or a
+         * leading zero allowed); half-typed text is left in the box. */
+        auto value = event.GetParameter<Rml::String>("value", "");
+        char code[PC_CODE_SIZE];
+        if (pc_identity_normalize_code(value.c_str(), code))
+            prefs.net_code = code;
+        return true;
+    }
     if (id != "net-name" && id != "net-target")
         return false;
     auto value = event.GetParameter<Rml::String>("value", "");
-    const size_t limit = id == "net-name" ? 8 : 17;
+    const size_t limit = id == "net-name" ? 8 : PC_CODE_LEN_MAX;
     if (value.size() > limit)
         return true;
     for (char& c : value) {
@@ -326,7 +335,7 @@ class Launcher final : public Rml::EventListener {
         case 2:
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
-            return {"net-name", "net-target", "net-delay"};
+            return {"net-code", "net-target", "net-delay"};
         case 5:
             return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
         default:
@@ -1525,7 +1534,7 @@ public:
         case 2:
             return {"unlock-all", "frozen-stadium", "free-camera", "ucf"};
         case 4:
-            return {"net-name", "net-target", "net-delay"};
+            return {"net-code", "net-target", "net-delay"};
         default: {
             std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < PAD_BUTTON_COUNT; ++i)
@@ -2432,6 +2441,9 @@ extern "C" float pc_get_sfx_volume(void) {
 
 extern "C" const char* pc_get_net_name(void) {
     return prefs.net_name.c_str();
+}
+extern "C" const char* pc_get_net_code(void) {
+    return prefs.net_code.c_str();
 }
 extern "C" const char* pc_get_net_target(void) {
     return prefs.net_target.c_str();

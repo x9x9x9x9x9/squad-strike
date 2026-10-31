@@ -301,6 +301,24 @@ Verification verify_disc(
     return {VerifyState::Verified, "Verified / matches the original USA revision 2 disc."};
 }
 
+/* A canonical TAG#NUM connect code (net_identity.c has the same rule; this
+ * file is linked without it): 1-4 letters, '#', 1-3 digits, no leading 0. */
+bool connect_code_valid(const std::string& code) {
+    size_t hash = code.find('#');
+    if (hash == std::string::npos || hash < 1 || hash > 4)
+        return false;
+    for (size_t i = 0; i < hash; i++)
+        if (code[i] < 'A' || code[i] > 'Z')
+            return false;
+    size_t digits = code.size() - hash - 1;
+    if (digits < 1 || digits > 3 || (digits > 1 && code[hash + 1] == '0'))
+        return false;
+    for (size_t i = hash + 1; i < code.size(); i++)
+        if (code[i] < '0' || code[i] > '9')
+            return false;
+    return true;
+}
+
 Preferences load_preferences(const std::filesystem::path& path) {
     Preferences prefs;
     std::ifstream file(path);
@@ -309,7 +327,11 @@ Preferences load_preferences(const std::filesystem::path& path) {
         std::istringstream row(line);
         std::string key;
         row >> key;
-        if (key == "net_name" || key == "net_target") {
+        if (key == "net_code") {
+            std::string value;
+            if (row >> std::quoted(value) && connect_code_valid(value))
+                prefs.net_code = value;
+        } else if (key == "net_name" || key == "net_target") {
             std::string value;
             if (row >> std::quoted(value)) {
                 bool valid = value.size() <= (key == "net_name" ? 8u : 17u);
@@ -438,7 +460,8 @@ bool save_preferences(
         return false;
     }
     std::ostringstream text;
-    text << "net_name " << std::quoted(prefs.net_name) << "\nnet_target "
+    text << "net_name " << std::quoted(prefs.net_name) << "\nnet_code "
+         << std::quoted(prefs.net_code) << "\nnet_target "
          << std::quoted(prefs.net_target) << "\nnet_delay " << prefs.net_delay << "\nnet_port "
          << prefs.net_port << "\n";
     text << "disc " << std::quoted(prefs.disc) << "\nvsync " << prefs.vsync << "\nfullscreen "

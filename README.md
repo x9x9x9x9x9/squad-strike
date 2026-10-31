@@ -97,7 +97,7 @@ table is right and the other one is stale.
 | High-refresh interpolation | planned | |
 | Training tools (hitboxes, savestates, frame advance) | planned | |
 | Replay recording (`.slp`) | done | Set `MELEE_SLP_DIR` to record offline or online VS matches; off by default. |
-| Online play (LAN / direct IP) | partial | LAN/direct-IP plus signed internet Direct, Unranked and Ranked implemented. Every datagram is authenticated (protocol 9), so both peers must run the same build, and a connect code is 8 characters after the `#`. Phone VPN to home broadband Direct Connect reached results; broader two-NAT and live ranked acceptance remain pending. See platform matrix below. |
+| Online play (LAN / direct IP) | partial | LAN/direct-IP plus signed internet Direct, Unranked and Ranked implemented. Every datagram is authenticated (protocol 9), so both peers must run the same build, and a connect code is a player-chosen `TAG#123` (1-4 letters, 1-3 digits). Phone VPN to home broadband Direct Connect reached results; broader two-NAT and live ranked acceptance remain pending. See platform matrix below. |
 | RetroAchievements | planned | |
 | Squad Strike (tag team) | partial | 1v1 squads of up to four fighters, offline and in LAN / Direct netplay; see [docs/squad-strike.md](docs/squad-strike.md). New; not yet tested in play. |
 
@@ -271,8 +271,13 @@ path retains its older protocol-version-only check.
 In the menus: VS Mode → ONLINE → LAN PLAY finds other
 copies on the local network by mDNS and the first Start elects a host
 (lowest install id wins a tie). DIRECT CONNECT opens an in-game hub where
-either player can call a friend's `NAME#XXXXXXXX` code, enter its eight-character
-suffix, or choose a clipboard code or recent opponent. UNRANKED searches for
+either player can call a friend's connect code, type it on the in-game keyboard,
+or choose a clipboard code or recent opponent. Codes are Slippi-style and you
+pick your own: 1-4 letters, `#`, then 1-3 digits, like `CHRS#123` (launcher or
+F1 → Online → Your connect code). Until you choose one you get a default made
+from your old player name and your key, like `PLAY#417`. Codes are not registered anywhere, so two people
+can pick the same one; the lobby shows who you reached, and every pairing
+message is still signed by that player's key. UNRANKED searches for
 an opponent; RANKED runs a rated best-of-three set. PROFILE shows your code
 and locally verified rating. Internet discovery may take about 30 seconds to
 bootstrap and some NATs cannot support a direct peer connection. Legacy

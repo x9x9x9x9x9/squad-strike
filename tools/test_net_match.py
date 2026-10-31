@@ -42,19 +42,20 @@ def run():
             profile.mkdir()
             codes.append(subprocess.run(
                 [executable, "code"], check=True, text=True, capture_output=True,
-                env=os.environ | {"MATCH_NAME": f"P{player}", "MATCH_DIR": str(profile)}
+                env=os.environ | {"MATCH_CODE": f"P#{player}", "MATCH_DIR": str(profile)}
             ).stdout.strip())
+        assert codes == ["P#0", "P#1"], codes
         processes = []
         try:
             for player in range(2):
                 profile = Path(work) / f"p{player}"
-                env = os.environ | {"MATCH_NAME": f"P{player}", "MATCH_DIR": str(profile)}
+                env = os.environ | {"MATCH_CODE": f"P#{player}", "MATCH_DIR": str(profile)}
                 if os.getenv("MATCH_DIRECT"):
                     # Both players dial each other -- the habit Slippi
-                    # teaches -- and player 1 gets the name wrong: only the
-                    # key suffix identifies a player now.
+                    # teaches -- and player 0 types it in lower case with a
+                    # leading zero: it is still the same code.
                     theirs = codes[1 - player]
-                    env["MATCH_DIAL"] = theirs if player else "WRONG" + theirs[theirs.index("#"):]
+                    env["MATCH_DIAL"] = theirs if player else "p#0" + theirs[2:]
                 processes.append(subprocess.Popen(
                     [executable, str(ports[player]), str(ports[1-player])],
                     env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
@@ -85,12 +86,12 @@ def run():
     elif os.getenv("MATCH_PROOF_TIMEOUT") or os.getenv("MATCH_PROOF_MISMATCH"):
         detail = "unverified peer state refused before socket handoff"
     elif os.getenv("MATCH_DIRECT"):
-        detail = "mutual direct dial by key suffix (one name wrong), contact saved"
+        detail = "mutual direct dial by TAG#NUM code (one typed loosely), contact saved"
     elif os.getenv("MATCH_RANKED"):
         detail = "BEP44 genesis proofs, signed ranked session and READY barrier"
     else:
         detail = "signed pairing, socket handoff, role election and READY barrier"
-    print(f"PASS: {detail}; cancellation and same-key name refresh")
+    print(f"PASS: {detail}; cancellation and same-key code change")
 
 
 if __name__ == "__main__":

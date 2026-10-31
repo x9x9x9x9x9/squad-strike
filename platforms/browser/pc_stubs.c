@@ -72,6 +72,9 @@ bool pc_is_custom_textures_enabled(void) {
 const char* pc_get_net_name(void) {
     return "";
 }
+const char* pc_get_net_code(void) {
+    return "";
+}
 const char* pc_get_net_target(void) {
     return "";
 }

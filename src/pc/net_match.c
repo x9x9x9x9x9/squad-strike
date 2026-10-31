@@ -27,6 +27,7 @@ typedef int MatchSocket;
 #endif
 
 extern const char* pc_get_net_name(void);
+extern const char* pc_get_net_code(void);
 extern int pc_get_net_port(void);
 extern const char* pc_lan_disc_id(void);
 #if defined(__GNUC__) || defined(__clang__)
@@ -38,8 +39,10 @@ __attribute__((weak)) void pc_log_line(const char* fmt, ...) {
 #define MATCH_MAGIC 0x4d504d31u /* MPM1 */
 /* v3: hello.code grew 14 -> 18 (40-bit key suffix).
  * v4: direct calls meet on key-suffix topics and are matched by key alone
- *     (pairing_topic), so the name part of a code no longer has to match. */
-#define MATCH_VERSION 4
+ *     (pairing_topic), so the name part of a code no longer has to match.
+ * v5: codes are player-chosen TAG#NUM (net_identity.c), no longer derived
+ *     from the key; direct calls meet on topics of the whole code. */
+#define MATCH_VERSION 5
 #define RETRY_MS 250
 #define TIMEOUT_MS 8000
 
@@ -73,8 +76,8 @@ static PcNetIdentity identity;
 static enum PcNetMatchMode mode;
 static int state = PC_MATCH_FAIL;
 static const char* failure = "not started";
-static char target[18], opponent[18];
-static char target_suffix[9]; /* direct: the key suffix we are calling, "" hosting */
+static char opponent[PC_CODE_SIZE];
+static char target_code[PC_CODE_SIZE]; /* direct: the code we are calling, "" hosting */
 static uint64_t started_ms;   /* this search's start, for the UI's clock */
 static unsigned candidates_tried;
 static uint8_t peer_key[32], compatibility[20], topic[20], offer_hash[20];
@@ -227,11 +230,22 @@ static void publication_result(const PcDhtItemResult* r, void* context) {
 }
 
 static bool load_identity(void) {
-    if (identity_loaded)
+    /* The chosen code; a profile that never chose one gets a default made
+     * from its old player name and its key. A code changed in the settings
+     * shows (and is used) at once, rather than after the next search. */
+    static char loaded_for[64];
+    const char* code = pc_get_net_code();
+    if (!code || !*code)
+        code = pc_get_net_name();
+    if (!code)
+        code = "";
+    if (identity_loaded && !strcmp(loaded_for, code))
         return true;
+    if (identity_loaded && state != PC_MATCH_FAIL)
+        return true; /* not mid-search: the Hello already carries the old one */
+    snprintf(loaded_for, sizeof loaded_for, "%s", code);
     char* dir = pc_get_pref_path();
-    const char* name = pc_get_net_name();
-    bool ok = dir && pc_identity_load(&identity, dir, name && *name ? name : "PLAYER");
+    bool ok = dir && pc_identity_load(&identity, dir, code ? code : "");
     if (dir && ok)
         snprintf(profile_directory, sizeof profile_directory, "%s", dir);
     SDL_free(dir);
@@ -262,31 +276,6 @@ static bool send_packet(const void* p, size_t n, const struct pc_dht_endpoint* e
     return sendto((MatchSocket)pc_dht_socket(), p, (int)n, 0, (struct sockaddr*)&to, sizeof to) ==
            (int)n;
 }
-static bool key_code_matches(const uint8_t key[32], const char* code) {
-    if (!pc_identity_code_valid(code))
-        return false;
-    uint8_t h[20];
-    pc_dht_sha1(key, 32, h);
-    static const char a[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    uint64_t bits = (uint64_t)h[0] << 32 | (uint64_t)h[1] << 24 | (uint64_t)h[2] << 16 |
-                    (uint64_t)h[3] << 8 | h[4];
-    size_t n = strlen(code);
-    for (int i = 0; i < 8; i++)
-        if (code[n - 8 + i] != a[(bits >> (35 - 5 * i)) & 31])
-            return false;
-    return true;
-}
-/* The key's own eight-character suffix (the part of a code it proves). */
-static void key_suffix(const uint8_t key[32], char out[9]) {
-    uint8_t h[20];
-    pc_dht_sha1(key, 32, h);
-    static const char a[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    uint64_t bits = (uint64_t)h[0] << 32 | (uint64_t)h[1] << 24 | (uint64_t)h[2] << 16 |
-                    (uint64_t)h[3] << 8 | h[4];
-    for (int i = 0; i < 8; i++)
-        out[i] = a[(bits >> (35 - 5 * i)) & 31];
-    out[8] = 0;
-}
 static bool signed_ok(const uint8_t key[32], const uint8_t sig[64], const void* p, size_t n) {
     return pc_identity_verify(key, sig, p, n - 64);
 }
@@ -309,25 +298,26 @@ static void fail(const char* why) {
 static void pairing_topic(enum PcNetMatchMode m, uint8_t out[20]) {
     char text[64];
     int n = snprintf(text, sizeof text,
-        m == PC_MATCH_DIRECT ? "meleepc/match/v2/direct" :
+        m == PC_MATCH_DIRECT ? "meleepc/match/v3/direct" :
         m == PC_MATCH_RANKED ? "meleepc/match/v1/ranked" :
                                "meleepc/match/v1/unranked");
     pc_dht_sha1(text, n > 0 ? (size_t)n : 0, out);
 }
 
-/* The topic two players who each dial the other both search: the two key
- * suffixes in sorted order, so either side computes the same one. */
+/* The topic two players who each dial the other both search: the two codes
+ * in sorted order, so either side computes the same one. */
 static void pair_topic(const char* a, const char* b, uint8_t out[20]) {
     char text[64];
-    int n = strcmp(a, b) < 0 ? snprintf(text, sizeof text, "meleepc/v2/pair/%s/%s", a, b) :
-                               snprintf(text, sizeof text, "meleepc/v2/pair/%s/%s", b, a);
+    int n = strcmp(a, b) < 0 ? snprintf(text, sizeof text, "meleepc/v3/pair/%s/%s", a, b) :
+                               snprintf(text, sizeof text, "meleepc/v3/pair/%s/%s", b, a);
     pc_dht_sha1(text, n > 0 ? (size_t)n : 0, out);
 }
 
 /* ---- contacts: everyone this profile has played, newest first ----------
  * Written only once a match reaches PC_MATCH_READY, so a code is saved only
- * after the key behind it answered: a typo is never remembered. Keyed by
- * suffix; the name is refreshed from the latest Hello. */
+ * after a player answered to it: a typo is never remembered. Keyed by code.
+ * Files from older builds hold NAME#K3XQ2M7A codes; those lines are not
+ * valid codes any more and are skipped. */
 static PcNetContact contacts[PC_NET_CONTACTS_MAX];
 static int contact_count = -1; /* -1: not loaded */
 
@@ -360,10 +350,9 @@ static void contacts_note(const char* code) {
     contacts_load();
     if (contact_count < 0 || !pc_identity_code_valid(code))
         return;
-    const char* suffix = pc_identity_code_suffix(code);
     int at = contact_count < PC_NET_CONTACTS_MAX ? contact_count : PC_NET_CONTACTS_MAX - 1;
     for (int i = 0; i < contact_count; i++)
-        if (!strcmp(pc_identity_code_suffix(contacts[i].code), suffix)) {
+        if (!strcmp(contacts[i].code, code)) {
             at = i;
             break;
         }
@@ -395,18 +384,17 @@ int pc_net_match_contacts(PcNetContact* out, int max) {
     return n;
 }
 
-/* A connect code on the clipboard, normalised to NAME#SUFFIX (or #SUFFIX when
- * the paste had no name), or false. */
-bool pc_net_match_clipboard_code(char out[18]) {
+/* A connect code on the clipboard other than our own, or false. */
+bool pc_net_match_clipboard_code(char out[PC_CODE_SIZE]) {
     if (!SDL_HasClipboardText())
         return false;
     char* text = SDL_GetClipboardText();
-    char suffix[9], name[9];
-    bool ok = text && pc_identity_parse_code(text, suffix, name) &&
-              strcmp(suffix, pc_identity_code_suffix(pc_net_match_local_code()));
+    char code[PC_CODE_SIZE];
+    bool ok = text && pc_identity_parse_code(text, code) &&
+              strcmp(code, pc_net_match_local_code());
     SDL_free(text);
     if (ok)
-        snprintf(out, 18, "%s#%s", name, suffix);
+        memcpy(out, code, PC_CODE_SIZE);
     return ok;
 }
 
@@ -421,7 +409,7 @@ void pc_net_match_progress(PcNetMatchProgress* p) {
     p->network_ready = state != PC_MATCH_SEARCH || pc_dht_ready();
     p->candidates = candidates_tried;
     p->found = have_peer || state == PC_MATCH_CONNECT || state == PC_MATCH_READY;
-    p->calling = mode == PC_MATCH_DIRECT && target_suffix[0];
+    p->calling = mode == PC_MATCH_DIRECT && target_code[0];
 }
 
 static void ready(void) {
@@ -490,9 +478,8 @@ static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep
         if (ntohl(h->magic) != MATCH_MAGIC || h->version != MATCH_VERSION || h->type != 'H' ||
             h->mode != (uint8_t)mode || h->nonce == local_nonce ||
             memcmp(h->compatibility, compatibility, 20) || memcmp(h->topic, topic, 20) ||
-            !terminator || !key_code_matches(h->public_key, h->code) ||
-            (mode == PC_MATCH_DIRECT && target_suffix[0] &&
-                strcmp(pc_identity_code_suffix(h->code), target_suffix)) ||
+            !terminator || !pc_identity_code_valid(h->code) ||
+            (mode == PC_MATCH_DIRECT && target_code[0] && strcmp(h->code, target_code)) ||
             !signed_ok(h->public_key, h->signature, h, sizeof *h))
             return;
         bool fresh = !have_peer;
@@ -618,39 +605,33 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
     recovery_immutable = false;
     proof_step = 0;
     identity_loaded = false; /* Reload display code from the same persistent key. */
-    char name[9];
-    target_suffix[0] = 0;
-    if (code && *code && !pc_identity_parse_code(code, target_suffix, name)) {
+    target_code[0] = 0;
+    if (code && *code && !pc_identity_parse_code(code, target_code)) {
         fail("invalid connect code");
         return false;
     }
-    if (target_suffix[0])
-        snprintf(target, sizeof target, "%s#%s", name, target_suffix);
-    else
-        target[0] = 0;
     if (!load_identity() || !pc_identity_random(&local_nonce, sizeof local_nonce)) {
         fail("identity unavailable");
         return false;
     }
-    char own[9];
-    key_suffix(identity.public_key, own);
-    if (m == PC_MATCH_DIRECT && !strcmp(target_suffix, own)) {
+    const char* own = identity.code;
+    if (m == PC_MATCH_DIRECT && !strcmp(target_code, own)) {
         fail("that is your own code");
         return false;
     }
     digest();
     pairing_topic(m, topic);
-    /* Direct: the doorbell is the callee's suffix, the caller's target or our
+    /* Direct: the doorbell is the callee's code, the caller's target or our
      * own when hosting. A caller also waits on the pair topic, which is where
      * two players who each dialled the other both are. */
-    const char* doorbell = target_suffix[0] ? target_suffix : own;
+    const char* doorbell = target_code[0] ? target_code : own;
     if (!pc_dht_start((enum pc_dht_mode)m, doorbell, 0, (uint16_t)pc_get_net_port())) {
         fail("DHT unavailable");
         return false;
     }
-    if (m == PC_MATCH_DIRECT && target_suffix[0]) {
+    if (m == PC_MATCH_DIRECT && target_code[0]) {
         uint8_t pair[20];
-        pair_topic(own, target_suffix, pair);
+        pair_topic(own, target_code, pair);
         pc_dht_add_topic(pair);
     }
     started_ms = SDL_GetTicks();
@@ -717,7 +698,7 @@ void pc_net_match_poll(void) {
             uint32_t cip = ntohl(ep.address);
             candidates_tried++;
             pc_log_line("match: sending MatchHello to %u.%u.%u.%u:%u (target=%s)", cip >> 24,
-                (cip >> 16) & 0xFF, (cip >> 8) & 0xFF, cip & 0xFF, ep.port, target);
+                (cip >> 16) & 0xFF, (cip >> 8) & 0xFF, cip & 0xFF, ep.port, target_code);
             for (int p = 0; p < 3; p++) {
                 send_packet(&hello, sizeof hello, &ep);
             }

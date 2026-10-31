@@ -11,7 +11,7 @@ enum PcNetMatchMode { PC_MATCH_DIRECT, PC_MATCH_UNRANKED, PC_MATCH_RANKED };
 enum PcNetMatchState { PC_MATCH_SEARCH, PC_MATCH_CONNECT, PC_MATCH_READY, PC_MATCH_FAIL };
 #define PC_NET_CONTACTS_MAX 16
 typedef struct PcNetContact {
-    char code[18];       /* NAME#SUFFIX as last seen */
+    char code[PC_CODE_SIZE]; /* their TAG#NUM */
     int64_t last_played; /* unix seconds */
 } PcNetContact;
 typedef struct PcNetMatchProgress {
@@ -24,7 +24,7 @@ typedef struct PcNetMatchProgress {
 /* Opponents this profile has played, newest first; codes are only saved once
  * a match actually connected. */
 int pc_net_match_contacts(PcNetContact* out, int max);
-bool pc_net_match_clipboard_code(char out[18]);
+bool pc_net_match_clipboard_code(char out[PC_CODE_SIZE]);
 bool pc_net_match_copy_code(void);
 void pc_net_match_progress(PcNetMatchProgress* progress);
 bool pc_net_match_publish_rank(void);

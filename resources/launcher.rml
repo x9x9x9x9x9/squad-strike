@@ -106,9 +106,8 @@
           </div>
         </div>
         <div id="page-online" class="page">
-          <div class="row" data-desc="1-8 letters or digits. Changes apply to the next search."><span class="name">Player name</span><input type="text" id="net-name" maxlength="8" value="PLAYER" /></div>
-          <div class="row" data-desc="Give this to a friend so they can connect to you."><span class="name">Your connect code</span><span id="net-code" class="readout"></span></div>
-          <div class="row" data-desc="Leave blank to host your code. Open Online, then Direct Connect, in the game."><span class="name">Friend's connect code</span><input type="text" id="net-target" maxlength="17" value="" /></div>
+          <div class="row" data-desc="Pick your own, like CHRS#123: 1-4 letters, #, then 1-3 digits. Give it to a friend so they can call you. Changes apply to the next search."><span class="name">Your connect code</span><input type="text" id="net-code" maxlength="8" value="" /></div>
+          <div class="row" data-desc="Leave blank to host your code. Open Online, then Direct Connect, in the game."><span class="name">Friend's connect code</span><input type="text" id="net-target" maxlength="8" value="" /></div>
           <div class="row" data-desc="Automatic adapts to your connection. Changes apply next match."><span class="name">Input delay</span><button id="net-delay" class="value">Auto</button></div>
           <p class="note">Internet discovery can take a few minutes. Some home networks cannot connect without a relay.</p>
         </div>

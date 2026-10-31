@@ -418,30 +418,28 @@ static bool internetLobby(void) {
  * your identity but you should rarely have to type it. So the first screen
  * is a hub -- a code found on the clipboard, everyone you have played,
  * "enter a code", "wait for a friend" -- and typing, when it is needed, is
- * eight characters on a keyboard grid rather than seventeen slots on a
- * wheel. Only the part after the '#' is typed: it is derived from the
- * friend's key and is all that identifies them (net_match.c pairing_topic),
- * so the name can be wrong or missing and the call still connects. Both
- * players may dial each other; they meet on a topic both compute.
+ * a short Slippi-style TAG#NUM ("CHRS#123", net_identity.c) on a keyboard
+ * grid: letters for the tag, then digits, and the '#' goes in by itself.
+ * Both players may dial each other; they meet on a topic both compute.
  *
  * States: HUB -> KEYS -> (call) ; HUB -> (call or wait). The call itself is
  * the internet lobby below, with a progress line and a clock. */
-#define DIRECT_SUFFIX 8
 enum { DIRECT_OFF, DIRECT_HUB, DIRECT_KEYS };
 enum { ROW_PASTE, ROW_CONTACT, ROW_TYPE, ROW_WAIT };
-static const char direct_keys[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+/* ONLINE_LOBBY_KEY_ROWS x ONLINE_LOBBY_KEY_COLS, row-major. */
+static const char direct_keys[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 static int direct_screen;
 static int direct_cursor;       /* hub row */
 static int direct_key;          /* keyboard cell */
-static char direct_suffix[DIRECT_SUFFIX + 1];
+static char direct_typed[PC_CODE_LEN_MAX + 1]; /* TAG, then '#' and digits */
 static char direct_error[ONLINE_LOBBY_MSG_LEN];
-static char direct_clip[18];    /* a code seen on the clipboard, or "" */
+static char direct_clip[PC_CODE_SIZE]; /* a code seen on the clipboard, or "" */
 static PcNetContact direct_contacts[ONLINE_LOBBY_MENU_ROWS];
 static int direct_contact_n;
 static int direct_row_kind[ONLINE_LOBBY_MENU_ROWS];
 static int direct_row_arg[ONLINE_LOBBY_MENU_ROWS];
 static int direct_rows;
-static char direct_calling[18]; /* who the current call is to, "" hosting */
+static char direct_calling[PC_CODE_SIZE]; /* who the current call is to, "" hosting */
 static bool direct_copied;
 
 static void directHubBuild(void)
@@ -487,17 +485,10 @@ static void directCall(const char* code)
     pc_net_match_start(PC_MATCH_DIRECT, code);
 }
 
-/* "RYAN#K3XQ2M7A" -> "RYAN #K3X-Q2M-7A": the suffix in groups of three is
- * how a person reads a code aloud and checks it against a friend's. */
+/* Codes are short enough to show as they are. */
 static void directShow(char* out, size_t n, const char* code)
 {
-    const char* hash = strchr(code, '#');
-    if (hash == NULL || strlen(hash + 1) != DIRECT_SUFFIX) {
-        snprintf(out, n, "%s", code);
-        return;
-    }
-    const char* s = hash + 1;
-    snprintf(out, n, "%.*s#%.3s-%.3s-%.2s", (int) (hash - code), code, s, s + 3, s + 6);
+    snprintf(out, n, "%s", code);
 }
 
 static void directAgo(char* out, size_t n, int64_t when)
@@ -584,7 +575,7 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
                 break;
             case ROW_TYPE:
                 direct_screen = DIRECT_KEYS;
-                direct_suffix[0] = '\0';
+                direct_typed[0] = '\0';
                 direct_key = 0;
                 direct_error[0] = '\0';
                 break;
@@ -596,10 +587,14 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
         return direct_screen != DIRECT_OFF;
     }
 
-    /* KEYS: eight characters, A-Z and 2-7 (the code alphabet has no 0, 1,
-     * 8 or 9, so there is nothing to mistype them as). The grid wraps, so
-     * any key is at most six moves away. */
-    int len = (int) strlen(direct_suffix);
+    /* KEYS: a tag of 1-4 letters, then 1-3 digits. The first digit puts
+     * the '#' in, so it is never typed; a key that cannot go next just
+     * buzzes. The grid wraps, so any key is a few moves away. */
+    int len = (int) strlen(direct_typed);
+    const char* hash = strchr(direct_typed, '#');
+    int tag_len = hash != NULL ? (int) (hash - direct_typed) : len;
+    int num_len = hash != NULL ? len - tag_len - 1 : 0;
+    int key_count = (int) sizeof direct_keys - 1;
     if (repeat & PAD_ANY_LEFT) {
         direct_key = direct_key / ONLINE_LOBBY_KEY_COLS * ONLINE_LOBBY_KEY_COLS +
                      (direct_key + ONLINE_LOBBY_KEY_COLS - 1) % ONLINE_LOBBY_KEY_COLS;
@@ -609,21 +604,41 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
                      (direct_key + 1) % ONLINE_LOBBY_KEY_COLS;
         sfxMove();
     } else if (repeat & PAD_ANY_UP) {
-        direct_key = (direct_key + (int) sizeof direct_keys - 1 - ONLINE_LOBBY_KEY_COLS) %
-                     ((int) sizeof direct_keys - 1);
+        direct_key = (direct_key + key_count - ONLINE_LOBBY_KEY_COLS) % key_count;
         sfxMove();
     } else if (repeat & PAD_ANY_DOWN) {
-        direct_key = (direct_key + ONLINE_LOBBY_KEY_COLS) % ((int) sizeof direct_keys - 1);
+        direct_key = (direct_key + ONLINE_LOBBY_KEY_COLS) % key_count;
         sfxMove();
     }
-    if ((input & HSD_PAD_A) && len < DIRECT_SUFFIX) {
-        direct_suffix[len++] = direct_keys[direct_key];
-        direct_suffix[len] = '\0';
-        direct_error[0] = '\0';
-        sfxForward();
+    if (input & HSD_PAD_A) {
+        char c = direct_keys[direct_key];
+        bool is_digit = c >= '0' && c <= '9';
+        if (!is_digit && hash == NULL && tag_len < PC_CODE_TAG_MAX) {
+            direct_typed[len++] = c;
+            direct_typed[len] = '\0';
+            direct_error[0] = '\0';
+            sfxForward();
+        } else if (is_digit && tag_len > 0 && num_len < PC_CODE_NUM_MAX) {
+            if (hash == NULL) {
+                direct_typed[len++] = '#';
+            }
+            direct_typed[len++] = c;
+            direct_typed[len] = '\0';
+            direct_error[0] = '\0';
+            sfxForward();
+        } else {
+            snprintf(direct_error, sizeof direct_error,
+                     tag_len == 0 ? "A code starts with a letter" :
+                     is_digit ? "The number is 1 to 3 digits" :
+                                "The tag is 1 to 4 letters, then the number");
+            sfxBack();
+        }
     } else if (input & HSD_PAD_B) {
         if (len > 0) {
-            direct_suffix[--len] = '\0';
+            direct_typed[--len] = '\0';
+            if (len > 0 && direct_typed[len - 1] == '#') {
+                direct_typed[--len] = '\0'; /* the '#' goes with the last digit */
+            }
             sfxBack();
         } else {
             direct_screen = DIRECT_HUB; /* B on an empty code goes back a step */
@@ -631,32 +646,24 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
             return true;
         }
     } else if (input & HSD_PAD_START) {
-        if (len == DIRECT_SUFFIX) {
-            char code[18];
-            snprintf(code, sizeof code, "#%s", direct_suffix);
+        char code[PC_CODE_SIZE];
+        if (pc_identity_normalize_code(direct_typed, code)) {
             sfxForward();
             directCall(code);
             return false;
         }
-        snprintf(direct_error, sizeof direct_error, "A code has 8 characters after the #");
+        snprintf(direct_error, sizeof direct_error, "A code is letters, then a number: CHRS#123");
         sfxBack();
     }
     view->screen = LOBBY_SCREEN_KEYS;
     view->keys = direct_keys;
     view->key_cursor = direct_key;
     view->menu_count = 1;
-    {
-        char slots[DIRECT_SUFFIX + 1];
-        for (int i = 0; i < DIRECT_SUFFIX; i++) {
-            slots[i] = i < len ? direct_suffix[i] : '_';
-        }
-        slots[DIRECT_SUFFIX] = '\0';
-        snprintf(buf, sizeof buf, "Friend's code   # %.3s-%.3s-%.2s", slots, slots + 3, slots + 6);
-        snprintf(view->menu[0], sizeof view->menu[0], "%s", buf);
-    }
+    snprintf(buf, sizeof buf, "Friend's code   %s_", direct_typed);
+    snprintf(view->menu[0], sizeof view->menu[0], "%s", buf);
     snprintf(view->message, sizeof view->message, "%s",
              direct_error[0] ? direct_error :
-             "Type the 8 characters after the #");
+             "Type the letters, then the number. START: call");
     view->hint = "A: type   B: delete   START: call";
     return true;
 }

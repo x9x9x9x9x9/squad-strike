@@ -47,110 +47,139 @@ bool pc_identity_random(void* bytes, size_t length) {
 static char upper(char c) {
     return c >= 'a' && c <= 'z' ? (char)(c - ('a' - 'A')) : c;
 }
-static bool name_char(char c) {
-    return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+static bool tag_char(char c) {
+    return c >= 'A' && c <= 'Z';
+}
+static bool digit(char c) {
+    return c >= '0' && c <= '9';
 }
 
+/* Connect codes are Slippi-style and chosen by the player: TAG#NUM, a tag
+ * of 1-4 letters and a number of 1-3 digits ("CHRS#123"). Unlike the old
+ * NAME#K3XQ2M7A codes they are not derived from the key, so they can be
+ * anything; the key still signs every pairing message (net_match.c). The
+ * number is kept without leading zeros so "CHRS#007" and "CHRS#7" are the
+ * same code. */
 bool pc_identity_code_valid(const char* code) {
     if (!code)
         return false;
-    size_t n = strlen(code);
-    if (n < 10 || n > 17 || code[n - 9] != '#')
+    size_t tag = 0;
+    while (tag_char(code[tag]))
+        tag++;
+    if (tag < 1 || tag > PC_CODE_TAG_MAX || code[tag] != '#')
         return false;
-    for (size_t i = 0; i < n - 9; ++i)
-        if (!name_char(code[i]))
-            return false;
-    for (size_t i = n - 8; i < n; ++i)
-        if (!((code[i] >= 'A' && code[i] <= 'Z') || (code[i] >= '2' && code[i] <= '7')))
-            return false;
-    return true;
+    const char* num = code + tag + 1;
+    size_t digits = 0;
+    while (digit(num[digits]))
+        digits++;
+    if (digits < 1 || digits > PC_CODE_NUM_MAX || num[digits] != '\0')
+        return false;
+    return !(digits > 1 && num[0] == '0');
 }
 
-const char* pc_identity_code_suffix(const char* code) {
-    return pc_identity_code_valid(code) ? code + strlen(code) - 8 : "";
+/* Tag letters and number digits to a canonical code, or false. */
+static bool make_code(const char* tag, size_t tag_len, const char* num, size_t num_len,
+    char out[PC_CODE_SIZE]) {
+    if (tag_len < 1 || tag_len > PC_CODE_TAG_MAX || num_len < 1 || num_len > PC_CODE_NUM_MAX)
+        return false;
+    while (num_len > 1 && num[0] == '0') {
+        num++;
+        num_len--;
+    }
+    size_t n = 0;
+    for (size_t i = 0; i < tag_len; i++)
+        out[n++] = upper(tag[i]);
+    out[n++] = '#';
+    memcpy(out + n, num, num_len);
+    out[n + num_len] = '\0';
+    return pc_identity_code_valid(out);
 }
 
-/* One character of a base32 suffix as a person might type it, or 0. The
- * alphabet has no 0, 1 or 8, so those can only be O, I and B misread. */
-static char suffix_char(char c) {
-    c = upper(c);
-    if (c == '0')
-        return 'O';
-    if (c == '1')
-        return 'I';
-    if (c == '8')
-        return 'B';
-    return (c >= 'A' && c <= 'Z') || (c >= '2' && c <= '7') ? c : 0;
-}
-
-bool pc_identity_parse_code(const char* text, char suffix[9], char name[9]) {
+bool pc_identity_normalize_code(const char* text, char out[PC_CODE_SIZE]) {
     if (!text)
         return false;
-    suffix[0] = name[0] = 0;
-    /* Preferred: NAME#SUFFIX, or #SUFFIX, anywhere in the text. Separators
-     * people add when reading a code out (spaces, dashes) are skipped. */
-    for (const char* hash = strchr(text, '#'); hash; hash = strchr(hash + 1, '#')) {
-        char s[9];
-        int n = 0;
-        const char* p = hash + 1;
-        for (; *p && n < 8; p++) {
-            if (*p == '-' || *p == ' ')
-                continue;
-            char c = suffix_char(*p);
-            if (!c)
-                break;
-            s[n++] = c;
-        }
-        char next = suffix_char(*p);
-        if (n != 8 || (next && *p != ' ' && *p != '-'))
-            continue; /* too short, or runs on: not a code */
-        s[8] = 0;
-        /* The name: up to eight name characters directly before the '#'. */
-        int len = 0;
-        while (len < 8 && hash - len > text && name_char(upper(hash[-len - 1])))
-            len++;
-        for (int i = 0; i < len; i++)
-            name[i] = upper(hash[i - len]);
-        name[len] = 0;
-        memcpy(suffix, s, 9);
-        return true;
+    char tag[PC_CODE_TAG_MAX], num[PC_CODE_NUM_MAX];
+    size_t t = 0, d = 0;
+    const char* p = text;
+    while (*p == ' ')
+        p++;
+    for (; tag_char(upper(*p)); p++) {
+        if (t == sizeof tag)
+            return false;
+        tag[t++] = *p;
     }
-    /* Otherwise a bare suffix: exactly eight code characters standing alone. */
-    for (const char* p = text; *p; p++) {
-        if (p > text && suffix_char(p[-1]))
-            continue; /* only at the start of a run */
-        char s[9];
-        int n = 0;
-        const char* q = p;
-        while (n < 8 && suffix_char(*q))
-            s[n++] = suffix_char(*q++);
-        if (n == 8 && !suffix_char(*q)) {
-            s[8] = 0;
-            memcpy(suffix, s, 9);
+    while (*p == ' ')
+        p++;
+    if (*p++ != '#')
+        return false;
+    while (*p == ' ')
+        p++;
+    for (; digit(*p); p++) {
+        if (d == sizeof num)
+            return false;
+        num[d++] = *p;
+    }
+    while (*p == ' ')
+        p++;
+    return *p == '\0' && make_code(tag, t, num, d, out);
+}
+
+bool pc_identity_parse_code(const char* text, char out[PC_CODE_SIZE]) {
+    if (!text)
+        return false;
+    /* TAG#NUM anywhere in the text ("my code is chrs#123!"), with a space
+     * allowed either side of the '#'. A tag or number that runs on past its
+     * limit is not a code, rather than a code cut out of a longer word. */
+    for (const char* hash = strchr(text, '#'); hash; hash = strchr(hash + 1, '#')) {
+        const char* end = hash;
+        if (end > text && end[-1] == ' ')
+            end--;
+        const char* tag = end;
+        while (tag > text && tag_char(upper(tag[-1])))
+            tag--;
+        if (tag > text && digit(tag[-1]))
+            continue;
+        const char* num = hash + 1;
+        if (*num == ' ')
+            num++;
+        size_t digits = 0;
+        while (digit(num[digits]))
+            digits++;
+        if (tag_char(upper(num[digits])))
+            continue;
+        if (make_code(tag, (size_t)(end - tag), num, digits, out))
             return true;
-        }
     }
     return false;
 }
 
-bool pc_identity_load(PcNetIdentity* id, const char* directory, const char* name) {
+/* A default code for a profile that has not chosen one: up to four letters
+ * of `hint` (the old player name) or PLYR, and a number from the key, so two
+ * fresh installs are unlikely to share one. */
+static void default_code(const char* hint, const uint8_t public_key[32], char out[PC_CODE_SIZE]) {
+    char tag[PC_CODE_TAG_MAX];
+    size_t t = 0;
+    for (const char* p = hint ? hint : ""; *p && t < sizeof tag; p++)
+        if (tag_char(upper(*p)))
+            tag[t++] = upper(*p);
+    if (!t) {
+        memcpy(tag, "PLYR", 4);
+        t = 4;
+    }
+    uint8_t digest[20];
+    pc_dht_sha1(public_key, 32, digest);
+    unsigned number = ((unsigned)digest[0] << 8 | digest[1]) % 1000;
+    char num[4];
+    int d = snprintf(num, sizeof num, "%u", number);
+    make_code(tag, t, num, (size_t)d, out);
+}
+
+bool pc_identity_load(PcNetIdentity* id, const char* directory, const char* code) {
     uint8_t seed[32];
-    char label[9], path[4096];
-    if (!id || !directory || !name)
+    char path[4096];
+    if (!id || !directory)
         return false;
     memset(id, 0, sizeof *id);
-    size_t len = strlen(name);
-    if (!len || len > 8)
-        return false;
-    for (size_t i = 0; i < len; ++i) {
-        char c = name[i];
-        if (c >= 'a' && c <= 'z')
-            c -= 'a' - 'A';
-        if (!name_char(c))
-            return false;
-        label[i] = c;
-    }
-    label[len] = 0;
     int n = snprintf(path, sizeof path, "%s/identity.key", directory);
     if (n < 0 || n >= (int)sizeof path)
         return false;
@@ -216,18 +245,8 @@ bool pc_identity_load(PcNetIdentity* id, const char* directory, const char* name
     }
     crypto_ed25519_key_pair(id->secret_key, id->public_key, seed);
     crypto_wipe(seed, sizeof seed);
-    uint8_t digest[20];
-    pc_dht_sha1(id->public_key, sizeof id->public_key, digest);
-    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    /* 40 digest bits (five bytes) packed big-endian: the same bit-packing as
-     * the DHT infohash, 8 base32 chars ~ 2^40 grind cost. */
-    uint64_t bits = (uint64_t)digest[0] << 32 | (uint64_t)digest[1] << 24 |
-                    (uint64_t)digest[2] << 16 | (uint64_t)digest[3] << 8 | digest[4];
-    memcpy(id->code, label, len);
-    id->code[len++] = '#';
-    for (int i = 0; i < 8; ++i)
-        id->code[len++] = alphabet[(bits >> (35 - 5 * i)) & 31];
-    id->code[len] = 0;
+    if (!pc_identity_normalize_code(code, id->code))
+        default_code(code, id->public_key, id->code);
     return true;
 }
 

@@ -189,19 +189,15 @@
             </div>
           </div>
           <div id="page-online" class="page">
-            <div class="row" data-desc="1–8 letters or digits. Changes apply to the next search.">
-              <span class="name">Player name<span class="detail">1–8 letters or digits. Changes apply to the next search.</span>
+            <div class="row" data-desc="Pick your own, like CHRS#123: 1–4 letters, #, then 1–3 digits. Changes apply to the next search.">
+              <span class="name">Your connect code<span class="detail">Pick your own, like CHRS#123: 1–4 letters, #, then 1–3 digits. Changes apply to the next search.</span>
               </span>
-              <input type="text" id="net-name" maxlength="8" value="PLAYER" />
-            </div>
-            <div class="row" data-desc="Your connect code">
-              <span class="name">Your connect code<span id="net-code" class="detail" />
-              </span>
+              <input type="text" id="net-code" maxlength="8" value="" />
             </div>
             <div class="row" data-desc="Leave blank to host your code. Open Online → Direct Connect in-game.">
               <span class="name">Friend's connect code<span class="detail">Leave blank to host your code. Open Online → Direct Connect in-game.</span>
               </span>
-              <input type="text" id="net-target" maxlength="17" value="" />
+              <input type="text" id="net-target" maxlength="8" value="" />
             </div>
             <div class="row" data-desc="Automatic adapts to your connection. Changes apply next match.">
               <span class="name">Input delay<span class="detail">Automatic adapts to your connection. Changes apply next match.</span>
