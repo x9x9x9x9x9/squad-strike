@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftdonkeyspecialn.h"
 
 #include <Runtime/platform.h>
@@ -562,6 +563,8 @@ void ftDk_SpecialN_DestroyAllEffects(HSD_GObj* gobj)
 void ftDk_SpecialN_DestroyAllEffectsPlus(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    fp->u.dk.x222C = 0;
+    if (!FT_SDR) { /* SD Remix: up-B keeps the Giant Punch charge */
+        fp->u.dk.x222C = 0;
+    }
     efLib_DestroyAll(gobj);
 }
