@@ -47,6 +47,9 @@ bool pc_is_squad_strike_enabled(void) {
     const char* env = getenv("MELEE_SQUAD_STRIKE");
     return env == NULL || env[0] != '0';
 }
+bool pc_sdremix_active(void) {
+    return false;
+}
 bool pc_is_stage_expansion_enabled(void) {
     const char* env = getenv("MELEE_STAGE_EXPANSION");
     return env == NULL || env[0] != '0';
