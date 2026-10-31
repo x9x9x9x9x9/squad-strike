@@ -169,6 +169,10 @@ void onEnterLobby(UNUSED GameModeState* state)
         pc_net_disconnect();
     }
     pc_lan_stop();
+    /* LAN / Direct play under the host's rules: 4 stocks unless changed. */
+    if (online_kind == ONLINE_KIND_LAN || online_kind == ONLINE_KIND_DIRECT) {
+        gmVsMelee_DefaultStockOnce();
+    }
 #endif
     /* Same CSS start state on both peers: two human doors, nothing picked. */
     gm_InitVsMode(&online_vs);
