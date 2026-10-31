@@ -90,7 +90,7 @@ static int state = PC_MATCH_FAIL;
 static const char* failure = "not started";
 static char opponent[PC_CODE_SIZE];
 static char target_code[PC_CODE_SIZE]; /* direct: the code we are calling, "" hosting */
-static uint64_t started_ms;   /* this search's start, for the UI's clock */
+static uint64_t started_ms;            /* this search's start, for the UI's clock */
 static unsigned candidates_tried;
 static uint8_t peer_key[32], compatibility[20], topic[20], offer_hash[20];
 static uint64_t local_nonce, peer_nonce, deadline, next_send;
@@ -404,8 +404,7 @@ bool pc_net_match_clipboard_code(char out[PC_CODE_SIZE]) {
         return false;
     char* text = SDL_GetClipboardText();
     char code[PC_CODE_SIZE];
-    bool ok = text && pc_identity_parse_code(text, code) &&
-              strcmp(code, pc_net_match_local_code());
+    bool ok = text && pc_identity_parse_code(text, code) && strcmp(code, pc_net_match_local_code());
     SDL_free(text);
     if (ok)
         memcpy(out, code, PC_CODE_SIZE);
@@ -546,7 +545,8 @@ static void beacon_poll(uint64_t now) {
             !strcmp(b.from, identity.code) || !ntohs(b.port))
             continue;
         /* Calling us, or the one we are calling. */
-        bool for_us = !strcmp(b.to, identity.code) || (target_code[0] && !strcmp(b.from, target_code));
+        bool for_us =
+            !strcmp(b.to, identity.code) || (target_code[0] && !strcmp(b.from, target_code));
         if (!for_us || have_peer)
             continue;
         struct pc_dht_endpoint ep = {from.sin_addr.s_addr, ntohs(b.port)};

@@ -7,6 +7,9 @@
 static bool tiebreak, set_complete;
 static int async_status, next_state;
 ResultsMatchInfo gmVsMelee_ResultsEnterData;
+void pc_log_line(const char* fmt, ...) {
+    (void)fmt;
+}
 bool pc_rank_session_set_complete(void) {
     return set_complete;
 }
@@ -89,6 +92,29 @@ int main(void) {
     StartMeleeData saved = start;
     rankedRules(&start, NULL);
     assert(!memcmp(&start, &saved, sizeof start));
+    /* Unranked/LAN/Direct: the loser of the last game picks the stage; a
+     * tie or a cancelled game keeps the last chooser. P1 starts. */
+    assert(gmOnline_StageChooser() == 0);
+    MatchEnd* end = &gmVsMelee_ResultsEnterData.match_end;
+    end->n_winners = 1;
+    end->winners[0] = 0;
+    onExitResults(NULL);
+    assert(gmOnline_StageChooser() == 1 && next_state == state_css);
+    end->winners[0] = 1;
+    onExitResults(NULL);
+    assert(gmOnline_StageChooser() == 0);
+    end->winners[0] = 0;
+    end->n_winners = 2; /* tie */
+    onExitResults(NULL);
+    assert(gmOnline_StageChooser() == 0);
+    end->n_winners = 1;
+    end->outcome = 99; /* cancelled */
+    onExitResults(NULL);
+    assert(gmOnline_StageChooser() == 0);
+    end->outcome = 0;
+    online_kind = ONLINE_KIND_RANKED; /* ranked keeps its own stage list */
+    onExitResults(NULL);
+    assert(gmOnline_StageChooser() == 0);
     puts("PASS: ranked stock/time/item/pause/team/player rules, zero-damage tiebreak, "
-         "async-independent results routing, unranked untouched");
+         "async-independent results routing, unranked untouched, loser picks the stage");
 }

@@ -78,8 +78,8 @@ bool pc_identity_code_valid(const char* code) {
 }
 
 /* Tag letters and number digits to a canonical code, or false. */
-static bool make_code(const char* tag, size_t tag_len, const char* num, size_t num_len,
-    char out[PC_CODE_SIZE]) {
+static bool make_code(
+    const char* tag, size_t tag_len, const char* num, size_t num_len, char out[PC_CODE_SIZE]) {
     if (tag_len < 1 || tag_len > PC_CODE_TAG_MAX || num_len < 1 || num_len > PC_CODE_NUM_MAX)
         return false;
     while (num_len > 1 && num[0] == '0') {

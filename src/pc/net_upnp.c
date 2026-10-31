@@ -73,7 +73,8 @@ static const char* find_ci(const char* hay, const char* needle) {
     size_t n = strlen(needle);
     for (; *hay; hay++) {
         size_t i = 0;
-        while (i < n && hay[i] && tolower((unsigned char)hay[i]) == tolower((unsigned char)needle[i]))
+        while (
+            i < n && hay[i] && tolower((unsigned char)hay[i]) == tolower((unsigned char)needle[i]))
             i++;
         if (i == n)
             return hay;
@@ -94,8 +95,11 @@ static bool parse_url(const char* url, char host[64], uint16_t* port, char path[
     p += h;
     *port = 80;
     if (*p == ':') {
-        long v = strtol(p + 1, (char**)&p, 10);
-        if (v <= 0 || v > 65535)
+        uint32_t v = 0;
+        int digits = 0;
+        for (p++; *p >= '0' && *p <= '9' && digits < 6; p++, digits++)
+            v = v * 10 + (uint32_t)(*p - '0');
+        if (v == 0 || v > 65535)
             return false;
         *port = (uint16_t)v;
     }
@@ -105,8 +109,8 @@ static bool parse_url(const char* url, char host[64], uint16_t* port, char path[
 
 /* One HTTP/1.0 exchange; the whole reply into `out`. `local` gets this PC's
  * address on the router's network. */
-static int http(const char* host, uint16_t port, const char* request, size_t request_len,
-    char* out, size_t cap, uint32_t* local) {
+static int http(const char* host, uint16_t port, const char* request, size_t request_len, char* out,
+    size_t cap, uint32_t* local) {
     struct sockaddr_in to = {0};
     to.sin_family = AF_INET;
     to.sin_port = htons(port);
@@ -253,8 +257,8 @@ static bool find_control(const char* xml, const char* location, UpnpControl* c) 
 }
 
 /* A SOAP call; true on HTTP 200. */
-static bool soap(const UpnpControl* c, const char* action, const char* args, char* out,
-    size_t cap) {
+static bool soap(
+    const UpnpControl* c, const char* action, const char* args, char* out, size_t cap) {
     char body[1536], request[2304];
     int b = snprintf(body, sizeof body,
         "<?xml version=\"1.0\"?>\r\n"

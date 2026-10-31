@@ -12,7 +12,7 @@ enum PcNetMatchState { PC_MATCH_SEARCH, PC_MATCH_CONNECT, PC_MATCH_READY, PC_MAT
 #define PC_NET_CONTACTS_MAX 16
 typedef struct PcNetContact {
     char code[PC_CODE_SIZE]; /* their TAG#NUM */
-    int64_t last_played; /* unix seconds */
+    int64_t last_played;     /* unix seconds */
 } PcNetContact;
 typedef struct PcNetMatchProgress {
     uint64_t elapsed_ms; /* since the search began; 0 once past it */
