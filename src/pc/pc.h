@@ -95,6 +95,11 @@ bool pc_is_frozen_stadium_enabled(void);
  * in-game menu), synced through netplay RULES. */
 bool pc_is_squad_strike_enabled(void);
 bool pc_is_stage_expansion_enabled(void);
+/* SD Remix characters (sdremix.cpp): its fighter files over the disc's and
+ * its code changes. Decided once at boot; both netplay peers must match. */
+void pc_sdremix_init(void);
+bool pc_sdremix_wanted(void);
+bool pc_sdremix_active(void);
 bool pc_is_free_camera_enabled(void);
 bool pc_is_ucf_enabled(void);
 int pc_get_hud_mode(void);
