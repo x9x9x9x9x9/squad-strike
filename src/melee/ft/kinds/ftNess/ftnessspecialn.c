@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftnessspecialn.h"
 
 #include <Runtime/platform.h>
@@ -204,7 +205,9 @@ void ftNs_SpecialNStart_Anim(HSD_GObj* gobj)
 
     ftNs_PKFlash_Init(gobj);
 
-    fp->x1968_jumpsUsed = (u8) fp->co_attrs.max_jumps;
+    if (!FT_SDR) { /* SD Remix: keeps its jump */
+        fp->x1968_jumpsUsed = (u8) fp->co_attrs.max_jumps;
+    }
 }
 
 /// Ness's grounded PK Flash Charge Animation callback
@@ -300,7 +303,9 @@ void ftNs_SpecialAirNStart_Anim(HSD_GObj* gobj)
                               1.0f, 0.0f, NULL);
     ftNs_PKFlash_Init(gobj);
 
-    fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+    if (!FT_SDR) { /* SD Remix: keeps its jump */
+        fp->x1968_jumpsUsed = fp->co_attrs.max_jumps;
+    }
 }
 
 /// Ness's aerial PK Flash Charge Animation callback
