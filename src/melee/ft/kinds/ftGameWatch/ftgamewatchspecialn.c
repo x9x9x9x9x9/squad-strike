@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftgamewatchspecialn.h"
 
 #include <melee/ft/forward.h>
@@ -115,7 +116,9 @@ void ftGw_SpecialN_Enter(HSD_GObj* gobj)
 /// State handler
 void ftGw_SpecialAirN_Enter(HSD_GObj* gobj)
 {
-    GET_FIGHTER(gobj)->self_vel.y = 0.0f;
+    if (!FT_SDR) { /* SD Remix: the chef keeps his momentum */
+        GET_FIGHTER(gobj)->self_vel.y = 0.0f;
+    }
     Fighter_ChangeMotionState(gobj, ftGw_MS_SpecialAirN, Ft_MF_None, 0.0f,
                               1.0f, 0.0f, NULL);
     ftAnim_8006EBA4(gobj);
@@ -274,8 +277,9 @@ void ftGw_SpecialAirN_AirToGround(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
 
-    ftCommon_AirToGroundStateChange(gobj, fp, ftGw_MS_SpecialN,
-                                    transition_flags);
+    /* SD Remix: landing during the chef cancels it into Landing */
+    ftCommon_AirToGroundStateChange(
+        gobj, fp, FT_SDR ? ftCo_MS_Landing : ftGw_MS_SpecialN, transition_flags);
     GET_FIGHTER(gobj)->accessory4_cb = &ftGw_SpecialN_CreateSausage;
 }
 
