@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftCo_Landing.h"
 
 #include <Runtime/platform.h>
@@ -76,6 +77,13 @@ void ftCo_Landing_Enter(Fighter_GObj* gobj, FtMotionId msid,
         break;
     case Ft_Kind_Mewtwo:
         fp->u.mt.x223C_isConfusionBoost = false;
+        break;
+    case Ft_Kind_Luigi:
+        if (FT_SDR) {
+            /* SD Remix: Luigi's cyclone recharges on landing, as Mario's */
+            fp->u.mr.x2234_tornadoCharge = false;
+            fp->u.mr.x2238_isCapeBoost = false;
+        }
         break;
     }
 }
