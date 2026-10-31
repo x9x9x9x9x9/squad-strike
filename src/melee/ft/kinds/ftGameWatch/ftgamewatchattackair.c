@@ -1,3 +1,4 @@
+#include <melee/ft/ftsdremix.h>
 #include "ftgamewatchattackair.h"
 
 #include <Runtime/platform.h>
@@ -552,6 +553,12 @@ static void ftGw_LandingAirN_Init(HSD_GObj* gobj)
 {
     Fighter* fp = getFighter(gobj);
 
+    if (FT_SDR) {
+        /* SD Remix: lands like everyone's N-air, so it L-cancels */
+        fp->motion_id = ftCo_MS_AttackAirN;
+        ftCo_LandingAir_EnterWithLag(gobj);
+        return;
+    }
     ftCo_LandingAir_EnterWithMsidLag(gobj, ftGw_MS_LandingAirN,
                                      fp->co_attrs.landingairn_lag);
 }
@@ -603,6 +610,12 @@ void ftGw_LandingAirB_Init(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
 
+    if (FT_SDR) {
+        /* SD Remix: lands like everyone's B-air, so it L-cancels */
+        fp->motion_id = ftCo_MS_AttackAirB;
+        ftCo_LandingAir_EnterWithLag(gobj);
+        return;
+    }
     ftCo_LandingAir_EnterWithMsidLag(gobj, ftGw_MS_LandingAirB,
                                      fp->co_attrs.landingairb_lag);
 }
@@ -651,6 +664,13 @@ void ftGw_LandingAirB_Coll(HSD_GObj* gobj)
 void ftGw_LandingAirHi_Init(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
+    if (FT_SDR) {
+        /* SD Remix: lands like everyone's up-air, so it L-cancels (and
+         * takes up-air's landing lag, not back-air's) */
+        fp->motion_id = ftCo_MS_AttackAirHi;
+        ftCo_LandingAir_EnterWithLag(gobj);
+        return;
+    }
     // Erroneously using Back Aerial's landing lag
     ftCo_LandingAir_EnterWithMsidLag(gobj, ftGw_MS_LandingAirHi,
                                      fp->co_attrs.landingairb_lag);
