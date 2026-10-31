@@ -9,6 +9,9 @@ HSD_RumbleData HSD_Rumble_804C22E0[GC_SLOTS];
 void pc_log_line(const char* fmt, ...) {
     (void)fmt;
 }
+bool pc_is_rumble_enabled(void) {
+    return true;
+}
 void PADSetVirtualStatus(u32 port, const PADStatus* status) {
     virtual_status[port] = *status;
     virtual_present[port] = true;
