@@ -423,10 +423,13 @@ void* lbDvd_GetPreloadedArchive(ssize_t entry_num)
 
 #ifdef TARGET_PC
         {
+#ifndef __EMSCRIPTEN__ /* the browser's DVD layer has no path lookup */
             char name[64];
             if (DVDConvertEntrynumToPath((s32) entry_num, name, sizeof name)) {
                 lbArchive_PcName(name);
-            } else {
+            } else
+#endif
+            {
                 lbArchive_PcName("(preloaded file)");
             }
         }
