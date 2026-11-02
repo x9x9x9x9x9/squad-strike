@@ -147,6 +147,12 @@ void ftSdr_ApplyFsm(Fighter_GObj* gobj)
     if (id < 0) {
         return;
     }
+    /* A rate of 0 is the game freezing the animation on purpose (a throw
+     * holding its pose in the air until the thrower lands); speeding it up
+     * again here would let Kirby's back throw run on mid-air. */
+    if ((fp->x2223_b0 ? fp->x8A0_unk : fp->frame_speed_mul) == 0.0f) {
+        return;
+    }
     frame = (int) fp->cur_anim_frame;
     motion = (u32) fp->motion_id;
     anim = (u32) fp->anim_id | 0x8000;

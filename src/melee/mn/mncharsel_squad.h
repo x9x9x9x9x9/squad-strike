@@ -9,8 +9,13 @@
  *     pointer, Z on a member already in your squad changes its colour.
  *   - X / Y while pointing at a squad member's portrait changes that
  *     member's colour (elsewhere they change your coin pick's, as usual).
- *   - Z on your own coin pick's portrait, or D-pad up (offline only: online
- *     the D-pad is quick chat), removes the last fighter you added.
+ *   - R, or D-pad up (offline only: online the D-pad is quick chat),
+ *     removes the last fighter you added. Holding L for 1.5 s clears the
+ *     whole squad.
+ *   - Z on the random area beside the portraits (where a dropped coin picks
+ *     at random): still carrying your coin, it picks your first fighter at
+ *     random; after that each press adds a random fighter not yet in the
+ *     squad, so four presses make a fully random squad.
  *   - Holding a CPU's coin, Z builds that CPU's squad.
  *   - The error buzz: every other colour is taken, the squad is full, or
  *     there are more than two players (squads are for 1v1s).
@@ -379,12 +384,7 @@ static void squad_add(int target, u8 ck)
                    shown_ck == ck && shown_color < squad_num_colors(ck);
 
     if ((u8) pl->ckind == ck) {
-        /* Your coin pick's portrait: take the last member back. */
-        if (squad_remove_last(target)) {
-            sfxBack();
-        } else {
-            lbAudioAx_80024030(3);
-        }
+        lbAudioAx_80024030(3); /* already your first fighter (R removes) */
         return;
     }
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
@@ -419,6 +419,80 @@ static void squad_add(int target, u8 ck)
     lbAudioAx_80024030(3); /* squad full */
 }
 
+/* Frames L is held to clear a squad: 1.5 s. */
+#define SQUAD_CLEAR_HOLD 90
+static u8 squad_l_held[4];
+
+/* The random area either side of the portraits' bottom row: a coin dropped
+ * there picks at random (mncharsel.c, the A press). Same coordinates as
+ * squad_hovered: where the coin would land. */
+static bool squad_on_random(struct CSSCursorData* cursor)
+{
+    f32 x = cursor->xC + 2.7f;
+    f32 y = cursor->x10 - 2.0f;
+    return y < 6.0f && y > -1.0f &&
+           ((x > -30.0f && x < -24.4f) || (x > 24.4f && x < 30.2f));
+}
+
+/* A random number both netplay peers agree on: the session seed, the synced
+ * frame and who asked. Offline, the game's own generator. */
+static u32 squad_random(int port, int salt)
+{
+    if (pc_net_active()) {
+        u32 h = pc_net_seed() ^ ((u32) pc_net_frame() * 2654435761u) ^
+                ((u32) (port * 97 + salt) * 40503u);
+        h ^= h >> 15;
+        h *= 0x2C1B3C6Du;
+        h ^= h >> 12;
+        h *= 0x297A2D39u;
+        h ^= h >> 15;
+        return h;
+    }
+    return (u32) HSD_Randi(0x7FFFFFFF);
+}
+
+/* Z on the random area. Carrying the door's own coin with nothing picked:
+ * the game's random coin pick. Otherwise a random fighter the squad does not
+ * have yet joins it. */
+static void squad_random_pick(int target, struct CSSCursorData* cursor)
+{
+    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[target];
+    u8 pool[25];
+    int n = 0, i, k;
+
+    if (cursor->x5 == 1 && cursor->x6 == target && (u8) pl->ckind >= 26) {
+        /* As dropping the coin on the random area with A does. */
+        mnCharSel_8025FB50((u8) target, 0);
+        do {
+            mnCharSel_803F0DFC.doors[target].costume = HSD_Randi((s32) gm_GetNumCostumesForCKind(
+                icons[mnCharSel_803F0DFC.doors[target].sel_icon].char_kind));
+        } while (isDuplicateCostume(target));
+        mnCharSel_8025DB34((u8) target);
+        cursor->x5 = 2;
+        lbAudioAx_800237A8(0xB8, 0x7F, 0x40);
+        return;
+    }
+    if ((u8) pl->ckind >= 26) {
+        lbAudioAx_80024030(3); /* pick a first fighter first */
+        return;
+    }
+    for (i = 0; i < 25; i++) {
+        u8 ck = icons[i].char_kind;
+        bool have = icons[i].state < 1 || ck >= 26 || ck == (u8) pl->ckind;
+        for (k = 0; k < GMSQUAD_EXTRA && !have; k++) {
+            have = gmSquad_rows[target][k].ckind == ck;
+        }
+        if (!have) {
+            pool[n++] = ck;
+        }
+    }
+    if (n == 0 || gmSquad_Count(target) >= GMSQUAD_EXTRA) {
+        lbAudioAx_80024030(3); /* squad full */
+        return;
+    }
+    squad_add(target, pool[squad_random(target, gmSquad_Count(target)) % (u32) n]);
+}
+
 static void squad_buttons(int port)
 {
     struct CSSCursorData* cursor = mnCharSel_804A0BC0[port];
@@ -429,6 +503,11 @@ static void squad_buttons(int port)
         return;
     }
     pressed = HSD_PadCopyStatus[port].trigger;
+    if (!(HSD_PadCopyStatus[port].button & HSD_PAD_L)) {
+        squad_l_held[port] = 0;
+    } else if (squad_l_held[port] < 0xFF) {
+        squad_l_held[port]++;
+    }
     if (pressed & (HSD_PAD_X | HSD_PAD_Y)) {
         /* Pointing at one of your members: X/Y recolour it, like the coin
          * pick (mnCharSel_CostumeChange leaves these presses to us). */
@@ -445,7 +524,9 @@ static void squad_buttons(int port)
             return;
         }
     }
-    if (!(pressed & (HSD_PAD_Z | HSD_PAD_DPADUP))) {
+    if (!(pressed & (HSD_PAD_Z | HSD_PAD_R | HSD_PAD_DPADUP)) &&
+        squad_l_held[port] != SQUAD_CLEAR_HOLD)
+    {
         return;
     }
     if (cursor->x5 == 2) { /* free pointer: your own squad */
@@ -458,15 +539,28 @@ static void squad_buttons(int port)
     if (!squad_door_open(target)) {
         return;
     }
-    if (pressed & HSD_PAD_DPADUP) {
-        /* Online the D-pad is quick chat (src/pc/net_chat.c). */
-        if (!pc_net_active()) {
-            if (squad_remove_last(target)) {
-                sfxBack();
-            } else {
-                lbAudioAx_80024030(3);
-            }
+    if (squad_l_held[port] == SQUAD_CLEAR_HOLD) {
+        /* Held for 1.5 s: the whole squad goes, once per hold. */
+        if (gmSquad_Count(target) != 0) {
+            gmSquad_Clear(target);
+            sfxBack();
         }
+        return;
+    }
+    /* Online the D-pad is quick chat (src/pc/net_chat.c). */
+    if ((pressed & HSD_PAD_R) || ((pressed & HSD_PAD_DPADUP) && !pc_net_active())) {
+        if (squad_remove_last(target)) {
+            sfxBack();
+        } else {
+            lbAudioAx_80024030(3);
+        }
+        return;
+    }
+    if (pressed & HSD_PAD_DPADUP) {
+        return;
+    }
+    if (squad_on_random(cursor)) {
+        squad_random_pick(target, cursor);
         return;
     }
     {

@@ -199,7 +199,14 @@ union ftCommon_MotionVars {
         /* fp+2340 */ bool x0; // itemget action is heavy type?
     } itemget;
     struct ftCommon_MotionVars_fighterthrow {
-        /* fp+2340 */ UNK_T x0;
+        /* fp+2340 */ int x0; /* 4 bytes, as on GameCube: these fields share
+                               * memory with #throw_ (ftCo_800DD724 stores
+                               * the release velocity through throw_.xC and
+                               * ThrowB/Hi/Lw read it back as self_vel_x/y).
+                               * A pointer here moved them 4 bytes on
+                               * 64-bit, so an airborne thrower (Kirby's
+                               * back/up throw) got the wrong velocity and
+                               * never landed. */
         /* fp+2344 */ int x4;
         /* fp+2348 */ int x8;
         /* fp+234C */ u8 pad_xC[4];
@@ -519,5 +526,19 @@ struct DISC_STRUCT TetherAttributes {
     /* +40 */ float pos_x_1;
 };
 DISC_ASSERT_SIZE(struct TetherAttributes, 0x44);
+
+/* ftCo_800DD724 writes the release velocity as throw_.xC; ThrowB/Hi/Lw read
+ * it back through fighterthrow. Keep the two views lined up. */
+#ifdef TARGET_PC
+_Static_assert(offsetof(union ftCommon_MotionVars, fighterthrow.x4) ==
+              offsetof(union ftCommon_MotionVars, throw_.x4),
+               "throw vars layout");
+_Static_assert(offsetof(union ftCommon_MotionVars, fighterthrow.self_vel_y) ==
+              offsetof(union ftCommon_MotionVars, throw_.xC.y),
+               "throw vars layout");
+_Static_assert(offsetof(union ftCommon_MotionVars, fighterthrow.self_vel_x) ==
+              offsetof(union ftCommon_MotionVars, throw_.xC.z),
+               "throw vars layout");
+#endif
 
 #endif

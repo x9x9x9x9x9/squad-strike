@@ -181,8 +181,10 @@ void onEnterLobby(UNUSED GameModeState* state)
         gmVsMelee_DefaultStockOnce();
     }
 #endif
-    /* A new session: P1 picks the first stage. */
+    /* A new session: P1 picks the first stage, and the games-won stars on
+     * the character select doors start from nothing. */
     stage_chooser = 0;
+    gmVsMelee_ResetKOCounts();
     /* Same CSS start state on both peers: two human doors, nothing picked. */
     gm_InitVsMode(&online_vs);
     online_vs.start.players[0].slot_type = Gm_PKind_Human;
@@ -582,6 +584,14 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
                  direct_copied ? "Your code is copied - send it to a friend" :
                  "Pick who to play. Both of you can call each other.");
         view->hint = "A: select   Y: copy my code   B: back";
+        if (input & (HSD_PAD_B | PAD_CANCEL)) {
+            /* Leave Direct Connect. The hub owns the screen, so it has to
+             * hand B on: off the hub, the lobby's own B handling below backs
+             * out to the menu (it used to work only from "wait for a
+             * friend", the one screen that is not the hub). */
+            direct_screen = DIRECT_OFF;
+            return false;
+        }
         if (input & HSD_PAD_Y) {
             direct_copied = pc_net_match_copy_code();
             sfxForward();

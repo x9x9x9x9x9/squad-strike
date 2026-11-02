@@ -43,13 +43,44 @@ u8* gmVsMelee_GetKOCounts(void)
     return ko_counts;
 }
 
+#ifdef TARGET_PC
+/* Whether player i won this match: one of the winners, or on a winning team.
+ * A tie with no winner counts for nobody. */
+static bool gmVsMelee_PlayerWon(MatchEnd* end, int i)
+{
+    int k;
+    if (gm_WasMatchCanceled(end->outcome)) {
+        return false;
+    }
+    if (end->is_teams) {
+        for (k = 0; k < end->n_team_winners && k < GM_MAX_TEAMS; k++) {
+            if (end->team_winners[k] == end->player_standings[i].team) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (end->n_winners != 1) {
+        return false;
+    }
+    return end->winners[0] == i;
+}
+#endif
+
 void gmVsMelee_UpdateKOCounts(u8* ko_counts, MatchEnd* end)
 {
     ssize_t i;
     for (i = 0; i < GM_MAX_PLAYERS; i++) {
         if (end->player_standings[i].pkind == Gm_PKind_Human) {
+#ifdef TARGET_PC
+            /* The star on the character select door counts games won, not
+             * the KOs the game used to add up there. */
+            ko_counts[i] =
+                lbTime_8000AF74(ko_counts[i], gmVsMelee_PlayerWon(end, i));
+#else
             ko_counts[i] =
                 lbTime_8000AF74(ko_counts[i], end->player_standings[i].x20);
+#endif
         }
     }
 }
