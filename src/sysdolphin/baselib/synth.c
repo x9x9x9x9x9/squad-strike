@@ -842,6 +842,34 @@ void HSD_SynthSFXResume(int sfx_id)
     }
 }
 
+#ifdef TARGET_PC
+/* How long a sample plays at its own rate, in ms, from the loaded bank data
+ * alone (no voice needed); -1 if it is not loaded, 0 for a looping one. */
+int HSD_SynthSFXLengthMs(int sfx_id)
+{
+    struct foo* e = hsd_SynthSFXDataHash[sfx_id & 0x1F];
+    for (; e != NULL; e = DP(struct foo, e->next)) {
+        u32 samples;
+        if (e->unk4 != sfx_id) {
+            continue;
+        }
+        if (e->x10.loopFlag != 0 || e->unkC <= 0) {
+            return 0;
+        }
+        samples = e->x10.endAddress - e->x10.currentAddress + 1;
+        switch (e->x10.format) {
+        case 0: /* ADPCM: addresses count nibbles, 14 samples per 16 */
+            samples = samples / 16 * 14;
+            break;
+        default: /* PCM: addresses count samples */
+            break;
+        }
+        return (int) ((u64) samples * 1000 / (u32) e->unkC);
+    }
+    return -1;
+}
+#endif
+
 int HSD_SynthSFXCheck(int sfx_id)
 {
     struct HSD_SynthSFXNode* node = getNode(sfx_id);

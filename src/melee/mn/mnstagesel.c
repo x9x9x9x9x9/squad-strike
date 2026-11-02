@@ -365,8 +365,10 @@ static void frozen_place(HSD_GObj* gobj)
 
     lb_8000B1CC(frozen_tile, NULL, &p);
     if (frozen_text != NULL) {
+        /* Text y runs down the screen (the opposite of world y): this puts
+         * the tag's top edge just under the tile. */
         frozen_text->pos_x = p.x - src->xC;
-        frozen_text->pos_y = p.y - src->x10 + 1.3f;
+        frozen_text->pos_y = -(p.y - src->x10) + 0.2f;
         frozen_text->pos_z = p.z + 0.5f;
     }
     if (!frozen_logged && mnStageSel_804D6CA4 == 0) {

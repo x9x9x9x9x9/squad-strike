@@ -113,6 +113,100 @@ static bool AXDriverKeyOff(HSD_SM* v)
     return true;
 }
 
+#ifdef TARGET_PC
+u32 parseWait(u32 param_type, u32 param_value);
+
+/* How long a sound runs, in ms, from its data alone: its command script's
+ * waits (5 ms AX frames) and the length of each sample it plays. 0 for one
+ * that loops or holds, -1 if it cannot be told. */
+int HSD_AudioSFXLengthMs(int sound_id)
+{
+    int bank_idx = sound_id / 10000;
+    int sample_idx;
+    const DiscU32* c;
+    u32 at = 0, end = 0;
+    int loops = -1;
+
+    if (sound_id < 0 || AXDriver_804D77B0 <= bank_idx) {
+        return -1;
+    }
+    sample_idx = sound_id % 10000 + AXDriver_804D77B4[bank_idx].v;
+    if (AXDriver_804D77B8 <= sample_idx ||
+        (bank_idx < AXDriver_804D77B0 - 1 &&
+         AXDriver_804D77B4[bank_idx + 1].v <= sample_idx))
+    {
+        return -1;
+    }
+    c = DP(DiscU32, AXDriver_804D77BC[sample_idx].v);
+    if (c == NULL) {
+        return -1;
+    }
+    for (int n = 0; n < 1024; n++, c++) {
+        const u32 w = c->v;
+        const u32 type = w >> 24;
+        if (type == 1) {
+            const int len = HSD_SynthSFXLengthMs((u16) w);
+            if (len == 0) {
+                return 0;
+            }
+            if (len > 0 && at + (u32) len > end) {
+                end = at + (u32) len;
+            }
+        }
+        at += parseWait(type, w) * 5;
+        if (type == 2) {
+            loops = (u16) w;
+            if (loops == 0) {
+                return 0; /* repeats until stopped */
+            }
+        } else if (type == 3 && loops > 0) {
+            loops--;
+            c -= w & 0xFFFFFF;
+        } else if (type == 14 || type == 15) {
+            break;
+        }
+    }
+    return (int) (end > at ? end : at);
+}
+
+/* Netplay: "is it still playing" for the crowd's voices (channels 5 and 6,
+ * lbAudioAx_800240B4 / 8002411C), answered from the frame they started and
+ * their length from the data, so both peers and every re-run of a frame agree
+ * (see HSD_AudioSFXCheck_ask). Without it they read "finished" at once and
+ * the crowd chanted every repeat on top of the last. */
+#define TIMED_MAX 16
+static struct {
+    int handle;
+    s32 end_frame;
+} s_timed[TIMED_MAX];
+static unsigned s_timed_next;
+
+static void timed_note(int handle, int sound_id)
+{
+    int ms = HSD_AudioSFXLengthMs(sound_id);
+    int frames;
+    if (ms < 0) {
+        ms = 2000; /* unknown: about one chant */
+    } else if (ms == 0) {
+        ms = 10000; /* loops: until keyed off */
+    }
+    frames = (ms * 60 + 999) / 1000;
+    s_timed[s_timed_next % TIMED_MAX].handle = handle;
+    s_timed[s_timed_next % TIMED_MAX].end_frame = pc_net_frame() + frames;
+    s_timed_next++;
+}
+
+static int timed_find(int handle)
+{
+    for (int i = 0; i < TIMED_MAX; i++) {
+        if (s_timed[i].handle == handle && handle != 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+#endif
+
 bool HSD_AudioSFXKeyOff(int vid)
 {
     bool result;
@@ -123,6 +217,10 @@ bool HSD_AudioSFXKeyOff(int vid)
 
 #ifdef TARGET_PC
     if (net_sfx_is_handle(vid)) {
+        const int t = timed_find(vid);
+        if (t >= 0) {
+            s_timed[t].end_frame = pc_net_frame(); /* stopped: over now */
+        }
         vid = net_sfx_keyoff(vid); /* -1: waiting or gone, nothing to cut */
     }
 #endif
@@ -638,7 +736,11 @@ int HSD_AudioSFXStartParam(int sound_id, u8 volume, u8 pan, int track, int chann
 {
     int32_t j;
     if (pc_net_sfx_on()) {
-        return (int) net_sfx_start(sound_id, volume, pan, track, channel);
+        const int handle = (int) net_sfx_start(sound_id, volume, pan, track, channel);
+        if (channel == 5 || channel == 6) {
+            timed_note(handle, sound_id);
+        }
+        return handle;
     }
     /* MELEE_NET_SFX_LOG=off: the engine's id, journalled per frame. */
     if (pc_net_audio_replay(&j)) {
@@ -972,6 +1074,13 @@ static bool HSD_AudioSFXCheck_ask(int vid)
     if (v->unk != vid || !(v->flags & SMSTATE_MASK)) {
         return false;
     }
+    /* Started, but the audio thread has not run its script yet (or it is
+     * between samples): still playing. Reading that as "finished" let the
+     * crowd start every chant repeat at once, whenever the PC audio thread
+     * ran a frame behind the game. */
+    if (v->vID == -1) {
+        return true;
+    }
     if (HSD_SynthSFXCheck(v->vID) == -1) {
         return false;
     }
@@ -982,6 +1091,12 @@ bool HSD_AudioSFXCheck(int vid)
 {
 #ifdef TARGET_PC
     bool live;
+    if (net_sfx_is_handle(vid) && pc_net_sfx_on()) {
+        const int t = timed_find(vid);
+        if (t >= 0) {
+            return pc_net_frame() < s_timed[t].end_frame;
+        }
+    }
     if (net_sfx_is_handle(vid)) {
         bool audio_only = net_sfx_is_private(vid);
         vid = net_sfx_resolve(vid);

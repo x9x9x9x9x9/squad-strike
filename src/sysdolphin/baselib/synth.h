@@ -39,6 +39,9 @@ void HSD_SynthSFXKeyOff(int);
 /* 389A50 */ void HSD_SynthSFXPause(int);
 /* 389AD0 */ void HSD_SynthSFXResume(int);
 /* 389B50 */ int HSD_SynthSFXCheck(int);
+#ifdef TARGET_PC
+int HSD_SynthSFXLengthMs(int sfx_id);
+#endif
 /* 389BD8 */ void HSD_SynthSFXSetVolumeFade(int, u8, int);
 /* 389CC4 */ void HSD_SynthSFXSetPan(int, u8);
 /* 389D24 */ void HSD_SynthSFXSetMix(int, float, float, float);
