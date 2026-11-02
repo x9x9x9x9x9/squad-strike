@@ -1,8 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /*
- * Wii U / Switch GameCube controller adapter (WUP-028; Mayflash in Wii U
- * mode presents the same device), read directly so the game gets the
- * controller's raw 8-bit values.
+ * Wii U / Switch GameCube controller adapter (WUP-028, and everything that
+ * presents as one: Mayflash and other 4-port adapters in Wii U / Switch
+ * mode, the many WUP-028 clones), read directly so the game gets the
+ * controller's raw 8-bit values. Adapters in PC mode (Mayflash / EVORETRO /
+ * DragonRise, 0079:1843/1844/1846) are left to SDL's GameCube driver, and
+ * everything else (Switch 2 GameCube controller, 8BitDo, Xbox, PlayStation,
+ * generic USB pads) to SDL's gamepad layer; see also pad_generic.c.
  *
  * SDL3's hidapi GameCube driver rescales every axis from an assumed 128+-88
  * range that then grows to whatever it observes (SDL_hidapi_gamecube.c
@@ -137,9 +141,40 @@ void pc_gcadapter_init(void) {
     const char* env = getenv("MELEE_GC_ADAPTER");
     s_enabled = !(env != NULL && env[0] == '0');
     if (s_enabled) {
-        /* Set before SDL_Init(SDL_INIT_JOYSTICK): SDL's driver must not open
-         * the adapter, or its rescaled copy would win the virtual-pad merge. */
-        SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_GAMECUBE, "0");
+        /* Set before SDL_Init(SDL_INIT_JOYSTICK): SDL must not open the
+         * WUP-028 as a gamepad, or its rescaled copy would win the virtual-pad
+         * merge. Only that device is hidden from SDL's gamepad layer (raw HID
+         * enumeration still sees it): SDL's GameCube driver stays on for the
+         * PC-mode adapters it also handles. Appended to any list the user
+         * set in the environment. */
+        const char* prev = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
+        char list[512];
+        if (prev != NULL && prev[0] != '\0') {
+            SDL_snprintf(list, sizeof(list), "%s,0x%04x/0x%04x", prev, GC_VID, GC_PID);
+        } else {
+            SDL_snprintf(list, sizeof(list), "0x%04x/0x%04x", GC_VID, GC_PID);
+        }
+        SDL_SetHintWithPriority(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, list, SDL_HINT_OVERRIDE);
+    }
+}
+
+/* The adapter's motor byte for what the game asks (HSD last_status: 0 hard
+ * stop, 1 stop, 2 rumble). The adapter knows 0 off and 1 on; 2 is a "brake"
+ * that only the official adapter honours (SDL leaves it off by default),
+ * and clones run the motor for any nonzero byte. The game's state starts at
+ * 0, so sending the brake for it ran every motor from launch. */
+static uint8_t motor_byte(unsigned char request, bool enabled) {
+    return request == 2 && enabled ? 1 : 0;
+}
+
+/* All motors off now, whatever the last report said. */
+static void stop_all_motors(void) {
+    if (s_dev == NULL) {
+        return;
+    }
+    memset(s_rumble + 1, 0, GC_SLOTS);
+    if (SDL_hid_write(s_dev, s_rumble, sizeof(s_rumble)) < 0) {
+        pc_log_line("GC adapter: rumble stop failed: %s", SDL_GetError());
     }
 }
 
@@ -212,7 +247,8 @@ static void try_open(void) {
         s_dev = NULL;
         return;
     }
-    memset(s_rumble + 1, 0, GC_SLOTS);
+    /* A motor left running (a crash, another program) stops on open. */
+    stop_all_motors();
     s_warned_open = false;
     pc_log_line(
         "GC adapter: WUP-028 opened, raw 1000 Hz path active (MELEE_GC_ADAPTER=0 to use SDL)");
@@ -220,6 +256,7 @@ static void try_open(void) {
 
 static void close_dev(const char* why) {
     pc_log_line("GC adapter: %s", why);
+    stop_all_motors(); /* fails harmlessly if it was unplugged */
     SDL_hid_close(s_dev);
     s_dev = NULL;
     for (int i = 0; i < GC_SLOTS; i++) {
@@ -318,19 +355,15 @@ static void parse_slot(int i, const uint8_t* s, uint64_t now_ns) {
 }
 
 static void update_rumble(const uint8_t* slots) {
-    /* Adapter motor byte: 0 stop, 1 rumble, 2 brake. Game state last_status:
-     * 0 hard stop, 1 stop, 2 rumble. Only a wired pad on a slot with the
-     * second USB cable powered can rumble. */
-    static const uint8_t k_motor[3] = {2, 0, 1};
+    /* Only a wired pad on a slot with the second USB cable powered can
+     * rumble. */
     bool changed = false;
     for (int i = 0; i < GC_SLOTS; i++) {
         const uint8_t* s = slots + 9 * i;
         uint8_t v = 0;
         const unsigned char motor = atomic_load_explicit(&s_motor_request[i], memory_order_relaxed);
-        if (s_present[i] && (s[0] & GC_SLOT_RUMBLE_POWER) && !(s[0] & GC_SLOT_WIRELESS) &&
-            motor < 3)
-        {
-            v = k_motor[motor];
+        if (s_present[i] && (s[0] & GC_SLOT_RUMBLE_POWER) && !(s[0] & GC_SLOT_WIRELESS)) {
+            v = motor_byte(motor, true);
         }
         if (s_rumble[1 + i] != v) {
             s_rumble[1 + i] = v;
@@ -393,7 +426,7 @@ void pc_gcadapter_apply(void) {
         /* Rumble switched off (launcher / F1): ask for "stop" (1) where the
          * game asks for "rumble" (2). */
         unsigned char want = HSD_Rumble_804C22E0[i].last_status;
-        if (want == 2 && !pc_is_rumble_enabled()) {
+        if (motor_byte(want, pc_is_rumble_enabled()) == 0) {
             want = 1;
         }
         atomic_store_explicit(&s_motor_request[i], want, memory_order_relaxed);
@@ -439,4 +472,18 @@ bool pc_gcadapter_raw(int port, uint8_t raw[6], bool* wireless) {
 
 uint64_t pc_gcadapter_report_count(void) {
     return atomic_load_explicit(&s_reports, memory_order_relaxed);
+}
+
+/* Exit: stop every motor and let go of the adapter. The adapter keeps the
+ * last motor state for as long as it has power, so without this a pad left
+ * rumbling kept rumbling after the game closed. Runs after the input thread
+ * (the only other user of the device) has been joined. */
+void pc_gcadapter_shutdown(void) {
+    if (s_dev == NULL) {
+        return;
+    }
+    stop_all_motors();
+    SDL_hid_close(s_dev);
+    s_dev = NULL;
+    pc_log_line("GC adapter: closed, motors stopped");
 }

@@ -332,6 +332,7 @@ static void publish_locked(void) {
  * happens once per pad-alarm period (1/60 s cap, lb_0195.c:84-86), so a press
  * shorter than a frame survives to exactly one read and no further. */
 void pc_keyboard_apply(void) {
+    pc_pad_generic_frame();
     pc_gcadapter_apply();
     const bool focused = SDL_GetKeyboardFocus() != NULL;
     lock_keys();

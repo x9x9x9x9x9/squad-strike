@@ -35,6 +35,14 @@ static void* writer(void* unused) {
 }
 
 int main(void) {
+    /* Motor byte: only "rumble" with rumble on runs a motor; the game's
+     * starting state (0, hard stop) must not send the brake byte, which
+     * clone adapters treat as "on". */
+    assert(motor_byte(0, true) == 0);
+    assert(motor_byte(1, true) == 0);
+    assert(motor_byte(2, true) == 1);
+    assert(motor_byte(2, false) == 0);
+    assert(motor_byte(3, true) == 0);
     uint8_t report[9] = {GC_SLOT_WIRED, 0, 0, 128, 128, 128, 128, 0, 0};
     parse_slot(1, report, 1);
     assert(virtual_writes == 0); /* polling thread must never mutate PADRead state */

@@ -329,6 +329,7 @@ static void pc_shutdown_once(void) {
     /* Stop producers before joining DMA and destroying platform resources.
      * An unjoined ARQ worker aborts in std::thread's static destructor. */
     pc_input_poll_shutdown();
+    pc_gcadapter_shutdown(); /* after the poll thread: it owns the device */
     AXQuit();
     aurora_dvd_close();
     pc_textures_shutdown();
@@ -670,6 +671,8 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
     if (mappings_loaded > 0) {
         pc_log_line("input: loaded %d gamepad mappings from gamecontrollerdb.txt", mappings_loaded);
     }
+    /* Anything still not a gamepad gets a generic layout. */
+    pc_pad_generic_init();
     /* Record which backend was actually selected and the adapter it landed on.
      * Without this the log cannot say whether a run went through D3D12 or
      * Vulkan, or on which GPU/driver, which is the first thing worth knowing

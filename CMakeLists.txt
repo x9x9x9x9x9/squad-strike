@@ -214,6 +214,7 @@ set(PC_SOURCES
         src/pc/input_poll.c
         src/pc/keyboard.c
         src/pc/main.c
+        src/pc/pad_generic.c
         src/pc/paths.c
         src/pc/misc.c
         src/pc/os.c

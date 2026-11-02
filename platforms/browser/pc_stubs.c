@@ -100,6 +100,9 @@ const char* pc_app_rev(void) {
 /* libusb GameCube adapter. */
 void pc_gcadapter_init(void) {}
 void pc_gcadapter_poll(void) {}
+void pc_gcadapter_shutdown(void) {}
+void pc_pad_generic_init(void) {}
+void pc_pad_generic_frame(void) {}
 void pc_gcadapter_apply(void) {}
 bool pc_gcadapter_status(int port, struct PADStatus* out) {
     (void)port;

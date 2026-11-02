@@ -49,7 +49,11 @@ void pc_touch_apply(void);
  * origin-relative pad for a port to the virtual-pad merge (keyboard.c). */
 void pc_gcadapter_init(void);
 void pc_gcadapter_poll(void);
-void pc_gcadapter_apply(void); /* main-thread publication to virtual pads */
+void pc_gcadapter_shutdown(void); /* motors off, adapter closed (exit) */
+/* Generic USB pads SDL has no mapping for (pad_generic.c). */
+void pc_pad_generic_init(void);  /* after SDL init and the mapping files */
+void pc_pad_generic_frame(void); /* main thread, once a frame */
+void pc_gcadapter_apply(void);   /* main-thread publication to virtual pads */
 struct PADStatus;
 bool pc_gcadapter_status(int port, struct PADStatus* out);
 /* HUD snapshot: raw[6] = stick x,y  c-stick x,y  L R as the adapter reports
