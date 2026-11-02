@@ -289,8 +289,10 @@ static void parse_slot(int i, const uint8_t* s, uint64_t now_ns) {
          * not forward it, so take the first report, as Dolphin does. */
         memcpy(s_origin[i], s + 3, 6);
         s_present[i] = true;
-        pc_log_line("GC adapter: port %d %s controller, origin %u,%u c %u,%u L %u R %u", i + 1,
-            s[0] & GC_SLOT_WIRELESS ? "wireless" : "wired", s[3], s[4], s[5], s[6], s[7], s[8]);
+        pc_log_line("GC adapter: port %d %s controller (status 0x%02x, rumble power %s), origin "
+                    "%u,%u c %u,%u L %u R %u",
+            i + 1, s[0] & GC_SLOT_WIRELESS ? "wireless" : "wired", s[0],
+            s[0] & GC_SLOT_RUMBLE_POWER ? "yes" : "no", s[3], s[4], s[5], s[6], s[7], s[8]);
     }
 
     u16 b = 0;

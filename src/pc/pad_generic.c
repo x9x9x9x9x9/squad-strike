@@ -15,17 +15,30 @@
  * (a pad mapped there is a gamepad already, so this never touches it).
  *
  * Wheels, flight sticks, throttles and instrument controllers are left
- * alone, as is anything with too few controls to play with.
+ * alone, as is anything with too few controls to play with, and devices
+ * that only look like joysticks (foot pedals, keyboards and mice with a
+ * joystick interface).
+ *
+ * Also here: a port the raw GameCube adapter path has a controller in
+ * belongs to that controller (claim_adapter_ports). SDL hands out
+ * player numbers in plug-in order, so any other device (an N64 adapter, a
+ * pedal) could land on port 1 and be merged into the GameCube controller's
+ * input, and get that port's rumble too: a Raphnet N64 adapter answered the
+ * rumble with junk stick and button reports, which played as random smash
+ * attacks and turnarounds.
  */
 #include "pc/pc.h"
 
 #include <SDL3/SDL.h>
+#include <dolphin/pad.h>
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 #define PENDING_MAX 16
+
+static void claim_adapter_ports(void);
 
 static SDL_SpinLock s_lock;
 static SDL_JoystickID s_pending[PENDING_MAX];
@@ -83,7 +96,41 @@ int pc_pad_generic_mapping(
     return len > 0 && (size_t)len < size ? len : 0;
 }
 
+/* Not controllers, whatever their HID descriptor says. */
+static bool looks_like_a_controller(SDL_JoystickID id) {
+    static const char* const k_not_pads[] = {
+        "footswitch",
+        "foot switch",
+        "pedal",
+        "keyboard",
+        "mouse",
+        "consumer control",
+        "system control",
+        "receiver",
+    };
+    const char* name = SDL_GetJoystickNameForID(id);
+    char lower[128];
+    size_t n = 0;
+    /* QinHeng (WCH) USB chips: foot switches, macro pads, keyboards. */
+    if (SDL_GetJoystickVendorForID(id) == 0x1a86) {
+        return false;
+    }
+    for (; name != NULL && name[n] != '\0' && n + 1 < sizeof(lower); n++) {
+        lower[n] = (char)SDL_tolower((unsigned char)name[n]);
+    }
+    lower[n] = '\0';
+    for (size_t i = 0; i < sizeof(k_not_pads) / sizeof(k_not_pads[0]); i++) {
+        if (SDL_strstr(lower, k_not_pads[i]) != NULL) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static bool wanted(SDL_JoystickID id) {
+    if (!looks_like_a_controller(id)) {
+        return false;
+    }
     switch (SDL_GetJoystickTypeForID(id)) {
     case SDL_JOYSTICK_TYPE_WHEEL:
     case SDL_JOYSTICK_TYPE_FLIGHT_STICK:
@@ -170,5 +217,40 @@ void pc_pad_generic_frame(void) {
     SDL_UnlockSpinlock(&s_lock);
     for (int i = 0; i < n; i++) {
         map_one(ids[i]);
+    }
+    claim_adapter_ports();
+}
+
+/* Once a frame: no SDL gamepad shares a port with a controller in the raw
+ * GameCube adapter. One SDL put there moves to the first port with neither,
+ * or to none. */
+static void claim_adapter_ports(void) {
+    bool adapter[4];
+    for (int i = 0; i < 4; i++) {
+        PADStatus st;
+        adapter[i] = pc_gcadapter_status(i, &st);
+    }
+    for (int i = 0; i < 4; i++) {
+        SDL_Gamepad* pad;
+        int to = -1;
+        if (!adapter[i] || (pad = SDL_GetGamepadFromPlayerIndex(i)) == NULL) {
+            continue;
+        }
+        for (int j = 0; j < 4; j++) {
+            if (!adapter[j] && SDL_GetGamepadFromPlayerIndex(j) == NULL) {
+                to = j;
+                break;
+            }
+        }
+        SDL_SetGamepadPlayerIndex(pad, to);
+        char where[16];
+        if (to >= 0) {
+            SDL_snprintf(where, sizeof(where), "port %d", to + 1);
+        } else {
+            SDL_snprintf(where, sizeof(where), "no port");
+        }
+        pc_log_line("input: \"%s\" moved off port %d (the GameCube adapter's controller is "
+                    "there) to %s",
+            SDL_GetGamepadName(pad) ? SDL_GetGamepadName(pad) : "?", i + 1, where);
     }
 }
