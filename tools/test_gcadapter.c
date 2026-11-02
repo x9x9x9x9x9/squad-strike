@@ -43,6 +43,42 @@ int main(void) {
     assert(motor_byte(2, true) == 1);
     assert(motor_byte(2, false) == 0);
     assert(motor_byte(3, true) == 0);
+
+    /* While rumbling, a one-report blip (A for one report, stick spike) is
+     * filtered; a real press shows one report later. */
+    {
+        uint8_t r[9] = {GC_SLOT_WIRED | GC_SLOT_RUMBLE_POWER, 0, 0, 128, 128, 128, 128, 0, 0};
+        PADStatus o;
+        parse_slot(3, r, 10);
+        s_motor_on_until[3] = 1000;
+        parse_slot(3, r, 11);
+        parse_slot(3, r, 12);
+        r[1] = 1;   /* A */
+        r[3] = 228; /* stick far right */
+        parse_slot(3, r, 13);
+        publish_snapshot();
+        assert(pc_gcadapter_status(3, &o) && o.button == 0 && o.stickX == 0);
+        r[1] = 0;
+        r[3] = 128;
+        parse_slot(3, r, 14);
+        publish_snapshot();
+        assert(pc_gcadapter_status(3, &o) && o.button == 0 && o.stickX == 0);
+        assert(s_glitch[3][1] == 1);
+        r[1] = 1;
+        r[3] = 228;
+        parse_slot(3, r, 15);
+        parse_slot(3, r, 16);
+        publish_snapshot();
+        assert(pc_gcadapter_status(3, &o) && o.button == PAD_BUTTON_A && o.stickX == 100);
+        /* Motor off: no filter, the report is taken as is. */
+        r[1] = 0;
+        r[3] = 128;
+        parse_slot(3, r, 2000);
+        publish_snapshot();
+        assert(pc_gcadapter_status(3, &o) && o.button == 0 && o.stickX == 0);
+        clear_slot(3);
+        publish_snapshot();
+    }
     uint8_t report[9] = {GC_SLOT_WIRED, 0, 0, 128, 128, 128, 128, 0, 0};
     parse_slot(1, report, 1);
     assert(virtual_writes == 0); /* polling thread must never mutate PADRead state */

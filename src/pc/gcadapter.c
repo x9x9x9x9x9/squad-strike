@@ -110,6 +110,24 @@ static bool s_present[GC_SLOTS];
 static uint8_t s_origin[GC_SLOTS][6];
 static uint64_t s_combo_since[GC_SLOTS]; /* X+Y+Start held since (ns), 0 = not held */
 
+/* Rumble glitch filter. A rumble motor starting draws a burst of current;
+ * on adapters powered from one USB cable (the RP2040 ones among them) that
+ * corrupts the odd controller report while it runs: a stick spike or a
+ * button for one report, which the game read as a random smash attack,
+ * aerial or turnaround. While a port's motor runs (and a little after), each
+ * value is the middle of its last three reports and each button the
+ * majority: a one-report blip never gets through, a real change arrives one
+ * report (~1 ms) later. With the motor off nothing is filtered. */
+#define GC_HIST 3
+#define GC_FILTER_TAIL_NS 150000000ull       /* keep filtering 150 ms after a stop */
+static uint8_t s_hist[GC_SLOTS][GC_HIST][8]; /* buttons x2, sticks, triggers */
+static int s_hist_n[GC_SLOTS];
+static uint64_t s_motor_on_until[GC_SLOTS]; /* filter while now < this */
+/* Glitches seen (one-report spikes / flickers), with the motor on and off,
+ * logged once a second while nonzero. */
+static unsigned s_glitch[GC_SLOTS][2];
+static uint64_t s_glitch_logged_ns;
+
 /* Publish a complete report under a short copy-only lock. Device I/O and
  * parsing remain worker-owned; virtual pads are written only by the main thread. */
 static atomic_flag s_snapshot_lock = ATOMIC_FLAG_INIT;
@@ -197,7 +215,41 @@ static void stop_all_motors(void) {
     }
 }
 
+static uint8_t median3(uint8_t a, uint8_t b, uint8_t c) {
+    const uint8_t lo = a < b ? a : b, hi = a < b ? b : a;
+    return c < lo ? lo : c > hi ? hi : c;
+}
+
+/* One report into the history; counts it as a glitch if the report before
+ * it stood out from both its neighbours. */
+static void push_history(int i, const uint8_t* v, bool motor) {
+    if (s_hist_n[i] < GC_HIST) {
+        memcpy(s_hist[i][s_hist_n[i]++], v, 8);
+        return;
+    }
+    memmove(s_hist[i][0], s_hist[i][1], sizeof(s_hist[i][0]) * (GC_HIST - 1));
+    memcpy(s_hist[i][GC_HIST - 1], v, 8);
+    const uint8_t* a = s_hist[i][0];
+    const uint8_t* b = s_hist[i][1];
+    const uint8_t* c = s_hist[i][2];
+    bool glitch = false;
+    for (int k = 0; k < 2; k++) {
+        /* A button on (or off) for exactly one report. */
+        glitch |= ((b[k] ^ a[k]) & (b[k] ^ c[k]) & ~(a[k] ^ c[k])) != 0;
+    }
+    for (int k = 2; k < 8; k++) {
+        const int da = (int)b[k] - (int)a[k], dc = (int)b[k] - (int)c[k];
+        const int ac = (int)a[k] - (int)c[k];
+        glitch |= ((da >= 30 && dc >= 30) || (da <= -30 && dc <= -30)) && ac < 10 && ac > -10;
+    }
+    if (glitch) {
+        s_glitch[i][motor ? 1 : 0]++;
+    }
+}
+
 static void clear_slot(int i) {
+    s_hist_n[i] = 0;
+    s_motor_on_until[i] = 0;
     s_present[i] = false;
     memset(&s_status[i], 0, sizeof(s_status[i]));
     s_combo_since[i] = 0;
@@ -314,6 +366,24 @@ static void parse_slot(int i, const uint8_t* s, uint64_t now_ns) {
             s[0] & GC_SLOT_RUMBLE_POWER ? "yes" : "no", s[3], s[4], s[5], s[6], s[7], s[8]);
     }
 
+    /* s[1..8] as the game will see them: filtered while rumbling. */
+    const bool filter = now_ns < s_motor_on_until[i];
+    uint8_t v[9];
+    v[0] = s[0];
+    push_history(i, s + 1, filter);
+    if (filter && s_hist_n[i] == GC_HIST) {
+        const uint8_t* h0 = s_hist[i][0];
+        const uint8_t* h1 = s_hist[i][1];
+        const uint8_t* h2 = s_hist[i][2];
+        for (int k = 0; k < 2; k++) {
+            v[1 + k] = (uint8_t)((h0[k] & h1[k]) | (h0[k] & h2[k]) | (h1[k] & h2[k]));
+        }
+        for (int k = 2; k < 8; k++) {
+            v[1 + k] = median3(h0[k], h1[k], h2[k]);
+        }
+        s = v;
+    }
+
     u16 b = 0;
     if (s[1] & 0x01)
         b |= PAD_BUTTON_A;
@@ -375,7 +445,7 @@ static void parse_slot(int i, const uint8_t* s, uint64_t now_ns) {
     atomic_store_explicit(&s_raw[i], snap, memory_order_relaxed);
 }
 
-static void update_rumble(const uint8_t* slots) {
+static void update_rumble(const uint8_t* slots, uint64_t now_ns) {
     /* Only a wired pad on a slot with the second USB cable powered can
      * rumble. */
     bool changed = false;
@@ -385,6 +455,9 @@ static void update_rumble(const uint8_t* slots) {
         const unsigned char motor = atomic_load_explicit(&s_motor_request[i], memory_order_relaxed);
         if (s_present[i] && (s[0] & GC_SLOT_RUMBLE_POWER) && !(s[0] & GC_SLOT_WIRELESS)) {
             v = motor_byte(motor, true);
+        }
+        if (v != 0) {
+            s_motor_on_until[i] = now_ns + GC_FILTER_TAIL_NS;
         }
         if (s_rumble[1 + i] != v) {
             s_rumble[1 + i] = v;
@@ -430,7 +503,18 @@ void pc_gcadapter_poll(void) {
             parse_slot(i, last + 1 + 9 * i, now);
         }
         publish_snapshot();
-        update_rumble(last + 1);
+        update_rumble(last + 1, now);
+        if (now - s_glitch_logged_ns >= 1000000000ull) {
+            s_glitch_logged_ns = now;
+            for (int i = 0; i < GC_SLOTS; i++) {
+                if (s_glitch[i][0] != 0 || s_glitch[i][1] != 0) {
+                    pc_log_line("GC adapter: port %d one-report glitches in the last second: %u "
+                                "while rumbling (filtered), %u otherwise",
+                        i + 1, s_glitch[i][1], s_glitch[i][0]);
+                    s_glitch[i][0] = s_glitch[i][1] = 0;
+                }
+            }
+        }
     }
 }
 
