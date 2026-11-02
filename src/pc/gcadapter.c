@@ -139,21 +139,40 @@ static _Atomic uint64_t s_reports;
 
 void pc_gcadapter_init(void) {
     const char* env = getenv("MELEE_GC_ADAPTER");
+    const char* n64 = getenv("MELEE_ALLOW_N64");
+    const char* prev;
+    char list[512];
+    size_t len = 0;
+
     s_enabled = !(env != NULL && env[0] == '0');
+    /* Set before SDL_Init(SDL_INIT_JOYSTICK): devices SDL's gamepad layer
+     * must leave alone (raw HID enumeration still sees them). Appended to
+     * any list the user set in the environment. */
+    prev = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
+    list[0] = '\0';
+    if (prev != NULL && prev[0] != '\0') {
+        len = (size_t)SDL_snprintf(list, sizeof(list), "%s", prev);
+    }
+#define IGNORE(vid, pid)                                                                           \
+    do {                                                                                           \
+        if (len < sizeof(list))                                                                    \
+            len += (size_t)SDL_snprintf(                                                           \
+                list + len, sizeof(list) - len, "%s0x%04x/0x%04x", len ? "," : "", (vid), (pid));  \
+    } while (0)
     if (s_enabled) {
-        /* Set before SDL_Init(SDL_INIT_JOYSTICK): SDL must not open the
-         * WUP-028 as a gamepad, or its rescaled copy would win the virtual-pad
-         * merge. Only that device is hidden from SDL's gamepad layer (raw HID
-         * enumeration still sees it): SDL's GameCube driver stays on for the
-         * PC-mode adapters it also handles. Appended to any list the user
-         * set in the environment. */
-        const char* prev = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
-        char list[512];
-        if (prev != NULL && prev[0] != '\0') {
-            SDL_snprintf(list, sizeof(list), "%s,0x%04x/0x%04x", prev, GC_VID, GC_PID);
-        } else {
-            SDL_snprintf(list, sizeof(list), "0x%04x/0x%04x", GC_VID, GC_PID);
-        }
+        /* The WUP-028 (and everything presenting as one) is read raw here;
+         * SDL's rescaled copy would win the virtual-pad merge. Only that
+         * device: SDL's GameCube driver stays on for PC-mode adapters. */
+        IGNORE(GC_VID, GC_PID);
+    }
+    if (!(n64 != NULL && n64[0] == '1')) {
+        /* raphnet N64-to-USB adapter: an N64 controller is no use here, and
+         * the adapter answers rumble with junk reports (random inputs on
+         * whichever port it sat on). MELEE_ALLOW_N64=1 keeps it. */
+        IGNORE(0x289b, 0x0063);
+    }
+#undef IGNORE
+    if (list[0] != '\0') {
         SDL_SetHintWithPriority(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES, list, SDL_HINT_OVERRIDE);
     }
 }
