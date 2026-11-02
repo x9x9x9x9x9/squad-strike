@@ -14,9 +14,11 @@
  *     removes the last fighter you added. Holding L for 1.5 s clears the
  *     whole squad.
  *   - Z on the random area beside the portraits (where a dropped coin picks
- *     at random): still carrying your coin, it picks your first fighter at
- *     random; after that each press adds a random fighter not yet in the
- *     squad, so four presses make a fully random squad.
+ *     at random) adds a random fighter not yet in the squad, coin in hand
+ *     or not; with three added and your coin still in hand, the next press
+ *     drops it on a random fighter, so four presses make a random squad.
+ *   - A coin in your hand is no pick: the squad shows without it, and
+ *     where you drop it is where it joins the order.
  *   - Holding a CPU's coin, Z builds that CPU's squad.
  *   - The error buzz: every other colour is taken, the squad is full, or
  *     there are more than two players (squads are for 1v1s).
@@ -218,6 +220,21 @@ static bool squad_door_open(int port)
     return type == Gm_PKind_Human || type == Gm_PKind_Cpu;
 }
 
+/* The door's coin is in someone's hand. While it is, the game still keeps
+ * the character it was last on in players[].ckind, but that is no longer a
+ * pick: the squad has no coin fighter until the coin goes down again. */
+static bool squad_coin_held(int port)
+{
+    return mnCharSel_804A0BD0[port] != NULL && mnCharSel_804A0BD0[port]->x5 != 0;
+}
+
+/* The door's coin pick, or GMSQUAD_NONE while it has none (coin in hand). */
+static u8 squad_coin_pick(int port)
+{
+    u8 ck = (u8) mnCharSel_804D6CB0->vs.start.players[port].ckind;
+    return ck < 26 && !squad_coin_held(port) ? ck : GMSQUAD_NONE;
+}
+
 static int squad_players(void)
 {
     int n = 0;
@@ -376,7 +393,6 @@ static bool mnCharSel_SquadTakesXY(int port)
 
 static void squad_add(int target, u8 ck)
 {
-    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[target];
     int i;
     u8 shown_ck, shown_color;
     /* Carrying a coin over the portrait, the door previews this fighter in
@@ -384,8 +400,8 @@ static void squad_add(int target, u8 ck)
     bool preview = squad_door_shows(target, &shown_ck, &shown_color) &&
                    shown_ck == ck && shown_color < squad_num_colors(ck);
 
-    if ((u8) pl->ckind == ck) {
-        lbAudioAx_80024030(3); /* already your first fighter (R removes) */
+    if (squad_coin_pick(target) == ck) {
+        lbAudioAx_80024030(3); /* already your coin pick */
         return;
     }
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
@@ -452,18 +468,49 @@ static u32 squad_random(int port, int salt)
     return (u32) HSD_Randi(0x7FFFFFFF);
 }
 
-/* Z on the random area. Carrying the door's own coin with nothing picked:
- * the game's random coin pick. Otherwise a random fighter the squad does not
- * have yet joins it. */
+/* Z on the random area: a random fighter the squad does not have yet joins
+ * it, coin in hand or not. With the three Z places full and your own coin
+ * still in hand, the fourth press drops the coin on a random fighter too,
+ * so four presses make a fully random squad. */
 static void squad_random_pick(int target, struct CSSCursorData* cursor)
 {
-    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[target];
     u8 pool[25];
+    u8 coin = squad_coin_pick(target);
     int n = 0, i, k;
 
-    if (cursor->x5 == 1 && cursor->x6 == target && (u8) pl->ckind >= 26) {
-        /* As dropping the coin on the random area with A does. */
-        mnCharSel_8025FB50((u8) target, 0);
+    for (i = 0; i < 25; i++) {
+        u8 ck = icons[i].char_kind;
+        bool have = icons[i].state < 1 || ck >= 26 || ck == coin;
+        for (k = 0; k < GMSQUAD_EXTRA && !have; k++) {
+            have = gmSquad_rows[target][k].ckind == ck;
+        }
+        if (!have) {
+            pool[n++] = ck;
+        }
+    }
+    if (n == 0) {
+        lbAudioAx_80024030(3); /* nobody left */
+        return;
+    }
+    if (gmSquad_Count(target) < GMSQUAD_EXTRA) {
+        squad_add(target, pool[squad_random(target, gmSquad_Count(target)) % (u32) n]);
+        return;
+    }
+    if (cursor->x5 == 1 && cursor->x6 == target && squad_coin_held(target)) {
+        /* As dropping the coin on the random area with A does, but never
+         * on someone already in the squad. */
+        for (k = 0; k < 64; k++) {
+            bool dup = false;
+            u8 ck;
+            mnCharSel_8025FB50((u8) target, 0);
+            ck = (u8) mnCharSel_804D6CB0->vs.start.players[target].ckind;
+            for (i = 0; i < GMSQUAD_EXTRA; i++) {
+                dup |= gmSquad_rows[target][i].ckind == ck;
+            }
+            if (!dup) {
+                break;
+            }
+        }
         do {
             mnCharSel_803F0DFC.doors[target].costume = HSD_Randi((s32) gm_GetNumCostumesForCKind(
                 icons[mnCharSel_803F0DFC.doors[target].sel_icon].char_kind));
@@ -473,25 +520,7 @@ static void squad_random_pick(int target, struct CSSCursorData* cursor)
         lbAudioAx_800237A8(0xB8, 0x7F, 0x40);
         return;
     }
-    if ((u8) pl->ckind >= 26) {
-        lbAudioAx_80024030(3); /* pick a first fighter first */
-        return;
-    }
-    for (i = 0; i < 25; i++) {
-        u8 ck = icons[i].char_kind;
-        bool have = icons[i].state < 1 || ck >= 26 || ck == (u8) pl->ckind;
-        for (k = 0; k < GMSQUAD_EXTRA && !have; k++) {
-            have = gmSquad_rows[target][k].ckind == ck;
-        }
-        if (!have) {
-            pool[n++] = ck;
-        }
-    }
-    if (n == 0 || gmSquad_Count(target) >= GMSQUAD_EXTRA) {
-        lbAudioAx_80024030(3); /* squad full */
-        return;
-    }
-    squad_add(target, pool[squad_random(target, gmSquad_Count(target)) % (u32) n]);
+    lbAudioAx_80024030(3); /* squad full */
 }
 
 static void squad_buttons(int port)
@@ -574,16 +603,15 @@ static void squad_buttons(int port)
 
 static void squad_line(int port, char* out, size_t size)
 {
-    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[port];
     GmSquadMember order[GMSQUAD_SIZE];
     int i, n;
     out[0] = '\0';
     if (gmSquad_Count(port) == 0) {
         return;
     }
-    /* In fighting order; the coin pick without its colour word, "?" until
-     * the coin is down. */
-    n = gmSquad_Lineup(port, (u8) pl->ckind, GMSQUAD_NONE, order);
+    /* In fighting order; the coin pick (if the coin is down) without its
+     * colour word. */
+    n = gmSquad_Lineup(port, squad_coin_pick(port), 0, order);
     for (i = 0; i < n; i++) {
         GmSquadMember* m = &order[i];
         const char* word;
@@ -591,7 +619,6 @@ static void squad_line(int port, char* out, size_t size)
             strncat(out, " ", size - strlen(out) - 1);
         }
         if (m->ckind >= 26) {
-            strncat(out, "?", size - strlen(out) - 1);
             continue;
         }
         word = m->color < squad_num_colors(m->ckind)
@@ -669,7 +696,6 @@ static HSD_GObj* squad_icon_create(u8 ck, u8 color, f32 x, f32 y, f32 z,
 /* A row of stock icons above door p's nametag: coin pick, then members. */
 static bool squad_icon_row(int p)
 {
-    PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[p];
     u8 cks[SQUAD_ICONS_MAX];
     u8 colors[SQUAD_ICONS_MAX];
     int n = 0;
@@ -690,9 +716,8 @@ static bool squad_icon_row(int p)
     if (gmSquad_Count(p) != 0) {
         /* In fighting order, the coin pick among the others. */
         GmSquadMember order[GMSQUAD_SIZE];
-        int count = gmSquad_Lineup(
-            p, (u8) pl->ckind < 26 ? (u8) pl->ckind : GMSQUAD_NONE,
-            squad_coin_color(p), order);
+        int count = gmSquad_Lineup(p, squad_coin_pick(p),
+                                   squad_coin_color(p), order);
         for (i = 0; i < count && n < SQUAD_ICONS_MAX; i++) {
             cks[n] = order[i].ckind;
             colors[n] = order[i].color;
@@ -912,8 +937,7 @@ static void mnCharSel_SquadFrame(void)
             squad_buttons(p);
         }
         /* Where the coin pick falls in the order fighters were picked. */
-        gmSquad_TrackCoin(
-            p, (u8) mnCharSel_804D6CB0->vs.start.players[p].ckind < 26);
+        gmSquad_TrackCoin(p, squad_coin_pick(p) != GMSQUAD_NONE);
     }
 
     if (squad_players() > 2 && gmSquad_Any()) {

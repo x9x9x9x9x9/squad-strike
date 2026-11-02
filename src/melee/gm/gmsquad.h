@@ -46,7 +46,7 @@ extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
 
 /// Where the coin pick goes in each port's fighting order: how many of
 /// gmSquad_rows were added before the coin was dropped (so a squad fights
-/// in the order it was picked), or GMSQUAD_NONE before the first drop.
+/// in the order it was picked), or GMSQUAD_NONE while it has no coin pick.
 /// Kept up by character select (gmSquad_TrackCoin).
 extern u8 gmSquad_coin_pos[GMSQUAD_PORTS];
 
@@ -54,8 +54,8 @@ extern u8 gmSquad_coin_pos[GMSQUAD_PORTS];
 /// the door has a coin pick now.
 void gmSquad_TrackCoin(int port, bool has_coin_pick);
 
-/// The squad in fighting order: the coin pick (coin_ck, coin_color; may be
-/// GMSQUAD_NONE) placed among gmSquad_rows. Returns how many entries.
+/// The squad in fighting order: the coin pick (coin_ck, coin_color; left
+/// out if GMSQUAD_NONE) placed among gmSquad_rows. Returns how many.
 int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
                    GmSquadMember out[GMSQUAD_SIZE]);
 

@@ -312,6 +312,137 @@ int mnStageSel_802599EC(void)
     return i;
 }
 
+#ifdef TARGET_PC
+static inline void make_stage_icon(HSD_JObj** out);
+
+/* A second Pokémon Stadium tile under the grid, tagged FROZEN: picking it
+ * starts this match's Stadium with no transformations
+ * (grStadium_FrozenPick). It reports Stadium's cell as the hovered one, so
+ * the name, preview and pick all work as for Stadium; frozen_hover says
+ * which of the two tiles the cursor is on. */
+static int frozen_src = -1;      /* Pokémon Stadium's cell */
+static HSD_JObj* frozen_src_root; /* the icon pair Stadium is drawn in */
+static HSD_JObj* frozen_root;    /* the copy of that pair */
+static HSD_JObj* frozen_tile;    /* the copy's Stadium half */
+static HSD_Text* frozen_text;
+static bool frozen_hover;
+static bool frozen_logged;
+
+static bool frozen_shown(void)
+{
+    return frozen_tile != NULL && frozen_src >= 0 &&
+           mnStageSel_803F06D0[frozen_src].x8 >= 2;
+}
+
+/* Every frame: one row under the lowest tile, in Stadium's column (the
+ * grid slides in on entry, so this follows it). */
+static void frozen_place(HSD_GObj* gobj)
+{
+    struct StageListInfo* src;
+    Vec3 root, at, p;
+    f32 lowest = 1e9f;
+    int i;
+
+    (void) gobj;
+    if (frozen_tile == NULL) {
+        return;
+    }
+
+    src = &mnStageSel_803F06D0[frozen_src];
+    for (i = 0; i < 0x1E; i++) {
+        if (mnStageSel_803F06D0[i].x8 == 0 || mnStageSel_803F06D0[i].x0 == NULL) {
+            continue;
+        }
+        lb_8000B1CC(mnStageSel_803F06D0[i].x0, NULL, &p);
+        if (p.y - mnStageSel_803F06D0[i].x10 < lowest) {
+            lowest = p.y - mnStageSel_803F06D0[i].x10;
+        }
+    }
+    lb_8000B1CC(frozen_src_root, NULL, &root);
+    lb_8000B1CC(src->x0, NULL, &at);
+    root.y += (lowest - 0.6f - src->x10) - at.y;
+    HSD_JObjSetTranslate(frozen_root, &root);
+
+    lb_8000B1CC(frozen_tile, NULL, &p);
+    if (frozen_text != NULL) {
+        frozen_text->pos_x = p.x - src->xC;
+        frozen_text->pos_y = p.y - src->x10 + 1.3f;
+        frozen_text->pos_z = p.z + 0.5f;
+    }
+    if (!frozen_logged && mnStageSel_804D6CA4 == 0) {
+        frozen_logged = true;
+        pc_log_line("sss: frozen tile at (%.1f, %.1f), lowest tile edge %.1f",
+                    p.x, p.y, lowest);
+    }
+}
+
+static void frozen_create(void)
+{
+    struct StageListInfo* src;
+    HSD_JObj* other;
+    HSD_GObj* gobj;
+    int i, canvas;
+
+    frozen_src = -1;
+    for (i = 0; i < 0x16; i++) {
+        if (mnStageSel_803F06D0[i].stkind == St_Kind_PStadium) {
+            frozen_src = i;
+        }
+    }
+    if (frozen_src < 0 || pc_rank_session_active()) {
+        return;
+    }
+    src = &mnStageSel_803F06D0[frozen_src];
+    if (src->x8 < 2 || src->x0 == NULL || src->x0->parent == NULL) {
+        return; /* Stadium locked: no frozen copy either */
+    }
+    frozen_src_root = src->x0->parent;
+    make_stage_icon(&frozen_root);
+    /* Even cells are a pair's second half (child->next), odd the first. */
+    if (frozen_src & 1) {
+        frozen_tile = frozen_root->child;
+        other = frozen_root->child->next;
+    } else {
+        frozen_tile = frozen_root->child->next;
+        other = frozen_root->child;
+    }
+    HSD_JObjSetFlags(other, JOBJ_HIDDEN);
+    HSD_JObjReqAnimAllByFlags(frozen_tile, 0x10, src->x9 / 2 + 2);
+    HSD_JObjAnimAll(frozen_root);
+    HSD_ForeachAnim(frozen_root, JOBJ_TYPE, TOBJ_MASK, HSD_AObjStopAnim,
+                    AOBJ_ARG_AOV, NULL);
+    HSD_JObjSetTranslateX(frozen_root, 100.0F); /* placed from the next frame */
+
+    gobj = GObj_Create(4, 5, 0x80);
+    HSD_GObj_SetupProc(gobj, frozen_place, 3);
+
+    /* The tag, drawn by the stage select camera just above the icons. */
+    if (!netStageSel_Active()) {
+        HSD_SisLib_803A62A0(0, lbLang_IsSavedLanguageUS() ? "SdMenu.usd" : "SdMenu.dat",
+                           "SIS_MenuData");
+    }
+    canvas = HSD_SisLib_803A611C(0, mnStageSel_804D6C9C, 7, 8, 0x80, 4, 0x84, 0);
+    frozen_text = HSD_SisLib_803A6754(0, canvas);
+    if (frozen_text != NULL) {
+        f32 font = 0.035f;
+        frozen_text->pos_x = 100.0f;
+        frozen_text->box_size_x = 2.0f * src->xC / font;
+        frozen_text->box_size_y = 30.0f;
+        frozen_text->font_size.x = font;
+        frozen_text->font_size.y = font;
+        frozen_text->default_fitting = 1;
+        frozen_text->default_alignment = 1;
+        frozen_text->default_kerning = 1;
+        frozen_text->x4C = 1;
+        frozen_text->bg_color.r = 0x10;
+        frozen_text->bg_color.g = 0x30;
+        frozen_text->bg_color.b = 0x60;
+        frozen_text->bg_color.a = 0xC0;
+        HSD_SisLib_803A6B98(frozen_text, src->xC / font, 0.0f, "FROZEN");
+    }
+}
+#endif
+
 void mnStageSel_80259C28(void)
 {
     HSD_JObj* jobj;
@@ -336,17 +467,6 @@ void mnStageSel_80259C28(void)
         }
         break;
     default:
-#ifdef TARGET_PC
-        /* Z on Pokémon Stadium picks it frozen (no transformations). */
-        if ((mnStageSel_804D6CA0 & HSD_PAD_Z) && mnStageSel_804D6CAE < 0x1E &&
-            mnStageSel_803F06D0[mnStageSel_804D6CAE].stkind == St_Kind_PStadium &&
-            mnStageSel_803F06D0[mnStageSel_804D6CAE].x8 >= 2)
-        {
-            grStadium_FrozenPick = true;
-            pc_log_line("sss: Pokemon Stadium picked frozen (Z)");
-            goto skip_randomize;
-        }
-#endif
         if (!(mnStageSel_804D6CA0 & 0x1100)) {
             return;
         }
@@ -367,6 +487,13 @@ void mnStageSel_80259C28(void)
 #endif
     mnStageSel_804D6CAE = mnStageSel_802599EC();
 skip_randomize:
+#ifdef TARGET_PC
+    grStadium_FrozenPick = frozen_hover && frozen_shown() &&
+                           mnStageSel_804D6CAE == frozen_src;
+    if (grStadium_FrozenPick) {
+        pc_log_line("sss: Pokemon Stadium picked frozen");
+    }
+#endif
 
     gobj = GObj_Create(HSD_GOBJ_CLASS_FIGHTER, 5, 0x80);
     jobj = HSD_JObjLoadJoint(DP(HSD_Joint, sss_models->now_loading.joint));
@@ -546,6 +673,19 @@ void fn_8025A310(HSD_GObj* gobj)
 
     HSD_JObjSetTranslate(jobj, &sp1C);
     lb_8000B1CC(jobj, NULL, &sp1C);
+#ifdef TARGET_PC
+    if (frozen_shown()) {
+        struct StageListInfo* src = &mnStageSel_803F06D0[frozen_src];
+        lb_8000B1CC(frozen_tile, NULL, &sp10);
+        if (sp10.x - src->xC < sp1C.x && sp10.x + src->xC > sp1C.x &&
+            sp10.y - src->x10 < sp1C.y && sp10.y + src->x10 > sp1C.y)
+        {
+            mnStageSel_804D6CAE = frozen_src;
+            frozen_hover = true;
+            return;
+        }
+    }
+#endif
     for (i = 0; i < 0x1E; i++) {
         if (mnStageSel_803F06D0[i].x8 != 0) {
             lb_8000B1CC(mnStageSel_803F06D0[i].x0, NULL, &sp10);
@@ -556,6 +696,9 @@ void fn_8025A310(HSD_GObj* gobj)
                     sp10.y + mnStageSel_803F06D0[i].x10 > sp1C.y)
                 {
                     mnStageSel_804D6CAE = i;
+#ifdef TARGET_PC
+                    frozen_hover = false;
+#endif
                     return;
                 }
             }
@@ -570,6 +713,15 @@ void fn_8025A560(HSD_GObj* gobj)
     HSD_JObj* jobj = GET_JOBJ(gobj);
     temp_r30 = HSD_GObjGetUserData(gobj);
 
+#ifdef TARGET_PC
+    if (frozen_hover && frozen_shown() && mnStageSel_804D6CAE == frozen_src) {
+        lb_8000B1CC(frozen_tile, NULL, &sp10);
+        HSD_JObjSetTranslateX(jobj, sp10.x);
+        HSD_JObjSetTranslateY(jobj, sp10.y);
+        HSD_JObjSetScaleX(jobj, mnStageSel_803F06D0[frozen_src].x14);
+        HSD_JObjSetScaleY(jobj, mnStageSel_803F06D0[frozen_src].x18);
+    } else
+#endif
     if (mnStageSel_804D6CAE < 0x16 && (mnStageSel_804D6CAE & 1) &&
         mnStageSel_803F06D0[mnStageSel_804D6CAE].x8 == 0)
     {
@@ -692,7 +844,12 @@ static inline HSD_JObj* get_jobj(HSD_GObj* gobj)
 void mnStageSel_Scene_OnEnter(void* arg0)
 {
 #ifdef TARGET_PC
-    grStadium_FrozenPick = false; /* until Z picks it so */
+    grStadium_FrozenPick = false; /* until the FROZEN tile is picked */
+    frozen_hover = false;
+    frozen_logged = false;
+    frozen_src = -1;
+    frozen_root = frozen_tile = NULL;
+    frozen_text = NULL;
 #endif
     HSD_JObj* spDC[0x13];
     u8 _[0xDC - 0xD8];
@@ -1050,6 +1207,7 @@ void mnStageSel_Scene_OnEnter(void* arg0)
 #ifdef TARGET_PC
         if (pc_rank_session_active()) rankStageCreate();
         else if (netStageSel_Active()) netStageSel_TextCreate();
+        frozen_create();
 #endif
     }
 }
@@ -1173,6 +1331,8 @@ void mnStageSel_Scene_OnExit(UNUSED void* exit_data)
 #ifdef TARGET_PC
     if (rank_text) { HSD_SisLib_803A5CC4(rank_text); rank_text = NULL; }
     if (net_text) { HSD_SisLib_803A5CC4(net_text); net_text = NULL; }
+    if (frozen_text) { HSD_SisLib_803A5CC4(frozen_text); frozen_text = NULL; }
+    frozen_root = frozen_tile = NULL;
 #endif
     if (mnStageSel_804D6C94 != NULL) {
         lbArchive_80016EFC(mnStageSel_804D6C94);

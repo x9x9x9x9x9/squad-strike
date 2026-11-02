@@ -125,14 +125,12 @@ void gmSquad_TrackCoin(int port, bool has_coin_pick)
         return;
     }
     n = gmSquad_Count(port);
-    if (gmSquad_coin_pos[port] == GMSQUAD_NONE) {
-        if (has_coin_pick) {
-            /* The coin just went down: after whoever Z added first. Picking
-             * it up again later to change fighter keeps this place. */
-            gmSquad_coin_pos[port] = (u8) n;
-        }
-    } else if (!has_coin_pick && n == 0) {
-        gmSquad_coin_pos[port] = GMSQUAD_NONE; /* nothing left to order */
+    if (!has_coin_pick) {
+        /* Coin in hand: it is out of the order until it goes down again. */
+        gmSquad_coin_pos[port] = GMSQUAD_NONE;
+    } else if (gmSquad_coin_pos[port] == GMSQUAD_NONE) {
+        /* The coin just went down: after everyone picked before it. */
+        gmSquad_coin_pos[port] = (u8) n;
     } else if (gmSquad_coin_pos[port] > n) {
         gmSquad_coin_pos[port] = (u8) n; /* members removed (R) */
     }
@@ -151,7 +149,7 @@ int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
         if (gmSquad_rows[port][k].ckind == GMSQUAD_NONE) {
             continue;
         }
-        if (members == at) {
+        if (members == at && coin_ck != GMSQUAD_NONE) {
             out[n].ckind = coin_ck;
             out[n].color = coin_color;
             n++;
@@ -159,7 +157,7 @@ int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
         out[n++] = gmSquad_rows[port][k];
         members++;
     }
-    if (members <= at) {
+    if (members <= at && coin_ck != GMSQUAD_NONE) {
         out[n].ckind = coin_ck;
         out[n].color = coin_color;
         n++;
