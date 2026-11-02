@@ -4,6 +4,7 @@
 #undef __assert
 #include <stdio.h>
 #include "../src/melee/mn/mnstagesel.c"
+bool grStadium_FrozenPick;
 static uint32_t seed;
 static int enabled = -1;
 uint32_t pc_net_seed(void) {

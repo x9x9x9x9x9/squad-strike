@@ -23,6 +23,7 @@
 
 /* Squad members after the coin pick, per port (character, colour). */
 GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
+u8 gmSquad_coin_pos[GMSQUAD_PORTS];
 
 /* Whether the table above has been initialised, and for which netplay
  * session (pc_net_seed()) or 0 for offline play. */
@@ -38,7 +39,7 @@ static bool s_respawning;
 /* Stocks everyone started this squad match with: the biggest squad's size,
  * one per fighter (a smaller squad's last fighter keeps the spare ones). */
 static s8 s_stocks;
-/* Each player's lineup for the stock icons: coin pick, then members. */
+/* Each player's lineup in fighting order (the order it was picked). */
 static GmSquadMember s_lineup[GMSQUAD_PORTS][GMSQUAD_SIZE];
 static u8 s_lineup_count[GMSQUAD_PORTS];
 
@@ -46,6 +47,7 @@ static void init(void)
 {
     if (!s_init) {
         memset(gmSquad_rows, GMSQUAD_NONE, sizeof(gmSquad_rows));
+        memset(gmSquad_coin_pos, GMSQUAD_NONE, sizeof(gmSquad_coin_pos));
         s_init = true;
     }
 }
@@ -111,13 +113,65 @@ void gmSquad_Clear(int port)
     init();
     if (port >= 0 && port < GMSQUAD_PORTS) {
         memset(gmSquad_rows[port], GMSQUAD_NONE, sizeof(gmSquad_rows[port]));
+        gmSquad_coin_pos[port] = GMSQUAD_NONE;
     }
+}
+
+void gmSquad_TrackCoin(int port, bool has_coin_pick)
+{
+    int n;
+    init();
+    if (port < 0 || port >= GMSQUAD_PORTS) {
+        return;
+    }
+    n = gmSquad_Count(port);
+    if (gmSquad_coin_pos[port] == GMSQUAD_NONE) {
+        if (has_coin_pick) {
+            /* The coin just went down: after whoever Z added first. Picking
+             * it up again later to change fighter keeps this place. */
+            gmSquad_coin_pos[port] = (u8) n;
+        }
+    } else if (!has_coin_pick && n == 0) {
+        gmSquad_coin_pos[port] = GMSQUAD_NONE; /* nothing left to order */
+    } else if (gmSquad_coin_pos[port] > n) {
+        gmSquad_coin_pos[port] = (u8) n; /* members removed (R) */
+    }
+}
+
+int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
+                   GmSquadMember out[GMSQUAD_SIZE])
+{
+    int n = 0, k, members = 0, at;
+    init();
+    if (port < 0 || port >= GMSQUAD_PORTS) {
+        return 0;
+    }
+    at = gmSquad_coin_pos[port] == GMSQUAD_NONE ? 0 : gmSquad_coin_pos[port];
+    for (k = 0; k < GMSQUAD_EXTRA; k++) {
+        if (gmSquad_rows[port][k].ckind == GMSQUAD_NONE) {
+            continue;
+        }
+        if (members == at) {
+            out[n].ckind = coin_ck;
+            out[n].color = coin_color;
+            n++;
+        }
+        out[n++] = gmSquad_rows[port][k];
+        members++;
+    }
+    if (members <= at) {
+        out[n].ckind = coin_ck;
+        out[n].color = coin_color;
+        n++;
+    }
+    return n;
 }
 
 void gmSquad_ClearAll(void)
 {
     init();
     memset(gmSquad_rows, GMSQUAD_NONE, sizeof(gmSquad_rows));
+    memset(gmSquad_coin_pos, GMSQUAD_NONE, sizeof(gmSquad_coin_pos));
 }
 
 u32 gmSquad_Key(void)
@@ -128,6 +182,9 @@ u32 gmSquad_Key(void)
     init();
     for (i = 0; i < sizeof(gmSquad_rows); i++) {
         key = (key ^ p[i]) * 16777619u;
+    }
+    for (i = 0; i < GMSQUAD_PORTS; i++) {
+        key = (key ^ gmSquad_coin_pos[i]) * 16777619u;
     }
     return key;
 }
@@ -266,14 +323,14 @@ void gmSquad_OnEnterVs(StartMeleeData* start)
         if (i >= GMSQUAD_PORTS) {
             continue;
         }
-        s_lineup[i][0].ckind = (u8) start->players[i].ckind;
-        s_lineup[i][0].color = start->players[i].color;
-        s_lineup_count[i] = 1;
-        for (k = 0; k < GMSQUAD_EXTRA; k++) {
-            if (gmSquad_rows[i][k].ckind < ChKind_Max) {
-                s_lineup[i][s_lineup_count[i]++] = gmSquad_rows[i][k];
-            }
-        }
+        s_lineup_count[i] = (u8) gmSquad_Lineup(
+            i, (u8) start->players[i].ckind, start->players[i].color,
+            s_lineup[i]);
+        /* The squad fights in the order it was picked: whoever was picked
+         * first starts, coin pick or not. (start is the match's own copy;
+         * character select keeps its coin pick.) */
+        start->players[i].ckind = s_lineup[i][0].ckind;
+        start->players[i].color = s_lineup[i][0].color;
         {
             /* Which fighters this match loads, for a log that ends in a
              * crash: character kind:colour, in lineup order. */
@@ -356,8 +413,9 @@ void gmSquad_WarmFiles(void)
         lineup[p][count[p]] = Player_GetPlayerCharacter(p);
         colors[p][count[p]] = Player_GetCostumeId(p);
         count[p]++;
-        for (i = 0; i < GMSQUAD_EXTRA; i++) {
-            GmSquadMember* m = &gmSquad_rows[p][i];
+        /* Everyone but the starter (s_lineup[p][0], set up by the game). */
+        for (i = 1; i < s_lineup_count[p]; i++) {
+            GmSquadMember* m = &s_lineup[p][i];
             if (m->ckind < ChKind_Max) {
                 s32 extra;
                 s32 kind = Player_PcFighterKinds(m->ckind, &extra);
@@ -413,11 +471,11 @@ static GmSquadMember* due_member(s32 slot)
     if (lost <= 0 || lost % GMSQUAD_STOCKS_PER_FIGHTER != 0) {
         return NULL;
     }
-    index = lost / GMSQUAD_STOCKS_PER_FIGHTER - 1;
-    if (index < 0 || index >= GMSQUAD_EXTRA) {
+    index = lost / GMSQUAD_STOCKS_PER_FIGHTER;
+    if (index <= 0 || index >= s_lineup_count[slot]) {
         return NULL;
     }
-    m = &gmSquad_rows[slot][index];
+    m = &s_lineup[slot][index];
     if (m->ckind >= ChKind_Max || m->ckind == ps->ckind) {
         return NULL;
     }

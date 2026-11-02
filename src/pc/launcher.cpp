@@ -335,7 +335,7 @@ class Launcher final : public Rml::EventListener {
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera", "ucf", "rumble"};
+            return {"unlock-all", "free-camera", "ucf", "rumble"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         case 5:
@@ -1544,7 +1544,7 @@ public:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale",
                 "port-check-update"};
         case 2:
-            return {"unlock-all", "frozen-stadium", "free-camera", "ucf", "rumble"};
+            return {"unlock-all", "free-camera", "ucf", "rumble"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         default: {

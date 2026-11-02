@@ -1,8 +1,9 @@
 /* Squad Strike on character select (PC only; included by mncharsel.c, whose
  * statics it reads). See src/melee/gm/gmsquad.h.
  *
- *   - Drop your coin on your first fighter as usual.
- *   - Point at another portrait and press Z to add it (up to three times).
+ *   - Drop your coin on a fighter as usual, and point at other portraits
+ *     and press Z to add them (up to three). The squad fights in the order
+ *     it was picked: Z picks made before the coin went down come first.
  *     Carrying a coin, the portrait previews the fighter: pick its colour
  *     with X/Y first, and Z adds it in that colour (Z again on a member
  *     already in the squad gives it the previewed colour). With a free
@@ -574,23 +575,25 @@ static void squad_buttons(int port)
 static void squad_line(int port, char* out, size_t size)
 {
     PlayerInitData* pl = &mnCharSel_804D6CB0->vs.start.players[port];
-    int i;
+    GmSquadMember order[GMSQUAD_SIZE];
+    int i, n;
     out[0] = '\0';
     if (gmSquad_Count(port) == 0) {
         return;
     }
-    if ((u8) pl->ckind < 26) {
-        strncat(out, squad_names[(u8) pl->ckind], size - strlen(out) - 1);
-    } else {
-        strncat(out, "?", size - strlen(out) - 1);
-    }
-    for (i = 0; i < GMSQUAD_EXTRA; i++) {
-        GmSquadMember* m = &gmSquad_rows[port][i];
+    /* In fighting order; the coin pick without its colour word, "?" until
+     * the coin is down. */
+    n = gmSquad_Lineup(port, (u8) pl->ckind, GMSQUAD_NONE, order);
+    for (i = 0; i < n; i++) {
+        GmSquadMember* m = &order[i];
         const char* word;
+        if (i != 0) {
+            strncat(out, " ", size - strlen(out) - 1);
+        }
         if (m->ckind >= 26) {
+            strncat(out, "?", size - strlen(out) - 1);
             continue;
         }
-        strncat(out, " ", size - strlen(out) - 1);
         word = m->color < squad_num_colors(m->ckind)
                    ? squad_colors[m->ckind][m->color]
                    : "";
@@ -685,15 +688,15 @@ static bool squad_icon_row(int p)
         return false;
     }
     if (gmSquad_Count(p) != 0) {
-        cks[n] = (u8) pl->ckind < 26 ? (u8) pl->ckind : GMSQUAD_NONE;
-        colors[n] = squad_coin_color(p);
-        n++;
-        for (i = 0; i < GMSQUAD_EXTRA; i++) {
-            if (gmSquad_rows[p][i].ckind < 26) {
-                cks[n] = gmSquad_rows[p][i].ckind;
-                colors[n] = gmSquad_rows[p][i].color;
-                n++;
-            }
+        /* In fighting order, the coin pick among the others. */
+        GmSquadMember order[GMSQUAD_SIZE];
+        int count = gmSquad_Lineup(
+            p, (u8) pl->ckind < 26 ? (u8) pl->ckind : GMSQUAD_NONE,
+            squad_coin_color(p), order);
+        for (i = 0; i < count && n < SQUAD_ICONS_MAX; i++) {
+            cks[n] = order[i].ckind;
+            colors[n] = order[i].color;
+            n++;
         }
     }
     for (i = 0; i < n; i++) {
@@ -908,6 +911,9 @@ static void mnCharSel_SquadFrame(void)
         if (mnCharSel_804D6CF6 == 0) {
             squad_buttons(p);
         }
+        /* Where the coin pick falls in the order fighters were picked. */
+        gmSquad_TrackCoin(
+            p, (u8) mnCharSel_804D6CB0->vs.start.players[p].ckind < 26);
     }
 
     if (squad_players() > 2 && gmSquad_Any()) {

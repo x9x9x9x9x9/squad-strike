@@ -104,6 +104,7 @@ struct StageSelUserData {
 #include <melee/gm/gmonlinemode.h>
 #include <sysdolphin/baselib/sislib.h>
 #include "pc/pc.h"
+#include <melee/gr/grpstadium.h>
 
 /* A compact ranked list uses synchronized pads and makes both bans visible.
  * It does not depend on the archive's cursor geometry. */
@@ -335,6 +336,17 @@ void mnStageSel_80259C28(void)
         }
         break;
     default:
+#ifdef TARGET_PC
+        /* Z on Pokémon Stadium picks it frozen (no transformations). */
+        if ((mnStageSel_804D6CA0 & HSD_PAD_Z) && mnStageSel_804D6CAE < 0x1E &&
+            mnStageSel_803F06D0[mnStageSel_804D6CAE].stkind == St_Kind_PStadium &&
+            mnStageSel_803F06D0[mnStageSel_804D6CAE].x8 >= 2)
+        {
+            grStadium_FrozenPick = true;
+            pc_log_line("sss: Pokemon Stadium picked frozen (Z)");
+            goto skip_randomize;
+        }
+#endif
         if (!(mnStageSel_804D6CA0 & 0x1100)) {
             return;
         }
@@ -679,6 +691,9 @@ static inline HSD_JObj* get_jobj(HSD_GObj* gobj)
 
 void mnStageSel_Scene_OnEnter(void* arg0)
 {
+#ifdef TARGET_PC
+    grStadium_FrozenPick = false; /* until Z picks it so */
+#endif
     HSD_JObj* spDC[0x13];
     u8 _[0xDC - 0xD8];
     Vec3 spCC;

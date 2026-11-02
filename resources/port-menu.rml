@@ -105,11 +105,6 @@
               </span>
               <button id="unlock-all" class="value">Off</button>
             </div>
-            <div class="row" data-desc="Lock Pokémon Stadium in neutral mode without transformations.">
-              <span class="name">Hazardless stages<span class="detail">Lock Pokémon Stadium in neutral mode without transformations.</span>
-              </span>
-              <button id="frozen-stadium" class="value">Off</button>
-            </div>
             <div class="row" data-desc="1v1 VS teams of up to four fighters, one stock each. Z on character select adds a fighter.">
               <span class="name">Squad Strike<span class="detail">1v1 VS teams of up to four fighters, one stock each. Z on character select adds a fighter.</span>
               </span>

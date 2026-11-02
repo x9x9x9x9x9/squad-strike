@@ -88,7 +88,6 @@
         </div>
         <div id="page-cheats" class="page">
           <div class="row" data-desc="Unlock all 26 characters, the 11 secret stages and All-Star mode."><span class="name">Unlock everything</span><button id="unlock-all" class="value">Off</button></div>
-          <div class="row" data-desc="Keep Pokémon Stadium in its neutral form, with no transformations."><span class="name">Hazardless stages</span><button id="frozen-stadium" class="value">Off</button></div>
           <div class="row" data-desc="1v1 VS teams of up to four fighters, one stock each: Z adds the fighter under your hand to your squad on character select."><span class="name">Squad Strike</span><button id="squad-strike" class="value">On</button></div>
           <div class="row" data-desc="UnclePunch's Stage Expansion: hazard-free layouts for Peach's Castle, Onett, Mute City, Jungle Japes and more."><span class="name">Stage Expansion</span><button id="stage-expansion" class="value">On</button></div>
           <div class="row" data-desc="SD Remix's character changes (sdremix.games), from its fighter files in an sdremix folder. Takes effect when the game starts; both online players need it."><span class="name">SD Remix characters</span><button id="sd-remix" class="value">Off</button></div>

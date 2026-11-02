@@ -7,6 +7,14 @@
 
 #include <dolphin/mtx.h>
 
+#ifdef TARGET_PC
+/// PC: this match's Pokémon Stadium stays in its neutral form (no
+/// transformations). Picked per match on stage select: Z on Pokémon Stadium
+/// picks it frozen, A as usual. Set from synced input, so both netplay
+/// peers agree.
+extern bool grStadium_FrozenPick;
+#endif
+
 /* 1D1018 */ void grStadium_OnDemoInit(s32);
 /* 1D101C */ void grStadium_OnInit(void);
 /* 1D10C8 */ void grStadium_OnLoad(void);

@@ -4,7 +4,8 @@
 /* PC only: Squad Strike (Smash Ultimate's tag team) for 1v1 VS matches.
  *
  * Each player builds a squad of up to four fighters on the character select
- * screen: the coin pick, then up to three more added with Z. Every fighter
+ * screen: the coin pick and up to three more added with Z, fighting in the
+ * order they were picked. Every fighter
  * gets one stock; when one is KO'd, the next drops in on the revival
  * platform. Ported from the "Squad Strike v4" Gecko codes for Dolphin.
  *
@@ -42,6 +43,21 @@ typedef struct GmSquadMember {
 
 /// Squad members after the coin pick, per CSS port, packed from index 0.
 extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
+
+/// Where the coin pick goes in each port's fighting order: how many of
+/// gmSquad_rows were added before the coin was dropped (so a squad fights
+/// in the order it was picked), or GMSQUAD_NONE before the first drop.
+/// Kept up by character select (gmSquad_TrackCoin).
+extern u8 gmSquad_coin_pos[GMSQUAD_PORTS];
+
+/// Character select, every frame per open door: has_coin_pick is whether
+/// the door has a coin pick now.
+void gmSquad_TrackCoin(int port, bool has_coin_pick);
+
+/// The squad in fighting order: the coin pick (coin_ck, coin_color; may be
+/// GMSQUAD_NONE) placed among gmSquad_rows. Returns how many entries.
+int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
+                   GmSquadMember out[GMSQUAD_SIZE]);
 
 /// Squads may exist in the current game mode (VS, or LAN/Direct online).
 bool gmSquad_ModeAllowed(void);

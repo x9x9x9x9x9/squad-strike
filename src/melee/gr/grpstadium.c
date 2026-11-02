@@ -48,6 +48,8 @@ static const char* grStadium_pc_pending;
 #endif
 #include "pc/pc.h"
 
+bool grStadium_FrozenPick;
+
 static struct grPStadium_YakumonoParam* yakumono_param;
 
 GrJoint grPs_803E1248[] = {
@@ -2105,14 +2107,14 @@ void grStadium_801D4548(Ground_GObj* gobj)
 
     switch (gp->u.stadium.xDC) {
     case 0:
-        if (pc_is_frozen_stadium_enabled() && gp->u.stadium.xDE == 5) {
+        if (grStadium_FrozenPick && gp->u.stadium.xDE == 5) {
             return;
         }
         s32 xD8 = gp->u.stadium.xD8;
         gp->u.stadium.xD8 = xD8 - 1;
         if (xD8 < 0) {
             if (gp->u.stadium.xDE == 5) {
-                if (pc_is_frozen_stadium_enabled()) {
+                if (grStadium_FrozenPick) {
                     gp->u.stadium.xD8 =
                         randi_between_2(yakumono_param->x0, yakumono_param->x4);
                     return;

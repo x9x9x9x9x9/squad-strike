@@ -41,6 +41,7 @@
 #include <melee/gm/gmvs.h>
 #include <melee/gm/types.h>
 #include <melee/gr/forward.h>
+#include <melee/gr/grpstadium.h>
 #include <melee/gr/types.h>
 #include <melee/it/forward.h>
 #include <melee/it/types.h>
@@ -297,7 +298,7 @@ void pc_slp_match_start(const struct StartMeleeData* data) {
         }
     }
     gs.pal = pc_region_pal;
-    gs.frozen_ps = pc_is_frozen_stadium_enabled();
+    gs.frozen_ps = grStadium_FrozenPick; /* picked with Z on stage select */
     gs.minor_scene = scene == GS_SUDDEN_DEATH ? 3 : 2;
     /* SPEC: 2 for VS mode, 8 for an online game (one with rollbacks) */
     s_net = pc_net_active();
