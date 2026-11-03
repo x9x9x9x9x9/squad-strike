@@ -164,6 +164,9 @@ Every push is built for every platform by GitHub Actions
 [docs/building.md](docs/building.md). The unit tests are `ninja unit_tests`
 then `ctest -L melee`.
 
+## **Donations** 
+Fuck no. This shit was made with Claude over the course of a week. Sure I had to sit here and babysit for hours and playtest for hours but this is made on the works of other people as all AI projects are. Donate to the people that deserve it or donate to a charity or something. 
+
 ## Credits
 
 - **[melee-pc](https://github.com/999sian/melee-pc)** by **999sian**: the PC
