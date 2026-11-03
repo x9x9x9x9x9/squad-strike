@@ -83,7 +83,7 @@ int grAce_Pick;
 typedef int CharacterKind;
 typedef int StKind;
 typedef int GameModeState;
-struct Rules {int stkind,item_freq,sd_penalty,match_kind,is_stock;};
+struct Rules {int stkind,item_freq,sd_penalty,match_kind,is_stock,timer_enabled,time_limit;};
 struct Player {int stocks,cpu_kind,ckind,slot_type;bool rumble_enabled;};
 typedef struct {struct Rules rules;struct Player players[6];} StartMeleeData;
 StartMeleeData data;

@@ -3790,6 +3790,9 @@ void gm_80167BC8(VsModeData* vs_data)
     rules = gmMainLib_GetGameRules();
     prefs = gmMainLib_GetGamePrefs();
     vs_data->start.rules.timer_enabled = 0;
+#ifdef TARGET_PC
+    vs_data->start.rules.timer_counts_up = 0; /* set again below for untimed stock */
+#endif
 
     switch (rules->mode) {
     case 0:
@@ -3806,6 +3809,16 @@ void gm_80167BC8(VsModeData* vs_data)
             vs_data->start.rules.time_limit = rules->stock_time_limit * 60;
             break;
         }
+#ifdef TARGET_PC
+        /* A stock match with no time limit shows how long it has run, as
+         * a count-up timer (it never ends the match): the vanilla game
+         * shows no timer at all there. VS and online VS only. */
+        if (gm_GetCurrentGameMode() == GM_VS || gm_GetCurrentGameMode() == GM_ONLINE) {
+            vs_data->start.rules.timer_enabled = 1;
+            vs_data->start.rules.timer_counts_up = 1;
+            vs_data->start.rules.time_limit = 0;
+        }
+#endif
         break;
     case 2:
         vs_data->start.rules.match_kind = 2;

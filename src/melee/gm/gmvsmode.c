@@ -198,6 +198,15 @@ void onEnterDebugVs(GameModeState* state)
             start->rules.stkind = (StKind) st;
         }
     }
+    /* MELEE_DEBUG_VS_TIME=<seconds>: a time limit, so the match timer shows
+     * (with MELEE_DEBUG_VS_STOCKS: a timed stock match). */
+    if (getenv("MELEE_DEBUG_VS_TIME") != NULL) {
+        int t = atoi(getenv("MELEE_DEBUG_VS_TIME"));
+        if (t > 0 && t < 100 * 60) {
+            start->rules.timer_enabled = true;
+            start->rules.time_limit = t;
+        }
+    }
     /* MELEE_DEBUG_VS_ACE=1|2|3: the debug match on an ACE stage (Metal
      * Cavern, WarioWare, Realgam Colosseum; gr/grace.h). */
     if (getenv("MELEE_DEBUG_VS_ACE") != NULL) {

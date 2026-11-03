@@ -465,7 +465,32 @@ static u32 squad_random(int port, int salt)
         h ^= h >> 15;
         return h;
     }
-    return (u32) HSD_Randi(0x7FFFFFFF);
+    /* Two draws, 15 bits each from the generator's well-mixed high half.
+     * (HSD_Randi(0x7FFFFFFF) overflowed its own multiply: the result was
+     * nearly fixed, so a handful of fighters came up again and again.) */
+    {
+        u32 hi = (u32) HSD_Rand() & 0x7FFF;
+        u32 lo = (u32) HSD_Rand() & 0x7FFF;
+        return (hi << 15) | lo;
+    }
+}
+
+/* The fighter the other squad player has at position pos of their lineup
+ * (coin pick included), or GMSQUAD_NONE: a random pick avoids taking the
+ * same fighter at the same position, so two random squads differ. */
+static u8 squad_rival_at(int target, int pos)
+{
+    GmSquadMember line[GMSQUAD_SIZE];
+    int p, n;
+    for (p = 0; p < 4; p++) {
+        if (p == target || !squad_door_open(p)) {
+            continue;
+        }
+        n = gmSquad_Lineup(p, squad_coin_pick(p),
+                           mnCharSel_804D6CB0->vs.start.players[p].color, line);
+        return pos < n ? line[pos].ckind : GMSQUAD_NONE;
+    }
+    return GMSQUAD_NONE;
 }
 
 /* Z on the random area: a random fighter the squad does not have yet joins
@@ -476,6 +501,9 @@ static void squad_random_pick(int target, struct CSSCursorData* cursor)
 {
     u8 pool[25];
     u8 coin = squad_coin_pick(target);
+    GmSquadMember line[GMSQUAD_SIZE];
+    int pos = gmSquad_Lineup(target, coin, 0, line); /* where the pick goes */
+    u8 rival = squad_rival_at(target, pos);
     int n = 0, i, k;
 
     for (i = 0; i < 25; i++) {
@@ -486,6 +514,14 @@ static void squad_random_pick(int target, struct CSSCursorData* cursor)
         }
         if (!have) {
             pool[n++] = ck;
+        }
+    }
+    if (n > 1) {
+        for (i = 0; i < n; i++) {
+            if (pool[i] == rival) {
+                pool[i] = pool[--n];
+                break;
+            }
         }
     }
     if (n == 0) {
@@ -507,6 +543,7 @@ static void squad_random_pick(int target, struct CSSCursorData* cursor)
             for (i = 0; i < GMSQUAD_EXTRA; i++) {
                 dup |= gmSquad_rows[target][i].ckind == ck;
             }
+            dup |= ck == rival;
             if (!dup) {
                 break;
             }
