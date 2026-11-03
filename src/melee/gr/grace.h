@@ -5,10 +5,10 @@
  * PUBLIC-), an m-ex build of Melee: Metal Cavern (Smash 64), WarioWare and
  * Realgam Colosseum.
  *
- * Their files are not part of this repository. The player puts them in an
- * "ace" folder (MELEE_ACE_DIR, the user data folder's ace/, or next to
- * melee.exe); src/pc/sdremix.cpp adds them to the disc at boot, so the ACE
- * disc itself is never needed:
+ * Their files ship in resources/ace (an "ace" folder in MELEE_ACE_DIR, the
+ * user data folder or next to melee.exe takes precedence); src/pc/
+ * sdremix.cpp adds them to the disc at boot, so the ACE disc itself is never
+ * needed:
  *   GrOMc.dat, GrWw.dat, GrColosseum.dat     the stages (ACE's files/)
  *   mcavern.hps, wahwareinc.hps, normalbattle.hps, cipherpeon.hps,
  *   battlemode1.hps                          their music (ACE's files/audio/)

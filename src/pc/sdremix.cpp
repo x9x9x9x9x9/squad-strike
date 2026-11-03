@@ -18,8 +18,9 @@
  * handshake compares it (net_handshake.c, unlock_hash_now).
  *
  * The same boot step adds the ACE stages' files (src/melee/gr/grace.h) from
- * an "ace" folder, looked for in the same places (MELEE_ACE_DIR first):
- * aurora takes one overlay set, so both go in together.
+ * an "ace" folder, looked for in the same places (MELEE_ACE_DIR first), then
+ * in resources/ace, which the builds ship: aurora takes one overlay set, so
+ * both go in together.
  */
 #include "paths.h"
 #include "pc.h"
@@ -133,6 +134,9 @@ std::string find_folder(const char* env_name, const char* name) {
         candidates.push_back(std::string(base) + name);
         candidates.push_back(std::string(base) + "../" + name);
         candidates.push_back(std::string(base) + "../../" + name);
+        /* The copy the release ships (resources/ace), after any the player
+         * put next to the exe. */
+        candidates.push_back(std::string(base) + "resources/" + name);
     }
     for (const std::string& dir : candidates) {
         if (is_dir(dir)) {

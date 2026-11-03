@@ -64,6 +64,10 @@ cp -r "${ROOT_DIR}/resources/"* "${ANDROID_DIR}/app/src/main/assets/resources/"
 # is checked for the current version and structure size again by the native loader before any driver compilation.
 rm -f "${ANDROID_DIR}/app/src/main/assets/initial_pipeline_cache.db" \
     "${ANDROID_DIR}/app/src/main/assets/resources/initial_pipeline_cache.db"
+# The ACE stage files are read from a folder on disk, which Android has no
+# path to; leave them out of the APK.
+rm -rf "${ANDROID_DIR}/app/src/main/assets/ace" \
+    "${ANDROID_DIR}/app/src/main/assets/resources/ace"
 gzip -dc "${ROOT_DIR}/tools/android_initial_pipeline_cache.db.gz" \
     > "${ANDROID_DIR}/app/src/main/assets/android_initial_pipeline_cache.db"
 
