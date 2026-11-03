@@ -6,10 +6,12 @@ fighters in a 1v1), three stages from the **ACE build**, **SD Remix**
 characters, **Stage Expansion** layouts, a FROZEN Pokémon Stadium pick,
 Slippi-style connect codes for online play, and better controller support.
 
-You need your own **Melee NTSC-U 1.02 (GALE01)** disc image. No Nintendo game
-data is included except the ACE stage files listed under Credits.
+You need your own legally acquired **Melee NTSC-U 1.02 (GALE01)** disc image. No Nintendo game
+data is included.
 
-![Character select](docs/screenshots/character-select.png)
+<img width="1922" height="1437" alt="squad strike in game" src="https://github.com/user-attachments/assets/73568ca2-4ce9-4467-a3eb-397c80465d06" />
+<img width="1966" height="1437" alt="squad strike done" src="https://github.com/user-attachments/assets/0b4dbb0a-8f16-464a-b86e-5f36cc27c923" />
+
 
 ## Features
 
@@ -39,20 +41,32 @@ data is included except the ACE stage files listed under Credits.
   ACE tiles follow this setting too.
 - **Loser picks the stage** between games online.
 
+
+<img width="1787" height="1437" alt="squad fourside" src="https://github.com/user-attachments/assets/f945fb7e-97a4-48a7-9f82-d5aa91b0537f" />
+
+<img width="1955" height="1437" alt="squad on wartioware" src="https://github.com/user-attachments/assets/6d6d12de-7f19-44a9-979a-879b30977fa2" />
+
+
 ### Characters
 - **SD Remix** characters (balance changes from sdremix.games). Turn on
   Settings → Gameplay → SD Remix characters. The fighter files come with the
   Windows download.
 - Kirby's throws work correctly.
 
+<img width="1827" height="1437" alt="squad mods" src="https://github.com/user-attachments/assets/36e32faf-57b7-41c2-9b3f-4a095bf44a2d" />
+
 ### Online
-- **Connect codes**, Slippi style: pick your own code like `CHRS#123`, give it
+- **Connect codes**, Slippi style: pick your own code like `CFOX#123`, give it
   to a friend, and they call you from Online → Direct Connect.
 - Direct Connect works on the same home network and over **phone hotspots**,
   and asks your router to open a port (UPnP) when it can.
 - **Ping display** in the top left corner during online matches (can be
   turned off).
 - Rollback netcode from melee-pc.
+
+<img width="1821" height="1437" alt="squad connect codes" src="https://github.com/user-attachments/assets/b822a044-1931-44db-bd35-b5878b05c466" />
+
+<img width="1810" height="1437" alt="squad other online" src="https://github.com/user-attachments/assets/62da45d6-bf00-4907-a170-1abaa6347218" />
 
 ### Controllers
 - Official and third-party **GameCube controller adapters**, including the
@@ -97,7 +111,7 @@ same zip.
 
 ## Character select: building a squad
 
-With Squad Strike on, in a 1v1 VS match:
+With Squad Strike on, in a 4 stock VS match:
 
 | Button | What it does |
 |---|---|
@@ -121,7 +135,11 @@ With Squad Strike on, in a 1v1 VS match:
 - **Metal Cavern, WarioWare, Colosseum** (next to FROZEN): the ACE stages.
   Colosseum plays one of three Pokémon Colosseum battle themes at random.
 
+<img width="1870" height="1437" alt="sq" src="https://github.com/user-attachments/assets/1975d134-72ae-45ed-9909-ac2690e354ca" />
+
 ## Controls
+
+Any Gamecube adapter or GC Ultimate should work.
 
 Keyboard: arrows or WASD = control stick, IJKL = C-stick, X = A, Z = B,
 C = X, V = Y, Q / E = L / R, Tab = Z, Enter = Start, TFGH = D-pad.
@@ -166,8 +184,9 @@ then `ctest -L melee`.
   team: the SD Remix character files and balance changes.
 - **Stage Expansion** by **UnclePunch**: the hazard-free stage layouts,
   ported here from his Gecko code.
-- **Squad Strike** is ported from the community's "Squad Strike v4" Gecko
-  codes for Dolphin.
+- **Squad Strike** is sort of ported from my buddy Tyler who tried to make squad strike work in Gecko
+  codes for Dolphin but slippi netcode doesn't allow for the swapping of characters mid match 
+  and it is pushing the dolphin memory limit as it's an emulator of a gamecube.
 
 ## License
 
