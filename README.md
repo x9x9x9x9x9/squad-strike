@@ -80,21 +80,16 @@ data is included.
 
 ### Removed from melee-pc
 - The **auto-updater** and its setting are gone. This build never downloads
-  or replaces itself. Get new versions from this page.
+  or replaces itself. New versions are posted on the
+  [Releases page](https://github.com/x9x9x9x9x9/squad-strike/releases).
 
 ## How to install
 
-1. **Download** the build for your system.
-   - Open the [Actions tab](https://github.com/x9x9x9x9x9/squad-strike/actions)
-     and click the newest green **Build** run on the `master` branch.
-   - Under **Artifacts**, download **windows-x86_64** (most Windows PCs),
-     **windows-arm64**, **linux-x86_64**, **macos-arm64** or **macos-x86_64**. You have to be
-     signed in to GitHub to download artifacts.
-   - If a release is on the
-     [Releases page](https://github.com/x9x9x9x9x9/squad-strike/releases),
-     you can download it from there instead.
-2. **Unzip** it. On Windows the zip holds `Melee-Windows-x86_64.zip`; unzip
-   that too, to a folder of your choice. Keep everything in that folder
+1. **Download** the latest release from the
+   [Releases page](https://github.com/x9x9x9x9x9/squad-strike/releases/latest)
+   (no GitHub account needed): **Melee-Windows-x86_64.zip** for most Windows
+   PCs, or the Windows ARM, Linux or macOS file for your system.
+2. **Unzip** it to a folder of your choice. Keep everything in that folder
    together: `melee.exe`, the DLLs, `resources/` (which holds the ACE stages)
    and `sdremix/`.
 3. **Run** `melee.exe`. If Windows SmartScreen warns you, click
