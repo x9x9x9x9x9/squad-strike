@@ -14,7 +14,7 @@ src/melee, src/sysdolphin     game code from doldecomp/melee (C11, GCC,
 src/pc                        platform layer: main, OS/VI/GX glue, keyboard,
                               1000 Hz input poll, software AX mixer, THP,
                               file cache, texture replacements, widescreen,
-                              touch, launcher + F1 overlay (RmlUi), updater
+                              touch, launcher + F1 overlay (RmlUi)
         │
         ▼
 extern/aurora (vendored)      GX command processor -> WebGPU (Dawn: Vulkan,
@@ -38,7 +38,7 @@ The boundary rule and the per-layer coding conventions are in
   `file_cache.cpp` (in-memory archive cache and loose-file overlay),
   `textures.cpp` (Dolphin-format texture packs), `widescreen.c`,
   `launcher.cpp` / `launcher_data.cpp` (RmlUi launcher, F1 overlay,
-  `launcher.cfg`), `updater.cpp`, `version.cpp`.
+  `launcher.cfg`), `version.cpp`.
 - `extern/aurora` - vendored aurora with local changes; editable in-tree.
   Dawn, SDL3 and nod arrive as prebuilts or are built from source per platform
   ([building.md](building.md)).
@@ -58,7 +58,7 @@ Melee itself is single-threaded: the game loop runs on the main thread and
 - `src/pc/audio.c` mixes in a 5 ms callback; voice parameters are protected by a
   recursive `s_audio_mutex`. Interrupt disables are limited to the synth tick.
 - `src/pc/file_cache.cpp` pre-warms core fighter, stage and menu archives on a
-  background thread after boot; `updater.cpp` checks and downloads on a worker.
+  background thread after boot.
 
 aurora delivers GX draw-done and DVD completion callbacks on worker threads. The
 game brackets its shared-state updates with `OSDisableInterrupts` /

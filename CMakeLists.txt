@@ -6,7 +6,7 @@ endif ()
 
 project(melee-pc LANGUAGES C CXX)
 
-# Native UI, updater and package metadata use the same release version.
+# Native UI and package metadata use the same release version.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" _melee_version LIMIT_COUNT 1)
 if (DEFINED ENV{MELEE_VERSION} AND NOT "$ENV{MELEE_VERSION}" STREQUAL "")
@@ -128,8 +128,7 @@ elseif (ANDROID OR IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     set(MELEE_NETWORK_LIBS)
     add_compile_definitions(MELEE_USE_BUILTIN_SHA1)
 elseif (APPLE)
-    # Builtin SHA-1 keeps the bundle free of a Homebrew OpenSSL; libcurl ships
-    # with macOS, so the updater can use it without bundling anything.
+    # Builtin SHA-1 keeps the bundle free of a Homebrew OpenSSL.
     set(MELEE_CRYPTO_LIBS)
     add_compile_definitions(MELEE_USE_BUILTIN_SHA1)
     find_package(CURL QUIET)
@@ -233,7 +232,6 @@ set(PC_SOURCES
         src/pc/music_stream.cpp
         src/pc/sdremix.cpp
         src/pc/textures.cpp
-        src/pc/updater.cpp
         src/pc/version.cpp
         # Netplay (docs/netcode-plan.md). net.c is the session and rollback
         # loop; the rest are its modules behind src/pc/net_internal.h.
@@ -646,15 +644,4 @@ if (NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
         set_tests_properties(name_animation PROPERTIES LABELS melee TIMEOUT 60)
     endif ()
 
-    add_executable(updater_test EXCLUDE_FROM_ALL tools/test_updater.cpp src/pc/version.cpp)
-    target_include_directories(updater_test PRIVATE src)
-    target_link_libraries(updater_test PRIVATE ${MELEE_NETWORK_LIBS} aurora::main)
-    if (WIN32)
-        target_link_libraries(updater_test PRIVATE shell32)
-    endif ()
-    target_compile_options(updater_test PRIVATE -UNDEBUG)
-    add_test(NAME updater COMMAND updater_test)
-    add_test(NAME updater_browser COMMAND updater_test browser)
-    set_tests_properties(updater updater_browser PROPERTIES LABELS melee TIMEOUT 10)
-    add_dependencies(unit_tests updater_test)
 endif ()

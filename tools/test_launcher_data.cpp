@@ -137,12 +137,17 @@ int main(int argc, char** argv) {
         f << "widescreen -1\nwidescreen 99\n";
     }
     assert(load_preferences(config).widescreen == 0);
-    loaded.check_updates = false;
+    /* Vibration starts off, also for a file saved with the old "rumble" key
+     * (which every earlier save wrote as on). */
+    {
+        std::ofstream f(config);
+        f << "rumble 1\n";
+    }
+    assert(!load_preferences(config).rumble);
+    loaded.rumble = true;
     assert(save_preferences(config, loaded, error));
-    assert(!load_preferences(config).check_updates);
-    loaded.check_updates = true;
-    assert(save_preferences(config, loaded, error));
-    assert(load_preferences(config).check_updates);
+    assert(load_preferences(config).rumble);
+    loaded.rumble = false;
     loaded.free_camera = false;
     assert(save_preferences(config, loaded, error));
     assert(!load_preferences(config).free_camera);

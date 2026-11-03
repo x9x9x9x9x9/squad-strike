@@ -5,7 +5,6 @@
 #include "launcher_data.hpp"
 #include "discfont.h"
 #include "version.hpp"
-#include "updater.hpp"
 #include "net_match.h"
 #include "net_identity.h"
 #include "net.h"
@@ -268,9 +267,6 @@ class Launcher final : public Rml::EventListener {
     unsigned last_progress = 101;
     std::vector<std::string> focus_ids;
     int result = -2, tab = 0;
-    bool update_card_dismissed = false;
-    pc::updater::Status last_updater_status = pc::updater::Status::Idle;
-    float last_download_progress = -1.0f;
     // Set once the player asks to play while the pipeline queue is still
     // draining: the game starts by itself when the queue empties, and a second
     // press starts it immediately.
@@ -339,7 +335,7 @@ class Launcher final : public Rml::EventListener {
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         case 5:
-            return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
+            return {"scale", "settings-discord", "export-logs"};
         default:
             return {};
         }
@@ -438,14 +434,6 @@ class Launcher final : public Rml::EventListener {
         enabled("discord", !busy());
         text("verify-label", verification.valid() ? "Cancel Verify" : "Verify Disc");
         focus_ids.assign(std::begin(main_ids), std::end(main_ids));
-        auto ustate = pc::updater::get_state();
-        if ((ustate.status == pc::updater::Status::UpdateAvailable ||
-                ustate.status == pc::updater::Status::Downloaded) &&
-            !update_card_dismissed)
-        {
-            focus_ids.insert(
-                focus_ids.begin(), {"update-action", "update-browser", "update-later"});
-        }
     }
     // Opens a page without moving the focus (describe() calls it whenever a
     // category takes the focus, by keys or by pointer).
@@ -615,17 +603,6 @@ class Launcher final : public Rml::EventListener {
         text("fps", prefs.fps ? "On" : "Off");
         slider("scale", prefs.scale * 100.0f);
         text("scale-val", std::to_string(int(prefs.scale * 100 + 0.5f)) + "%");
-        text("check-updates", prefs.check_updates ? "On" : "Off");
-        auto ustate = pc::updater::get_state();
-        if (ustate.status == pc::updater::Status::UpdateAvailable) {
-            text("check-status", "Update available: " + ustate.latest_release.tag_name);
-        } else if (ustate.status == pc::updater::Status::Checking) {
-            text("check-status", "Checking for updates...");
-        } else if (ustate.status == pc::updater::Status::Failed) {
-            text("check-status", ustate.message);
-        } else {
-            text("check-status", "Melee-PC is up to date (" + pc::get_app_version() + ").");
-        }
         notice();
         quiet = false;
     }
@@ -922,34 +899,6 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("scale")->Focus();
-        } else if (id == "check-updates") {
-            prefs.check_updates = !prefs.check_updates;
-            save();
-            refresh_settings();
-            element("check-updates")->Focus();
-        } else if (id == "check-now") {
-            pc::updater::check_for_updates_async(true);
-            status("Checking for updates...");
-            text("check-status", "Checking for updates...");
-            element("check-now")->Focus();
-        } else if (id == "update-action") {
-            auto ustate = pc::updater::get_state();
-            if (ustate.status == pc::updater::Status::Downloaded) {
-                std::string err;
-                if (!pc::updater::apply_update_and_restart(err)) {
-                    status(err, true);
-                }
-            } else {
-                pc::updater::start_download_async();
-            }
-        } else if (id == "update-browser") {
-            pc::updater::open_release_in_browser();
-        } else if (id == "update-later") {
-            update_card_dismissed = true;
-            if (auto* e = element("update-card"))
-                e->SetProperty("display", "none");
-            controls();
-            element("play")->Focus();
         }
     }
 
@@ -972,17 +921,12 @@ public:
 #endif
         document->Show();
         text("app-version", pc::get_app_version());
-        text("check-status", "Current version: " + pc::get_app_version());
         text("disc-note", disc_note);
-        if (prefs.check_updates) {
-            pc::updater::check_for_updates_async(true);
-        }
         controls();
         element("choose")->Focus();
     }
     ~Launcher() override {
         cancel = true;
-        pc::updater::cancel();
         if (verification.valid())
             verification.wait();
         if (inspection.valid())
@@ -1213,79 +1157,6 @@ public:
                     status("Disc changed or was removed. Choose the image again.", true);
                     controls();
                 }
-            }
-            auto ustate = pc::updater::get_state();
-            if (ustate.status != last_updater_status ||
-                std::abs(ustate.download_progress - last_download_progress) > 0.01f)
-            {
-                last_updater_status = ustate.status;
-                last_download_progress = ustate.download_progress;
-
-                if (auto* card = element("update-card")) {
-                    if (ustate.status == pc::updater::Status::UpdateAvailable &&
-                        !update_card_dismissed && !settings)
-                    {
-                        card->SetProperty("display", "block");
-                        text("update-tag", ustate.latest_release.tag_name);
-                        text("update-title", ustate.latest_release.name.empty() ?
-                                                 ustate.latest_release.tag_name :
-                                                 ustate.latest_release.name);
-                        std::string desc = "A newer version of Melee PC is available (" +
-                                           ustate.latest_release.tag_name + ").";
-#if defined(_WIN32)
-                        desc += " Download and extract the Windows ZIP from the release page.";
-                        text("update-action", "Open release page");
-#else
-                        if (!ustate.target_asset_name.empty()) {
-                            desc += " Ready to download: " + ustate.target_asset_name;
-                        }
-                        text("update-action", "Update Now");
-#endif
-                        text("update-desc", desc);
-                        enabled("update-action", true);
-                        if (auto* prog = element("update-progress-row"))
-                            prog->SetProperty("display", "none");
-                        controls();
-                    } else if (ustate.status == pc::updater::Status::Downloading) {
-                        card->SetProperty("display", "block");
-                        text("update-title", "Downloading Update...");
-                        int pct = static_cast<int>(ustate.download_progress * 100.0f + 0.5f);
-                        text("update-desc", "Downloading " + ustate.target_asset_name + " (" +
-                                                std::to_string(pct) + "%)");
-                        text("update-action", "Downloading...");
-                        enabled("update-action", false);
-                        if (auto* prog = element("update-progress-row"))
-                            prog->SetProperty("display", "flex");
-                        if (auto* fill = element("update-progress-fill"))
-                            fill->SetProperty("width", std::to_string(pct) + "%");
-                        text("update-progress-text", std::to_string(pct) + "%");
-                    } else if (ustate.status == pc::updater::Status::Downloaded) {
-                        card->SetProperty("display", "block");
-                        text("update-title", "Update Ready!");
-                        text("update-desc", ustate.restart_supported ?
-                                                "Downloaded successfully. Click Restart to apply." :
-                                                ("Saved to: " + ustate.downloaded_path));
-                        text("update-action",
-                            ustate.restart_supported ? "Restart to apply" : "Open folder");
-                        enabled("update-action", true);
-                        if (auto* prog = element("update-progress-row"))
-                            prog->SetProperty("display", "none");
-                        controls();
-                    } else if (ustate.status == pc::updater::Status::Failed &&
-                               last_download_progress > 0.0f)
-                    {
-                        text("update-title", "Download Failed");
-                        text("update-desc", ustate.message);
-                        text("update-action", "Retry");
-                        enabled("update-action", true);
-                    } else if (ustate.status != pc::updater::Status::UpdateAvailable &&
-                               ustate.status != pc::updater::Status::Downloading &&
-                               ustate.status != pc::updater::Status::Downloaded)
-                    {
-                        card->SetProperty("display", "none");
-                    }
-                }
-                refresh_settings();
             }
             {
                 const uint32_t pending = pending_pipelines();
@@ -1541,8 +1412,7 @@ public:
             return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
                 "filter-mode", "custom-textures", "backend"};
         case 1:
-            return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale",
-                "port-check-update"};
+            return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale"};
         case 2:
             return {"unlock-all", "free-camera", "ucf", "rumble"};
         case 4:
@@ -1768,16 +1638,6 @@ public:
         slider("scale", prefs.scale * 100.0f);
         label("scale-val", std::to_string(int(prefs.scale * 100 + 0.5f)) + "%");
         label("menu-version", pc::get_app_version());
-        auto ustate = pc::updater::get_state();
-        if (ustate.status == pc::updater::Status::UpdateAvailable) {
-            label("port-update-status", "Update available: " + ustate.latest_release.tag_name);
-        } else if (ustate.status == pc::updater::Status::Checking) {
-            label("port-update-status", "Checking for updates...");
-        } else if (ustate.status == pc::updater::Status::Failed) {
-            label("port-update-status", "Check failed");
-        } else {
-            label("port-update-status", "Up to date (" + pc::get_app_version() + ")");
-        }
         refresh_bindings();
         quiet = false;
     }
@@ -2066,12 +1926,6 @@ public:
         else if (id == "scale") {
             prefs.scale = prefs.scale >= 1.5f ? 0.75f : prefs.scale + 0.25f;
             aurora::rmlui::set_ui_scale(prefs.scale);
-        } else if (id == "port-check-update") {
-            pc::updater::check_for_updates_async(true);
-            label("port-update-status", "Checking for updates...");
-            label("menu-status", "Checking for updates...");
-            lbAudioAx_80024030(SFX_CONFIRM);
-            return;
         } else
             return;
         pc_audio_set_volume(prefs.mute ? 0 : prefs.volume);

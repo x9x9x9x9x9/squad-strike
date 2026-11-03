@@ -182,11 +182,6 @@
                 <span id="scale-val" class="slider-value">100%</span>
               </div>
             </div>
-            <div class="row" data-desc="Up to date">
-              <span class="name">Check for updates<span id="port-update-status" class="detail">Up to date</span>
-              </span>
-              <button id="port-check-update" class="value action">Check now</button>
-            </div>
           </div>
           <div id="page-online" class="page">
             <div class="row" data-desc="Pick your own, like CHRS#123: 1–4 letters, #, then 1–3 digits. Changes apply to the next search.">

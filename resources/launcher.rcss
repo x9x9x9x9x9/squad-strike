@@ -249,34 +249,6 @@ button {
 .note { font-size: 14dp; color: #9da2bb; margin: 12dp 0 0; }
 .page .note { margin: 10dp 12dp 0; }
 
-/* The update notice, desktop only: a gold box over the disc panel. */
-#update-card {
-    box-sizing: border-box;
-    padding: 12dp 16dp;
-    margin-bottom: 14dp;
-    background-color: #000000c0;
-    border: 3dp #e0b030;
-    border-radius: 10dp;
-}
-.update-badge-row { display: flex; align-items: center; }
-.update-badge {
-    background-color: #ffcb00;
-    color: #141008;
-    font-size: 13dp;
-    font-weight: bold;
-    letter-spacing: 2dp;
-    padding: 1dp 8dp;
-    margin-right: 10dp;
-    transform: skewX(-12deg);
-}
-.update-tag { color: #ffcb00; font-size: 15dp; font-weight: bold; }
-.update-title { font-size: 19dp; font-weight: bold; color: #ffffff; margin: 4dp 0 2dp; }
-.update-desc { font-size: 13dp; color: #b8bccb; margin: 0; }
-.update-progress-row { display: flex; align-items: center; margin-top: 8dp; }
-.progress-bar-bg { flex: 1; height: 8dp; background-color: #1a1a2a; border-radius: 4dp; margin-right: 10dp; }
-.progress-bar-fill { height: 100%; background-color: #ffcb00; border-radius: 4dp; }
-.progress-text { font-size: 13dp; color: #ffcb00; width: 44dp; text-align: right; }
-.update-actions { display: flex; margin-top: 10dp; }
 button.mini {
     flex: 1;
     height: 34dp;
@@ -489,8 +461,7 @@ input.range sliderarrowdec, input.range sliderarrowinc { width: 0; height: 0; }
     #hints { display: none; }
     #disc-name { font-size: 24dp; }
     #disc-panel { padding: 12dp 18dp 12dp 22dp; }
-    .note, .update-desc { display: none; }
-    #update-card { margin-bottom: 8dp; }
+    .note { display: none; }
 }
 @media (max-width: 900dp) {
     body { padding: 12dp 12dp 4dp; }

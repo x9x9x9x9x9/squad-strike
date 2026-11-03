@@ -407,16 +407,14 @@ Preferences load_preferences(const std::filesystem::path& path) {
             float value;
             if (row >> value && std::isfinite(value) && value >= 0.75f && value <= 1.5f)
                 prefs.scale = value;
-        } else if (key == "check_updates" || key == "custom_textures" || key == "unlock_all" ||
-                   key == "frozen_stadium" || key == "free_camera" || key == "ucf" ||
-                   key == "reverb" || key == "squad_strike" || key == "stage_expansion" ||
-                   key == "sd_remix" || key == "show_ping" || key == "rumble")
+        } else if (key == "custom_textures" || key == "unlock_all" || key == "frozen_stadium" ||
+                   key == "free_camera" || key == "ucf" || key == "reverb" ||
+                   key == "squad_strike" || key == "stage_expansion" || key == "sd_remix" ||
+                   key == "show_ping" || key == "vibration")
         {
             int value;
             if (row >> value && (value == 0 || value == 1)) {
-                if (key == "check_updates")
-                    prefs.check_updates = value;
-                else if (key == "custom_textures")
+                if (key == "custom_textures")
                     prefs.custom_textures = value;
                 else if (key == "unlock_all")
                     prefs.unlock_all = value;
@@ -436,7 +434,7 @@ Preferences load_preferences(const std::filesystem::path& path) {
                     prefs.sd_remix = value;
                 else if (key == "show_ping")
                     prefs.show_ping = value;
-                else if (key == "rumble")
+                else if (key == "vibration")
                     prefs.rumble = value;
             }
         } else if (key == "hud_mode") {
@@ -472,18 +470,21 @@ bool save_preferences(
          << "render_scale " << prefs.render_scale << "\nvolume " << prefs.volume << "\nmsaa "
          << prefs.msaa << "\nanisotropy " << prefs.anisotropy << "\nwidescreen " << prefs.widescreen
          << "\nmute " << prefs.mute << "\nfps " << prefs.fps << "\nfilter_mode "
-         << prefs.filter_mode << "\nbackend " << prefs.backend << "\ncheck_updates "
-         << prefs.check_updates << "\ncustom_textures " << prefs.custom_textures << "\nunlock_all "
-         << prefs.unlock_all << "\nhud_mode " << prefs.hud_mode << "\nfrozen_stadium "
-         << prefs.frozen_stadium << "\nfree_camera " << prefs.free_camera << "\nucf " << prefs.ucf
-         << "\nmusic_volume " << prefs.music_volume << "\nsfx_volume " << prefs.sfx_volume
-         << "\ninstall_id " << std::hex << prefs.install_id << std::dec << '\n';
+         << prefs.filter_mode << "\nbackend " << prefs.backend << "\ncustom_textures "
+         << prefs.custom_textures << "\nunlock_all " << prefs.unlock_all << "\nhud_mode "
+         << prefs.hud_mode << "\nfrozen_stadium " << prefs.frozen_stadium << "\nfree_camera "
+         << prefs.free_camera << "\nucf " << prefs.ucf << "\nmusic_volume " << prefs.music_volume
+         << "\nsfx_volume " << prefs.sfx_volume << "\ninstall_id " << std::hex << prefs.install_id
+         << std::dec << '\n';
     text << "reverb " << prefs.reverb << '\n'
          << "squad_strike " << prefs.squad_strike << '\n'
          << "stage_expansion " << prefs.stage_expansion << '\n'
          << "sd_remix " << prefs.sd_remix << '\n'
-         << "show_ping " << prefs.show_ping << '\n'
-         << "rumble " << prefs.rumble << '\n'
+         << "show_ping " << prefs.show_ping
+         << '\n'
+         /* Not "rumble": that key held the old default (on); renaming it makes
+          * vibration start off for everyone. */
+         << "vibration " << prefs.rumble << '\n'
          << "menu_button " << prefs.menu_button << '\n'
          << "keys";
     for (int code : prefs.keys)

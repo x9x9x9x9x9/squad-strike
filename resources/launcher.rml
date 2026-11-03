@@ -20,25 +20,6 @@
         <button id="quit" class="plate" data-desc="Close Melee PC."><span>Quit</span></button>
       </div>
       <div id="side">
-        <div id="update-card" style="display: none;">
-          <div class="update-badge-row">
-            <span class="update-badge">NEW</span>
-            <span id="update-tag" class="update-tag">v0.1.8-beta</span>
-          </div>
-          <div id="update-title" class="update-title">Melee PC Update</div>
-          <p id="update-desc" class="update-desc">A newer version is available.</p>
-          <div id="update-progress-row" class="update-progress-row" style="display: none;">
-            <div class="progress-bar-bg">
-              <div id="update-progress-fill" class="progress-bar-fill" style="width: 0%;"></div>
-            </div>
-            <span id="update-progress-text" class="progress-text">0%</span>
-          </div>
-          <div class="update-actions">
-            <button id="update-action" class="mini primary" data-desc="Download the new version.">Update Now</button>
-            <button id="update-browser" class="mini" data-desc="Open the release notes in the browser.">View Release</button>
-            <button id="update-later" class="mini" data-desc="Hide this until the next start.">Later</button>
-          </div>
-        </div>
         <div id="disc-panel">
           <div class="side-label">Disc</div>
           <h2 id="disc-name">No disc selected</h2>
@@ -57,7 +38,7 @@
         <button id="tab-cheats" class="plate small" data-desc="Unlocks, stage hazards and controller fixes."><span>Gameplay</span></button>
         <button id="tab-controls" class="plate small" data-desc="The keyboard layout and controller setup."><span>Controls</span></button>
         <button id="tab-online" class="plate small" data-desc="Your player name, connect codes and input delay."><span>Online</span></button>
-        <button id="tab-launcher" class="plate small" data-desc="The size of these menus, updates and the community."><span>Launcher</span></button>
+        <button id="tab-launcher" class="plate small" data-desc="The size of these menus and the community."><span>Launcher</span></button>
         <button id="back" class="plate small back" data-desc="Back to the main menu."><span>Back</span></button>
       </div>
       <div id="settings-content">
@@ -115,8 +96,6 @@
         <div id="page-launcher" class="page">
           <div class="row" data-desc="The size of these menus."><span class="name">Interface size</span>
             <div class="slider-control"><input type="range" class="range" id="scale" min="75" max="150" step="25" value="100" /><span id="scale-val" class="slider-value">100%</span></div></div>
-          <div class="row" data-desc="Look for a new release on GitHub at each start."><span class="name">Check for updates</span><button id="check-updates" class="value">On</button></div>
-          <div class="row" id="check-row" data-desc="Look for a new release now."><span class="name">Updates <span id="check-status" class="detail">Melee-PC is up to date.</span></span><button id="check-now" class="value action">Check now</button></div>
           <div class="row" data-desc="Join the community Discord server in your browser."><span class="name">Discord community</span><button id="settings-discord" class="value action">Join Discord</button></div>
           <div class="row android-only" data-desc="Save recent startup and crash logs to attach to a bug report. No PC is needed."><span class="name">Diagnostics</span><button id="export-logs" class="value action">Export logs</button></div>
         </div>

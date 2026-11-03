@@ -46,14 +46,13 @@ struct Preferences {
     int filter_mode = 0;
     int backend = 0;
     bool mute = false, fps = false, reverb = true;
-    bool check_updates = true;
     bool custom_textures = true;
     bool unlock_all = false;
     int hud_mode = 0;
     bool frozen_stadium = false;
     bool free_camera = false;
     bool ucf = false;
-    bool rumble = true;           // controller vibration (SDL pads and the GC adapter)
+    bool rumble = false;          // controller vibration (SDL pads and the GC adapter)
     bool show_ping = true;        // online: "Ping: 34ms" in the top left of a match
     bool squad_strike = true;     // Squad Strike on VS character select
     bool stage_expansion = true;  // UnclePunch's Stage Expansion layouts

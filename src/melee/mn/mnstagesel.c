@@ -333,7 +333,6 @@ static HSD_JObj* frozen_root;    /* the copy of that pair */
 static HSD_JObj* frozen_tile;    /* the copy's Stadium half */
 static HSD_Text* frozen_text;
 static bool frozen_hover;
-static bool frozen_logged;
 static int name_ace; /* the ACE stage the name card was last made for */
 
 static bool frozen_shown(void)
@@ -378,11 +377,6 @@ static void frozen_place(HSD_GObj* gobj)
         frozen_text->pos_x = p.x - src->xC;
         frozen_text->pos_y = -(p.y - src->x10) + 0.2f;
         frozen_text->pos_z = p.z + 0.5f;
-    }
-    if (!frozen_logged && mnStageSel_804D6CA4 == 0) {
-        frozen_logged = true;
-        pc_log_line("sss: frozen tile at (%.1f, %.1f), lowest tile edge %.1f",
-                    p.x, p.y, lowest);
     }
 }
 
@@ -1180,7 +1174,6 @@ void mnStageSel_Scene_OnEnter(void* arg0)
     ace_hover = GrAce_None;
     name_ace = GrAce_None;
     frozen_hover = false;
-    frozen_logged = false;
     frozen_src = -1;
     frozen_root = frozen_tile = NULL;
     frozen_text = NULL;

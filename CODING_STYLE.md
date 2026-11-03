@@ -29,7 +29,7 @@ The `melee-pc` codebase is divided into two distinct architectural domains:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 2. PC Platform & Systems Layer (src/pc)                                     │
 │    - C11 (Platform glue: main, vi, gx, audio, os, touch, widescreen)        │
-│    - C++20 (Subsystems: launcher, updater, version, RmlUi integration)      │
+│    - C++20 (Subsystems: launcher, version, RmlUi integration)               │
 │    - Standard types (uint8_t, uint32_t, size_t, std::filesystem, etc.)     │
 │    - Cross-platform: Linux (X11/Wayland), Windows (MinGW), Android (arm64)  │
 └─────────────────────────────────────┬───────────────────────────────────────┘

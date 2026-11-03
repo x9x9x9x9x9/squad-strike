@@ -94,7 +94,7 @@ bool pc_is_ping_display_enabled(void) {
     return false;
 }
 bool pc_is_rumble_enabled(void) {
-    return true;
+    return false;
 }
 const char* pc_get_net_target(void) {
     return "";

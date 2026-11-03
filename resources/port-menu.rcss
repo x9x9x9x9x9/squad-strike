@@ -25,5 +25,5 @@ body.port-menu { background-color: #07071a38; decorator: none; }
     button.value { font-size: 15dp; padding: 0 18dp; white-space: nowrap; }
     /* The description bar carries these hints in a narrow window. */
     .row .detail { display: none; }
-    #pad-name, #port-update-status { display: block; }
+    #pad-name { display: block; }
 }

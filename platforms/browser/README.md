@@ -9,7 +9,7 @@ Status: desktop Chrome (tested on Apple Silicon; Chromium on Linux with Intel
 Arc graphics as well) holds 60 fps in every scene the tests reach,
 including four CPUs on Final Destination. It needs WebGPU; there is no WebGL
 fallback. Netplay is compiled in but refused at connect (browsers have no UDP),
-and HD texture packs, custom music, the desktop launcher and the updater are
+and HD texture packs, custom music and the desktop launcher are
 absent.
 
 ## Build and run

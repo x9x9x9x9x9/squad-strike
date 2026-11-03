@@ -123,10 +123,9 @@ static uint64_t s_combo_since[GC_SLOTS]; /* X+Y+Start held since (ns), 0 = not h
 static uint8_t s_hist[GC_SLOTS][GC_HIST][8]; /* buttons x2, sticks, triggers */
 static int s_hist_n[GC_SLOTS];
 static uint64_t s_motor_on_until[GC_SLOTS]; /* filter while now < this */
-/* Glitches seen (one-report spikes / flickers), with the motor on and off,
- * logged once a second while nonzero. */
+/* Glitches seen (one-report spikes / flickers), with the motor on and off
+ * (tools/test_gcadapter.c checks the detector with these). */
 static unsigned s_glitch[GC_SLOTS][2];
-static uint64_t s_glitch_logged_ns;
 
 /* Publish a complete report under a short copy-only lock. Device I/O and
  * parsing remain worker-owned; virtual pads are written only by the main thread. */
@@ -504,17 +503,6 @@ void pc_gcadapter_poll(void) {
         }
         publish_snapshot();
         update_rumble(last + 1, now);
-        if (now - s_glitch_logged_ns >= 1000000000ull) {
-            s_glitch_logged_ns = now;
-            for (int i = 0; i < GC_SLOTS; i++) {
-                if (s_glitch[i][0] != 0 || s_glitch[i][1] != 0) {
-                    pc_log_line("GC adapter: port %d one-report glitches in the last second: %u "
-                                "while rumbling (filtered), %u otherwise",
-                        i + 1, s_glitch[i][1], s_glitch[i][0]);
-                    s_glitch[i][0] = s_glitch[i][1] = 0;
-                }
-            }
-        }
     }
 }
 
