@@ -337,7 +337,10 @@ jobs:
   release:
     name: Publish release
     needs: [lint, tests, linux, windows, android, ios, macos, browser]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # A v* tag publishes that tag's release; every push to master refreshes
+    # the release named by VERSION, so the newest master build is always on
+    # the Releases page (no GitHub sign-in needed to download it).
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -354,17 +357,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           ls -lh artifacts
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="$(tr -d '[:space:]' < VERSION)"
+            # Move this version's release (and its tag) to the new build.
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              gh release delete "${tag}" --cleanup-tag --yes
+            fi
+          fi
           # A tag containing a hyphen (v0.1.0-beta) is a prerelease.
           prerelease=""
-          [[ "${GITHUB_REF_NAME}" == *-* ]] && prerelease="--prerelease"
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" artifacts/* --clobber
-            gh release edit "${GITHUB_REF_NAME}" \
+          [[ "${tag}" == *-* ]] && prerelease="--prerelease"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" artifacts/* --clobber
+            gh release edit "${tag}" \
               --notes-file .github/RELEASE_NOTES.md
           else
-            gh release create "${GITHUB_REF_NAME}" \
-              --title "${GITHUB_REF_NAME}" \
+            gh release create "${tag}" \
+              --target "${GITHUB_SHA}" \
+              --title "${tag}" \
               --notes-file .github/RELEASE_NOTES.md \
+              --latest \
               ${prerelease} \
               artifacts/*
           fi
