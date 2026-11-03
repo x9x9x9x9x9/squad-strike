@@ -723,10 +723,27 @@ static bool fn_80023ED4(const char* path, int vol, int arg2)
     return HSD_AudioPStreamStartChParam(path, vol, arg2);
 }
 
+#ifdef TARGET_PC
+/* The ACE stages' music (gr/grace.c), after the disc's 0x62 tracks: files
+ * the ace folder adds to the disc's audio/ (src/pc/sdremix.cpp). */
+static const char* ace_hps_files[] = {
+    "mcavern.hps",     "wahwareinc.hps",  "normalbattle.hps",
+    "cipherpeon.hps",  "battlemode1.hps",
+};
+#define HPS_ID_MAX (0x62 + (int) ARRAY_SIZE(ace_hps_files))
+#else
+#define HPS_ID_MAX 0x62
+#endif
+
 static inline const char* getHPSFile(int arg0)
 {
     if (arg0 < 0) {
         return NULL;
+#ifdef TARGET_PC
+    } else if (arg0 >= 0x62 && arg0 < HPS_ID_MAX) {
+        strcpy(&cur_hps_file[hps_stem_pos], ace_hps_files[arg0 - 0x62]);
+        return cur_hps_file;
+#endif
     } else if (arg0 >= 0x62) {
         return NULL;
     } else {
@@ -766,7 +783,7 @@ int lbAudioAx_80023F28(int arg0)
 {
     const char* filename;
 
-    if (arg0 < 0 || arg0 >= 0x62 || pc_net_resim()) {
+    if (arg0 < 0 || arg0 >= HPS_ID_MAX || pc_net_resim()) {
         return true;
     }
     if (!(filename = getHPSFile(arg0))) {

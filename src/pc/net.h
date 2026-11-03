@@ -89,6 +89,10 @@ bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
 #define PC_RULE_FROZEN_STADIUM 0x01u
 #define PC_RULE_SQUAD_STRIKE 0x02u
 #define PC_RULE_STAGE_EXPANSION 0x04u
+/* The ACE stages the host has (pc_ace_local_bits() << 3): Metal Cavern,
+ * WarioWare, Realgam Colosseum. Both peers need the files to play one. */
+#define PC_RULE_ACE_STAGE_SHIFT 3
+#define PC_RULE_ACE_STAGES 0x38u
 /* The host's PC_RULE_* flags while a session's RULES are in force. */
 bool pc_net_rule_flags(unsigned* flags);
 

@@ -76,6 +76,10 @@ class Starter(unittest.TestCase):
 #define CKind_Playable_Count 26
 #define St_Kind_Test 1
 #define St_Kind_Last 32
+#define GrAce_None 0
+#define GrAce_Count 4
+#define GRACE_STKIND 0x35
+int grAce_Pick;
 typedef int CharacterKind;
 typedef int StKind;
 typedef int GameModeState;
@@ -97,6 +101,9 @@ int main(void) {
  for(int i=0;i<4;++i) {assert(data.players[i].ckind==(24+i)%26);assert(data.players[i].slot_type==1);}
  const char* invalid[]={"","26","-1","2oops"};
  for(int n=0;n<4;++n) {setenv("MELEE_DEBUG_VS_FIGHTER_BASE",invalid[n],1);onEnterDebugVs(NULL);assert(data.players[0].ckind==CKind_Link);}
+ setenv("MELEE_DEBUG_VS_ACE","2",1);
+ onEnterDebugVs(NULL);
+ assert(data.rules.stkind==GRACE_STKIND && grAce_Pick==2);
 }
 '''
         with tempfile.TemporaryDirectory() as tmp:

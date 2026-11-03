@@ -12,6 +12,7 @@
 #include "gmresult.h"
 #include "gmvsmelee.h"
 #include "types.h"
+#include <melee/gr/grace.h>
 #include <melee/if/if_2FD9.h>
 #include <melee/lb/types.h>
 #include <melee/mn/types.h>
@@ -195,6 +196,15 @@ void onEnterDebugVs(GameModeState* state)
         int st = atoi(getenv("MELEE_DEBUG_VS_STAGE"));
         if (st > St_Kind_Test && st <= St_Kind_Last) {
             start->rules.stkind = (StKind) st;
+        }
+    }
+    /* MELEE_DEBUG_VS_ACE=1|2|3: the debug match on an ACE stage (Metal
+     * Cavern, WarioWare, Realgam Colosseum; gr/grace.h). */
+    if (getenv("MELEE_DEBUG_VS_ACE") != NULL) {
+        int k = atoi(getenv("MELEE_DEBUG_VS_ACE"));
+        if (k > GrAce_None && k < GrAce_Count) {
+            grAce_Pick = k;
+            start->rules.stkind = GRACE_STKIND;
         }
     }
     if (getenv("MELEE_DEBUG_VS") != NULL && strcmp(getenv("MELEE_DEBUG_VS"), "cpu") == 0) {

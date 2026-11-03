@@ -69,6 +69,9 @@
 #include "grtpurin.h"
 #include "grtsamus.h"
 #include "grtseak.h"
+#ifdef TARGET_PC
+#include "grace.h"
+#endif
 #include "grtyoshi.h"
 #include "grtzelda.h"
 #include "grvenom.h"
@@ -439,8 +442,25 @@ GXColor* Ground_801C06A4(void)
     return &x->xC8;
 }
 
+#ifdef TARGET_PC
+/* An ACE stage plays on the Sheik target stage's grkind (grace.h): its
+ * StageData stands in there while one is picked, the target stage's own
+ * otherwise. Both stage-load entry points take it, so the file preloaded
+ * from the stage select screen and the one loaded are the same. */
+static void Ground_SyncAceStage(GrKind grkind)
+{
+    if (grkind == Gr_Kind_TSeak) {
+        StageData* ace = grAce_StageData();
+        stage_datas[Gr_Kind_TSeak] = ace != NULL ? ace : &grTSk_StageData;
+    }
+}
+#endif
+
 void Ground_801C06B8(GrKind arg0)
 {
+#ifdef TARGET_PC
+    Ground_SyncAceStage(arg0);
+#endif
     if (stage_datas[arg0] == NULL) {
         return;
     }
@@ -464,6 +484,9 @@ void Ground_801C0754(StageIdPair* pair)
     StageData* stage;
     bool arg3;
     Ground_801BFFB0();
+#ifdef TARGET_PC
+    Ground_SyncAceStage(pair->grkind);
+#endif
     stage_info.grkind = pair->grkind;
     stage = stage_datas[pair->grkind];
     arg3 = (pair->stkind == St_Kind_Heal) ? false : true;
@@ -1379,6 +1402,16 @@ static bool Ground_801C24F8(StKind stkind, u32 arg1, s32* arg2)
     enum_t bgm = BGM_Undefined;
     bool result = false;
     int i;
+#ifdef TARGET_PC
+    /* An ACE stage's file lists its m-ex stage id, not GRACE_STKIND, and
+     * its music is ACE's (lbaudio_ax.c plays these ids from the ace
+     * folder). */
+    if (stkind == GRACE_STKIND && grAce_Current() != GrAce_None) {
+        stage_info.unk8C.b0 = false;
+        *arg2 = grAce_Bgm();
+        return false;
+    }
+#endif
     for (i = 0; i < stage_info.param->stage_param_count; i++) {
         phi_r30 = &phi_r30_0[i];
         if (phi_r30->stkind == stkind) {
@@ -1533,6 +1566,17 @@ static void panicMissingStageParam(StKind stkind, s32 count)
     }
 }
 
+#ifdef TARGET_PC
+/* An ACE stage's single row is its own, whatever stage id it names. */
+static inline bool Ground_StageParamMatches(StageParam* param, StKind stkind)
+{
+    return param->stkind == stkind ||
+           (stkind == GRACE_STKIND && grAce_Current() != GrAce_None);
+}
+#else
+#define Ground_StageParamMatches(param, stkind) ((param)->stkind == (stkind))
+#endif
+
 void Ground_801C28CC(s32* arg0, StKind stkind)
 {
     StageParam* param = DP(StageParam, stage_info.param->stage_params);
@@ -1540,7 +1584,7 @@ void Ground_801C28CC(s32* arg0, StKind stkind)
     ssize_t i;
 
     for (i = 0; i < count; i++) {
-        if (param->stkind == stkind) {
+        if (Ground_StageParamMatches(param, stkind)) {
             s32 j;
             for (j = 0; 35 > j; j++) {
                 arg0[j] = stage_info.param->x6A[j] * param->x1A[j];
@@ -1563,7 +1607,7 @@ float Ground_801C2AE8(StKind stkind)
     StageParam* phi_r5 = DP(StageParam, stage_info.param->stage_params);
     int i;
     for (i = 0; i < stage_info.param->stage_param_count; i++) {
-        if (phi_r5->stkind == stkind) {
+        if (Ground_StageParamMatches(phi_r5, stkind)) {
             return (0.01f * stage_info.param->x68) * (0.01f * phi_r5->x18);
         }
         phi_r5 += 1;

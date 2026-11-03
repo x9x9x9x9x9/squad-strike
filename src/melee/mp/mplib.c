@@ -28,6 +28,7 @@
 #include <melee/cm/types.h>
 #include <melee/db/db.h>
 #include <melee/ft/ftlib.h>
+#include <melee/gr/grace.h>
 #include <melee/gr/grdynamicattr.h>
 #include <melee/gr/ground.h>
 #include <melee/gr/stage.h>
@@ -809,6 +810,23 @@ static struct mpLib_803BF248_t mpLib_803BF248[0x47] = {
     { Gr_Kind_Figure2, &mpLib_803BF1A8 },
     { Gr_Kind_Figure3, &mpLib_803BF1F8 },
 };
+
+#ifdef TARGET_PC
+/* Realgam Colosseum (an ACE stage on the Sheik target stage's grkind, see
+ * gr/grace.h) uses Battlefield's collision materials, as in ACE. */
+static struct mpLib_803BF248_t_x4* (*mpLib_Materials(void))[20]
+{
+    if (stage_info.grkind == Gr_Kind_TSeak &&
+        grAce_Current() == GrAce_Colosseum)
+    {
+        return &mpLib_803BE758;
+    }
+    return mpLib_803BF248[stage_info.grkind].x4;
+}
+#define MPLIB_MATERIALS() mpLib_Materials()
+#else
+#define MPLIB_MATERIALS() mpLib_803BF248[stage_info.grkind].x4
+#endif
 
 extern DiscVec2 mpLib_803BF718[2];
 extern MapLine mpLib_803BF728;
@@ -4995,13 +5013,13 @@ bool mpGetSpeed(int line_id, Vec3* pos, Vec3* speed)
 
 float mpLib_800569EC(u32 unk)
 {
-    return (*mpLib_803BF248[stage_info.grkind].x4)[(u8) unk]->x0;
+    return (*MPLIB_MATERIALS())[(u8) unk]->x0;
 }
 
 int* mpLib_80056A1C(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x14[0];
     return entry->x4;
 }
@@ -5009,7 +5027,7 @@ int* mpLib_80056A1C(int id, int* out)
 int mpLib_80056A54(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x14[2];
     return entry->x14[1];
 }
@@ -5017,7 +5035,7 @@ int mpLib_80056A54(int id, int* out)
 int* mpLib_80056A8C(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x30[0];
     return entry->x20;
 }
@@ -5025,7 +5043,7 @@ int* mpLib_80056A8C(int id, int* out)
 int mpLib_80056AC4(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x30[2];
     return entry->x30[1];
 }
@@ -5033,7 +5051,7 @@ int mpLib_80056AC4(int id, int* out)
 int* mpLib_80056AFC(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x4C[0];
     return entry->x3C;
 }
@@ -5041,7 +5059,7 @@ int* mpLib_80056AFC(int id, int* out)
 int mpLib_80056B34(int id, int* out)
 {
     struct mpLib_803BF248_t_x4* entry =
-        (*mpLib_803BF248[stage_info.grkind].x4)[(u8) id];
+        (*MPLIB_MATERIALS())[(u8) id];
     *out = entry->x4C[2];
     return entry->x4C[1];
 }

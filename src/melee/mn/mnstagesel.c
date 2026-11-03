@@ -104,7 +104,14 @@ struct StageSelUserData {
 #include <melee/gm/gmonlinemode.h>
 #include <sysdolphin/baselib/sislib.h>
 #include "pc/pc.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <string.h>
+#include <melee/gr/grace.h>
 #include <melee/gr/grpstadium.h>
+#include <sysdolphin/baselib/dobj.h>
+#include <sysdolphin/baselib/mobj.h>
+#include <sysdolphin/baselib/tobj.h>
 
 /* A compact ranked list uses synchronized pads and makes both bans visible.
  * It does not depend on the archive's cursor geometry. */
@@ -327,6 +334,7 @@ static HSD_JObj* frozen_tile;    /* the copy's Stadium half */
 static HSD_Text* frozen_text;
 static bool frozen_hover;
 static bool frozen_logged;
+static int name_ace; /* the ACE stage the name card was last made for */
 
 static bool frozen_shown(void)
 {
@@ -443,6 +451,278 @@ static void frozen_create(void)
         HSD_SisLib_803A6B98(frozen_text, src->xC / font, 0.0f, "FROZEN");
     }
 }
+
+/* The ACE stages (gr/grace.h): a tile each, in the FROZEN tile's row next to
+ * it, showing ACE's own icon. Like the FROZEN tile, hovering one reports
+ * Stadium's cell (so a pick passes every check a normal pick does) and
+ * ace_hover says which ACE stage it is; the name and preview, which are
+ * Stadium's, are hidden meanwhile. The pick becomes grAce_Pick and the
+ * match's stage St_Kind 0x35 (GRACE_STKIND). */
+static HSD_JObj* ace_root[GrAce_Count];
+static HSD_JObj* ace_tile[GrAce_Count];
+static HSD_Text* ace_text[GrAce_Count];
+static int ace_hover; /* GrAceStage under the cursor, or GrAce_None */
+
+static bool ace_shown(int k)
+{
+    return ace_tile[k] != NULL && frozen_src >= 0 &&
+           mnStageSel_803F06D0[frozen_src].x8 >= 2;
+}
+
+static bool ace_hovered(void)
+{
+    return ace_hover != GrAce_None && ace_shown(ace_hover) &&
+           mnStageSel_804D6CAE == frozen_src;
+}
+
+/* An ACE .tex (MexManager's icon format): a 32-byte header -- "TEX\0",
+ * GXTexFmt, GXTlutFmt, then little-endian u32s: width, height, the image's
+ * offset and size, the palette's offset and size -- and the GX data as the
+ * GameCube reads it. */
+static bool ace_load_icon(int k, HSD_ImageDesc** out_desc, HSD_Tlut** out_tlut)
+{
+    char path[1024];
+    u8 hdr[32];
+    u32 w, h, img_off, img_size, pal_off, pal_size;
+    u8* img;
+    u8* pal = NULL;
+    HSD_ImageDesc* desc;
+    HSD_Tlut* tlut = NULL;
+    FILE* f;
+    long len;
+
+    if (pc_ace_dir()[0] == '\0' || grAce_IconFile(k) == NULL) {
+        return false;
+    }
+    snprintf(path, sizeof path, "%s/%s", pc_ace_dir(), grAce_IconFile(k));
+    f = fopen(path, "rb");
+    if (f == NULL) {
+        pc_log_line("sss: no ACE icon %s", path);
+        return false;
+    }
+    fseek(f, 0, SEEK_END);
+    len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (len < 32 || fread(hdr, 1, 32, f) != 32 || memcmp(hdr, "TEX", 4) != 0) {
+        fclose(f);
+        pc_log_line("sss: %s is not an ACE icon", path);
+        return false;
+    }
+#define LE32(p) ((u32) (p)[3] << 24 | (u32) (p)[2] << 16 | (u32) (p)[1] << 8 | (p)[0])
+    w = LE32(hdr + 8);
+    h = LE32(hdr + 12);
+    img_off = LE32(hdr + 16);
+    img_size = LE32(hdr + 20);
+    pal_off = LE32(hdr + 24);
+    pal_size = LE32(hdr + 28);
+#undef LE32
+    if (w == 0 || h == 0 || w > 1024 || h > 1024 ||
+        (long) img_off + (long) img_size > len ||
+        (long) pal_off + (long) pal_size > len || pal_size > 0x2000)
+    {
+        fclose(f);
+        pc_log_line("sss: %s has a bad header", path);
+        return false;
+    }
+    img = HSD_MemAlloc(img_size);
+    if (pal_size != 0) {
+        pal = HSD_MemAlloc(pal_size);
+    }
+    if (fseek(f, img_off, SEEK_SET) != 0 || fread(img, 1, img_size, f) != img_size ||
+        (pal != NULL && (fseek(f, pal_off, SEEK_SET) != 0 ||
+                         fread(pal, 1, pal_size, f) != pal_size)))
+    {
+        fclose(f);
+        pc_log_line("sss: could not read %s", path);
+        return false;
+    }
+    fclose(f);
+
+    desc = HSD_MemAlloc(sizeof(*desc));
+    memset(desc, 0, sizeof(*desc));
+    DP_SET(desc->image_ptr, img);
+    desc->width = (u16) w;
+    desc->height = (u16) h;
+    desc->format = (GXTexFmt) hdr[4];
+    desc->mipmap = 0;
+    desc->minLOD = 0.0f;
+    desc->maxLOD = 0.0f;
+    if (pal != NULL) {
+        tlut = HSD_MemAlloc(sizeof(*tlut));
+        memset(tlut, 0, sizeof(*tlut));
+        tlut->lut = pal;
+        tlut->fmt = (GXTlutFmt) hdr[5];
+        tlut->n_entries = (u16) (pal_size / 2);
+    }
+    *out_desc = desc;
+    *out_tlut = tlut;
+    return true;
+}
+
+/* Put the icon on every animated texture of the tile (the stage picture:
+ * the grid's tiles pick theirs by animation frame), whose animations
+ * frozen-style creation has already stopped. */
+static int ace_retexture(HSD_JObj* jobj, HSD_ImageDesc* desc, HSD_Tlut* tlut,
+                         bool siblings)
+{
+    int n = 0;
+    for (; jobj != NULL; jobj = siblings ? jobj->next : NULL) {
+        HSD_DObj* dobj = HSD_JObjGetDObj(jobj);
+        for (; dobj != NULL; dobj = dobj->next) {
+            HSD_TObj* tobj = dobj->mobj != NULL ? dobj->mobj->tobj : NULL;
+            for (; tobj != NULL; tobj = tobj->next) {
+                if (tobj->imagetbl == NULL) {
+                    continue;
+                }
+                tobj->imagedesc = desc;
+                tobj->tlut = tlut;
+                tobj->tlut_no = (u8) -1;
+                n++;
+            }
+        }
+        n += ace_retexture(HSD_JObjGetChild(jobj), desc, tlut, true);
+        if (!siblings) {
+            break;
+        }
+    }
+    return n;
+}
+
+/* Every frame, after frozen_place: the FROZEN tile's row, one tile further
+ * out each -- to the right of it, or to its left when the grid's right edge
+ * is too close. */
+static void ace_place(HSD_GObj* gobj)
+{
+    struct StageListInfo* src;
+    Vec3 base, p;
+    f32 right = -1e9f, step, dir;
+    int k, slot, i;
+
+    (void) gobj;
+    if (frozen_src < 0 || frozen_root == NULL) {
+        return;
+    }
+    src = &mnStageSel_803F06D0[frozen_src];
+    for (i = 0; i < 0x1E; i++) {
+        if (mnStageSel_803F06D0[i].x8 == 0 || mnStageSel_803F06D0[i].x0 == NULL) {
+            continue;
+        }
+        lb_8000B1CC(mnStageSel_803F06D0[i].x0, NULL, &p);
+        if (p.x + mnStageSel_803F06D0[i].xC > right) {
+            right = p.x + mnStageSel_803F06D0[i].xC;
+        }
+    }
+    HSD_JObjGetTranslation(frozen_root, &base);
+    lb_8000B1CC(frozen_tile, NULL, &p);
+    step = 2.0f * src->xC + 0.6f;
+    dir = (p.x + 3.0f * step + src->xC <= right + 0.5f) ? 1.0f : -1.0f;
+
+    /* Reading order stays Metal Cavern, WarioWare, Colosseum either way. */
+    slot = 0;
+    for (k = GrAce_None + 1; k < GrAce_Count; k++) {
+        slot += ace_root[k] != NULL;
+    }
+    i = 0;
+    for (k = GrAce_None + 1; k < GrAce_Count; k++) {
+        Vec3 at = base;
+        if (ace_root[k] == NULL) {
+            continue;
+        }
+        i++; /* 1..slot, left to right */
+        at.x += (dir > 0.0f ? i : -(slot + 1 - i)) * step;
+        HSD_JObjSetTranslate(ace_root[k], &at);
+        if (ace_text[k] != NULL) {
+            Vec3 t;
+            lb_8000B1CC(ace_tile[k], NULL, &t);
+            ace_text[k]->pos_x = t.x - src->xC;
+            ace_text[k]->pos_y = -(t.y - src->x10) + 0.2f;
+            ace_text[k]->pos_z = t.z + 0.5f;
+        }
+    }
+}
+
+static void ace_create(void)
+{
+    struct StageListInfo* src;
+    HSD_GObj* gobj;
+    int k, canvas, made = 0;
+
+    for (k = 0; k < GrAce_Count; k++) {
+        ace_root[k] = ace_tile[k] = NULL;
+        ace_text[k] = NULL;
+    }
+    ace_hover = GrAce_None;
+    /* Placed in the FROZEN tile's row: no row without it. */
+    if (frozen_root == NULL || pc_rank_session_active()) {
+        return;
+    }
+    src = &mnStageSel_803F06D0[frozen_src];
+    for (k = GrAce_None + 1; k < GrAce_Count; k++) {
+        HSD_ImageDesc* desc;
+        HSD_Tlut* tlut;
+        HSD_JObj* other;
+        int n;
+
+        if (!grAce_Offered(k)) {
+            continue;
+        }
+        if (!ace_load_icon(k, &desc, &tlut)) {
+            desc = NULL; /* still offered: Stadium's picture, named below */
+        }
+        make_stage_icon(&ace_root[k]);
+        if (frozen_src & 1) {
+            ace_tile[k] = ace_root[k]->child;
+            other = ace_root[k]->child->next;
+        } else {
+            ace_tile[k] = ace_root[k]->child->next;
+            other = ace_root[k]->child;
+        }
+        HSD_JObjSetFlags(other, JOBJ_HIDDEN);
+        HSD_JObjReqAnimAllByFlags(ace_tile[k], 0x10, src->x9 / 2 + 2);
+        HSD_JObjAnimAll(ace_root[k]);
+        HSD_ForeachAnim(ace_root[k], JOBJ_TYPE, TOBJ_MASK, HSD_AObjStopAnim,
+                        AOBJ_ARG_AOV, NULL);
+        HSD_JObjSetTranslateX(ace_root[k], 100.0F); /* placed from the next frame */
+        n = desc != NULL ? ace_retexture(ace_tile[k], desc, tlut, false) : 0;
+        pc_log_line("sss: ACE tile %s (%d textures from %s)", grAce_Name(k), n,
+                    desc != NULL ? grAce_IconFile(k) : "nothing");
+
+        /* A canvas each, as the FROZEN tag has: the tag's backing box only
+         * showed for a canvas's first text. */
+        canvas = HSD_SisLib_803A611C(0, mnStageSel_804D6C9C, 7, 8, 0x80, 4, 0x84, 0);
+        ace_text[k] = HSD_SisLib_803A6754(0, canvas);
+        if (ace_text[k] != NULL) {
+            HSD_Text* t = ace_text[k];
+            f32 font = 0.035f;
+            t->pos_x = 100.0f;
+            t->box_size_x = 2.0f * src->xC / font;
+            t->box_size_y = 30.0f;
+            t->font_size.x = font;
+            t->font_size.y = font;
+            t->default_fitting = 1;
+            t->default_alignment = 1;
+            t->default_kerning = 1;
+            t->x4C = 1;
+            t->bg_color.r = 0x10;
+            t->bg_color.g = 0x30;
+            t->bg_color.b = 0x60;
+            t->bg_color.a = 0xC0;
+            char tag[32];
+            size_t i;
+            for (i = 0; grAce_Name(k)[i] != '\0' && i + 1 < sizeof tag; i++) {
+                tag[i] = (char) toupper((unsigned char) grAce_Name(k)[i]);
+            }
+            tag[i] = '\0';
+            HSD_SisLib_803A6B98(t, src->xC / font, 0.0f, tag);
+        }
+        made++;
+    }
+    if (made != 0) {
+        /* After frozen_place (same priority, created later). */
+        gobj = GObj_Create(4, 5, 0x80);
+        HSD_GObj_SetupProc(gobj, ace_place, 3);
+    }
+}
 #endif
 
 void mnStageSel_80259C28(void)
@@ -495,6 +775,10 @@ skip_randomize:
     if (grStadium_FrozenPick) {
         pc_log_line("sss: Pokemon Stadium picked frozen");
     }
+    grAce_Pick = ace_hovered() ? ace_hover : GrAce_None;
+    if (grAce_Pick != GrAce_None) {
+        pc_log_line("sss: ACE stage %s picked", grAce_Name(grAce_Pick));
+    }
 #endif
 
     gobj = GObj_Create(HSD_GOBJ_CLASS_FIGHTER, 5, 0x80);
@@ -533,7 +817,12 @@ void fn_80259D84(HSD_GObj* gobj)
         if (mnStageSel_804D6CAF == 0) {
             mnStageSel_80259C28();
         }
-        if (temp_r31->x0 != mnStageSel_804D6CAE) {
+        if (temp_r31->x0 != mnStageSel_804D6CAE
+#ifdef TARGET_PC
+            || name_ace != (ace_hovered() ? ace_hover : GrAce_None)
+#endif
+        )
+        {
             if (temp_r31->x0 < 0x1E &&
                 mnStageSel_803F06D0[temp_r31->x0].x8 >= 2)
             {
@@ -588,6 +877,14 @@ void mnStageSel_80259ED8(int id)
     temp_r3_2->x0 = id;
     temp_r3_2->x4 = 0;
     temp_r3_2->x2 = 0;
+#ifdef TARGET_PC
+    /* An ACE tile has no name card of its own (its tag says it). */
+    name_ace = ace_hovered() ? ace_hover : GrAce_None;
+    if (name_ace != GrAce_None) {
+        HSD_JObjSetFlagsAll(jobj, JOBJ_HIDDEN);
+        return;
+    }
+#endif
     if (id < 0x1E && mnStageSel_803F06D0[id].x8 >= 2) {
         do_anim(jobj, 20.0F * mnStageSel_803F06D0[id].x9);
     }
@@ -614,6 +911,11 @@ void fn_8025A090(HSD_GObj* gobj)
     {
         var_r3 = 0x1E;
     }
+#ifdef TARGET_PC
+    if (ace_hovered()) {
+        var_r3 = 0x1E; /* no preview: it would be Stadium's */
+    }
+#endif
     if (temp_r30->x0 != var_r3) {
         temp_r30->x0 = var_r3;
         temp_r30->x4 = 0;
@@ -684,7 +986,27 @@ void fn_8025A310(HSD_GObj* gobj)
         {
             mnStageSel_804D6CAE = frozen_src;
             frozen_hover = true;
+            ace_hover = GrAce_None;
             return;
+        }
+    }
+    {
+        int k;
+        for (k = GrAce_None + 1; k < GrAce_Count; k++) {
+            struct StageListInfo* src;
+            if (!ace_shown(k)) {
+                continue;
+            }
+            src = &mnStageSel_803F06D0[frozen_src];
+            lb_8000B1CC(ace_tile[k], NULL, &sp10);
+            if (sp10.x - src->xC < sp1C.x && sp10.x + src->xC > sp1C.x &&
+                sp10.y - src->x10 < sp1C.y && sp10.y + src->x10 > sp1C.y)
+            {
+                mnStageSel_804D6CAE = frozen_src;
+                frozen_hover = false;
+                ace_hover = k;
+                return;
+            }
         }
     }
 #endif
@@ -700,6 +1022,7 @@ void fn_8025A310(HSD_GObj* gobj)
                     mnStageSel_804D6CAE = i;
 #ifdef TARGET_PC
                     frozen_hover = false;
+                    ace_hover = GrAce_None;
 #endif
                     return;
                 }
@@ -716,7 +1039,13 @@ void fn_8025A560(HSD_GObj* gobj)
     temp_r30 = HSD_GObjGetUserData(gobj);
 
 #ifdef TARGET_PC
-    if (frozen_hover && frozen_shown() && mnStageSel_804D6CAE == frozen_src) {
+    if (ace_hovered()) {
+        lb_8000B1CC(ace_tile[ace_hover], NULL, &sp10);
+        HSD_JObjSetTranslateX(jobj, sp10.x);
+        HSD_JObjSetTranslateY(jobj, sp10.y);
+        HSD_JObjSetScaleX(jobj, mnStageSel_803F06D0[frozen_src].x14);
+        HSD_JObjSetScaleY(jobj, mnStageSel_803F06D0[frozen_src].x18);
+    } else if (frozen_hover && frozen_shown() && mnStageSel_804D6CAE == frozen_src) {
         lb_8000B1CC(frozen_tile, NULL, &sp10);
         HSD_JObjSetTranslateX(jobj, sp10.x);
         HSD_JObjSetTranslateY(jobj, sp10.y);
@@ -847,6 +1176,9 @@ void mnStageSel_Scene_OnEnter(void* arg0)
 {
 #ifdef TARGET_PC
     grStadium_FrozenPick = false; /* until the FROZEN tile is picked */
+    grAce_Pick = GrAce_None;      /* until an ACE tile is */
+    ace_hover = GrAce_None;
+    name_ace = GrAce_None;
     frozen_hover = false;
     frozen_logged = false;
     frozen_src = -1;
@@ -1210,6 +1542,7 @@ void mnStageSel_Scene_OnEnter(void* arg0)
         if (pc_rank_session_active()) rankStageCreate();
         else if (netStageSel_Active()) netStageSel_TextCreate();
         frozen_create();
+        ace_create();
 #endif
     }
 }
@@ -1320,6 +1653,13 @@ void mnStageSel_Scene_OnFrame(void)
         sss_data->vs.start.rules.stkind =
             mnStageSel_803F06D0[mnStageSel_804D6CAE].stkind;
 #ifdef TARGET_PC
+        if (grAce_Pick != GrAce_None &&
+            mnStageSel_803F06D0[mnStageSel_804D6CAE].stkind == St_Kind_PStadium)
+        {
+            sss_data->vs.start.rules.stkind = GRACE_STKIND;
+        } else {
+            grAce_Pick = GrAce_None;
+        }
         if (netStageSel_Active())
             pc_log_line("sss: resolved cell %d stage %d", mnStageSel_804D6CAE,
                         sss_data->vs.start.rules.stkind);
@@ -1335,6 +1675,15 @@ void mnStageSel_Scene_OnExit(UNUSED void* exit_data)
     if (net_text) { HSD_SisLib_803A5CC4(net_text); net_text = NULL; }
     if (frozen_text) { HSD_SisLib_803A5CC4(frozen_text); frozen_text = NULL; }
     frozen_root = frozen_tile = NULL;
+    {
+        int k;
+        for (k = 0; k < GrAce_Count; k++) {
+            if (ace_text[k]) { HSD_SisLib_803A5CC4(ace_text[k]); }
+            ace_text[k] = NULL;
+            ace_root[k] = ace_tile[k] = NULL;
+        }
+        ace_hover = GrAce_None;
+    }
 #endif
     if (mnStageSel_804D6C94 != NULL) {
         lbArchive_80016EFC(mnStageSel_804D6C94);

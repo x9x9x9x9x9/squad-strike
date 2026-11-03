@@ -108,6 +108,16 @@ bool pc_is_stage_expansion_enabled(void);
 void pc_sdremix_init(void);
 bool pc_sdremix_wanted(void);
 bool pc_sdremix_active(void);
+/* ACE stages (src/melee/gr/grace.h): their files, from an "ace" folder,
+ * overlaid on the disc at boot by pc_sdremix_init. pc_ace_has_file: that
+ * file was found ("GrWw.dat"); pc_ace_dir: the folder ("" if none). */
+bool pc_ace_has_file(const char* name);
+const char* pc_ace_dir(void);
+/* Whether ACE stage 1..3 (GrAceStage) may be picked: offline, when its file
+ * is in the folder; in netplay, when the host's RULES say so
+ * (PC_RULE_ACE_STAGE). pc_ace_local_bits: those bits for this install. */
+bool pc_ace_stage_offered(int stage);
+unsigned pc_ace_local_bits(void);
 bool pc_is_free_camera_enabled(void);
 bool pc_is_ucf_enabled(void);
 int pc_get_hud_mode(void);

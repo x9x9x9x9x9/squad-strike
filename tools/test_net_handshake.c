@@ -97,6 +97,9 @@ bool pc_is_squad_strike_enabled(void) {
 bool pc_is_stage_expansion_enabled(void) {
     return false;
 }
+unsigned pc_ace_local_bits(void) {
+    return 0;
+}
 bool pc_sdremix_active(void) {
     return false;
 }

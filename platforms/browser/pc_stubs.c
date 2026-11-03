@@ -50,6 +50,21 @@ bool pc_is_squad_strike_enabled(void) {
 bool pc_sdremix_active(void) {
     return false;
 }
+/* No ace folder in the browser: the ACE stages are not offered. */
+bool pc_ace_has_file(const char* name) {
+    (void)name;
+    return false;
+}
+const char* pc_ace_dir(void) {
+    return "";
+}
+bool pc_ace_stage_offered(int stage) {
+    (void)stage;
+    return false;
+}
+unsigned pc_ace_local_bits(void) {
+    return 0;
+}
 bool pc_is_stage_expansion_enabled(void) {
     const char* env = getenv("MELEE_STAGE_EXPANSION");
     return env == NULL || env[0] != '0';

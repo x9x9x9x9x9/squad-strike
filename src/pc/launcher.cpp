@@ -2407,6 +2407,16 @@ extern "C" bool pc_is_stage_expansion_enabled(void) {
     static const char* env = std::getenv("MELEE_STAGE_EXPANSION");
     return env ? env[0] != '0' : prefs.stage_expansion;
 }
+extern "C" bool pc_ace_stage_offered(int stage) {
+    if (stage < 1 || stage > 3) {
+        return false;
+    }
+    unsigned flags;
+    if (pc_net_rule_flags(&flags)) {
+        return (flags >> (PC_RULE_ACE_STAGE_SHIFT + stage - 1) & 1) != 0;
+    }
+    return (pc_ace_local_bits() >> (stage - 1) & 1) != 0;
+}
 extern "C" bool pc_sdremix_wanted(void) {
     static const char* env = std::getenv("MELEE_SD_REMIX");
     return env ? env[0] != '0' : prefs.sd_remix;
