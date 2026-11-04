@@ -3060,6 +3060,8 @@ TEST_F(GXFifoTest, TexCoordGen_Identity) {
 
 TEST_F(GXFifoTest, ChanAmbColor_Color0) {
   GXColor amb = {64, 128, 192, 255};
+  // GX_COLORn keeps the alpha byte GX_ALPHAn last wrote (as the SDK does).
+  GXSetChanAmbColor(GX_ALPHA0, GXColor{0, 0, 0, 7});
   GXSetChanAmbColor(GX_COLOR0, amb);
   auto bytes = capture_fifo();
 
@@ -3070,11 +3072,13 @@ TEST_F(GXFifoTest, ChanAmbColor_Color0) {
   EXPECT_NEAR(state.ambColor[0], 64.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.ambColor[1], 128.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.ambColor[2], 192.f / 255.f, 1.f / 255.f);
-  EXPECT_NEAR(state.ambColor[3], 255.f / 255.f, 1.f / 255.f);
+  EXPECT_NEAR(state.ambColor[3], 7.f / 255.f, 1.f / 255.f);
 }
 
 TEST_F(GXFifoTest, ChanMatColor_Color0) {
   GXColor mat = {255, 0, 128, 64};
+  // GX_COLORn keeps the alpha byte GX_ALPHAn last wrote (as the SDK does).
+  GXSetChanMatColor(GX_ALPHA0, GXColor{0, 0, 0, 7});
   GXSetChanMatColor(GX_COLOR0, mat);
   auto bytes = capture_fifo();
 
@@ -3085,11 +3089,13 @@ TEST_F(GXFifoTest, ChanMatColor_Color0) {
   EXPECT_NEAR(state.matColor[0], 255.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.matColor[1], 0.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.matColor[2], 128.f / 255.f, 1.f / 255.f);
-  EXPECT_NEAR(state.matColor[3], 64.f / 255.f, 1.f / 255.f);
+  EXPECT_NEAR(state.matColor[3], 7.f / 255.f, 1.f / 255.f);
 }
 
 TEST_F(GXFifoTest, ChanAmbColor_Color1) {
   GXColor amb = {10, 20, 30, 40};
+  // GX_COLORn keeps the alpha byte GX_ALPHAn last wrote (as the SDK does).
+  GXSetChanAmbColor(GX_ALPHA1, GXColor{0, 0, 0, 7});
   GXSetChanAmbColor(GX_COLOR1, amb);
   auto bytes = capture_fifo();
 
@@ -3100,11 +3106,13 @@ TEST_F(GXFifoTest, ChanAmbColor_Color1) {
   EXPECT_NEAR(state.ambColor[0], 10.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.ambColor[1], 20.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.ambColor[2], 30.f / 255.f, 1.f / 255.f);
-  EXPECT_NEAR(state.ambColor[3], 40.f / 255.f, 1.f / 255.f);
+  EXPECT_NEAR(state.ambColor[3], 7.f / 255.f, 1.f / 255.f);
 }
 
 TEST_F(GXFifoTest, ChanMatColor_Color1) {
   GXColor mat = {100, 150, 200, 250};
+  // GX_COLORn keeps the alpha byte GX_ALPHAn last wrote (as the SDK does).
+  GXSetChanMatColor(GX_ALPHA1, GXColor{0, 0, 0, 7});
   GXSetChanMatColor(GX_COLOR1, mat);
   auto bytes = capture_fifo();
 
@@ -3115,7 +3123,7 @@ TEST_F(GXFifoTest, ChanMatColor_Color1) {
   EXPECT_NEAR(state.matColor[0], 100.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.matColor[1], 150.f / 255.f, 1.f / 255.f);
   EXPECT_NEAR(state.matColor[2], 200.f / 255.f, 1.f / 255.f);
-  EXPECT_NEAR(state.matColor[3], 250.f / 255.f, 1.f / 255.f);
+  EXPECT_NEAR(state.matColor[3], 7.f / 255.f, 1.f / 255.f);
 }
 
 TEST_F(GXFifoTest, ChanAmbColor_Color0A0_Compound) {

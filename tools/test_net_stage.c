@@ -26,14 +26,14 @@ bool gm_IsStageUnlocked(u16 bit) {
     return ace_on && bit >= GRACE_SWITCH_BIT(1);
 }
 const char* grAce_Name(int stage) {
-    (void) stage;
+    (void)stage;
     return "ace";
 }
 bool pc_rank_session_active(void) {
     return false;
 }
 void pc_log_line(const char* fmt, ...) {
-    (void) fmt;
+    (void)fmt;
 }
 int main(void) {
     for (seed = 0; seed < 10000; ++seed) {
@@ -50,7 +50,7 @@ int main(void) {
     /* With the ACE switches on, Random lands on them too, as Pokemon
      * Stadium's cell plus grAce_Pick, the same way on both peers. */
     ace_on = true;
-    int ace_hits[GrAce_Count] = { 0 };
+    int ace_hits[GrAce_Count] = {0};
     for (seed = 0; seed < 10000; ++seed) {
         mnStageSel_804D6CAE = 29;
         int pick = netStageSel_Random();

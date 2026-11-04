@@ -93,6 +93,12 @@ const char* pc_get_net_code(void) {
 bool pc_is_ping_display_enabled(void) {
     return false;
 }
+bool pc_is_magnifier_enabled(void) {
+    return true;
+}
+bool pc_take_stage_list_reset(void) {
+    return false;
+}
 bool pc_is_rumble_enabled(void) {
     return false;
 }
