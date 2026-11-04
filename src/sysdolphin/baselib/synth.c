@@ -1,5 +1,8 @@
 #include <stdlib.h>
 #include "synth.h"
+#ifdef TARGET_PC
+#include "pc/pc.h"
+#endif
 
 #include <math.h> // IWYU pragma: keep
 #include <placeholder.h>
@@ -173,6 +176,13 @@ static void HSD_SynthSFXHeaderLoadCallback(int result, uintptr_t length,
                 warned_bank = bankID;
                 OSReport("Can't load SFX file; bank(id=%d) buffer overflow.\n", bankID);
             }
+            /* In the log too (OSReport is stdout, which RUN-AND-LOG.bat
+             * does not keep): a bank that does not fit plays nothing. */
+            pc_log_line("audio: sound file #%d does not fit bank %d (needs %u bytes, %d free); "
+                        "its sounds will be silent",
+                        HSD_Synth_804C2A60[0].entrynum, bankID,
+                        (unsigned) hsd_SynthSFXLoadBuf[1].v,
+                        (int) (hsd_SynthSFXBankHead[bankID + 1] - hsd_SynthSFXBank[bankID]));
         }
 #else
         HSD_ASSERTREPORT(0xCD,
@@ -246,6 +256,12 @@ int HSD_SynthSFXLoad(const char* filename, int bankID, void (*cb)(int, int),
                      "invalid bankID = %d; filename = %s\n", bankID, filename);
 
     entrynum = DVDConvertPathToEntrynum(filename);
+#ifdef TARGET_PC
+    /* Which sound banks a match loads, so a log can say why one fighter or
+     * stage is silent on one machine. */
+    pc_log_line("audio: bank %d loads %s (file #%d)%s", bankID, filename, entrynum,
+                entrynum < 0 ? " -- NOT ON THE DISC, its sounds will be silent" : "");
+#endif
 
     while (HSD_Synth_804D772C >= 6) {
     }
