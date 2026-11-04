@@ -140,6 +140,11 @@
               </span>
               <button id="rumble" class="value">On</button>
             </div>
+            <div class="row" data-desc="The results screen after a match. Off goes straight back to character select. Online, the host's setting is used.">
+              <span class="name">Post match results screen<span class="detail">The results screen after a match. Off goes straight back to character select. Online, the host's setting is used.</span>
+              </span>
+              <button id="results-screen" class="value">On</button>
+            </div>
           </div>
           <div id="page-audio" class="page">
             <div class="row" data-desc="Left/right or drag to adjust.">

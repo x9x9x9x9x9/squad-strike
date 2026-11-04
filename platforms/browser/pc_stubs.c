@@ -96,6 +96,9 @@ bool pc_is_ping_display_enabled(void) {
 bool pc_is_magnifier_enabled(void) {
     return true;
 }
+bool pc_is_results_screen_enabled(void) {
+    return true;
+}
 bool pc_take_stage_list_reset(void) {
     return false;
 }

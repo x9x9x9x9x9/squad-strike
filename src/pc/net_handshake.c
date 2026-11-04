@@ -238,7 +238,8 @@ static void rules_capture(Rules* ru) {
         (uint8_t)((pc_is_frozen_stadium_enabled() ? PC_RULE_FROZEN_STADIUM : 0) |
                   (pc_is_squad_strike_enabled() ? PC_RULE_SQUAD_STRIKE : 0) |
                   (pc_is_stage_expansion_enabled() ? PC_RULE_STAGE_EXPANSION : 0) |
-                  ((pc_ace_local_bits() << PC_RULE_ACE_STAGE_SHIFT) & PC_RULE_ACE_STAGES));
+                  ((pc_ace_local_bits() << PC_RULE_ACE_STAGE_SHIFT) & PC_RULE_ACE_STAGES) |
+                  (pc_is_results_screen_enabled() ? 0 : PC_RULE_NO_RESULTS));
 }
 
 static void rules_apply(const Rules* ru, bool from_peer) {

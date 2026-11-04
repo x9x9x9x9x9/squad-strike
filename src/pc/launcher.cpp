@@ -331,7 +331,7 @@ class Launcher final : public Rml::EventListener {
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
-            return {"unlock-all", "free-camera", "ucf", "rumble"};
+            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         case 5:
@@ -589,6 +589,7 @@ class Launcher final : public Rml::EventListener {
         text("stage-expansion", prefs.stage_expansion ? "On" : "Off");
         text("sd-remix", prefs.sd_remix ? "On" : "Off");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
+        text("results-screen", prefs.results_screen ? "On" : "Off");
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("rumble", prefs.rumble ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -808,6 +809,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("magnifier")->Focus();
+        } else if (id == "results-screen") {
+            prefs.results_screen = !prefs.results_screen;
+            save();
+            refresh_settings();
+            element("results-screen")->Focus();
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
             save();
@@ -1420,7 +1426,7 @@ public:
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale"};
         case 2:
-            return {"unlock-all", "free-camera", "ucf", "rumble"};
+            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping"};
         default: {
@@ -1629,6 +1635,7 @@ public:
                           prefs.sd_remix                        ? "On (after restart)" :
                                                                   "Off (after restart)");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
+        label("results-screen", prefs.results_screen ? "On" : "Off");
         label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         label("rumble", prefs.rumble ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -1889,6 +1896,8 @@ public:
             prefs.hud_mode = (prefs.hud_mode + 1) % 2;
         } else if (id == "magnifier") {
             prefs.magnifier = !prefs.magnifier;
+        } else if (id == "results-screen") {
+            prefs.results_screen = !prefs.results_screen;
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
         } else if (id == "squad-strike") {
@@ -2338,6 +2347,16 @@ extern "C" bool pc_is_ucf_enabled(void) {
 /* The off-screen magnifying glass: drawn or not. Display only (the bubble's
  * state, which off-screen damage reads, keeps updating), so it is a local
  * choice even in netplay. */
+/* The results screen after a match. Online it is the host's choice (RULES),
+ * since both peers leave the scene together. */
+extern "C" bool pc_is_results_screen_enabled(void) {
+    unsigned flags;
+    if (pc_net_rule_flags(&flags)) {
+        return (flags & PC_RULE_NO_RESULTS) == 0;
+    }
+    static const char* env = std::getenv("MELEE_RESULTS_SCREEN");
+    return env ? env[0] != '0' : prefs.results_screen;
+}
 extern "C" bool pc_is_magnifier_enabled(void) {
     static const char* env = std::getenv("MELEE_MAGNIFIER");
     return env ? env[0] != '0' : prefs.magnifier;

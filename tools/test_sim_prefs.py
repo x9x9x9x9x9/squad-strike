@@ -22,6 +22,7 @@ PINNED = {
     "pc_is_frozen_stadium_enabled": "RULES (pc_net_rules)",
     "pc_is_squad_strike_enabled": "RULES (pc_net_rules)",
     "pc_is_stage_expansion_enabled": "RULES (pc_net_rules)",
+    "pc_is_results_screen_enabled": "RULES (pc_net_rules)",
 }
 PRESENTATION = {
     "pc_get_hud_mode": "widescreen HUD placement (ifall.c)",

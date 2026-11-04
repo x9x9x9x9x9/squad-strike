@@ -102,6 +102,8 @@ bool pc_is_squad_strike_enabled(void);
 bool pc_is_ping_display_enabled(void);
 /* Whether the off-screen magnifying glass is drawn (display only). */
 bool pc_is_magnifier_enabled(void);
+/* Whether the results screen follows a match (online: the host's RULES). */
+bool pc_is_results_screen_enabled(void);
 /* Controller vibration on/off (launcher / F1 Gameplay page). */
 bool pc_is_rumble_enabled(void);
 bool pc_is_stage_expansion_enabled(void);

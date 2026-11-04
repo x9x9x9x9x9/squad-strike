@@ -1,4 +1,8 @@
 #include "gmresult.h"
+#ifdef TARGET_PC
+#include "gmscene.h"
+#include "pc/pc.h"
+#endif
 
 #include "types.h"
 #include <melee/lb/lb_013B.h>
@@ -1745,6 +1749,14 @@ static inline void gmResultReportModelGObj(void)
     HSD_ASSERT(0x6A2, 0);
 }
 
+#ifdef TARGET_PC
+static void gmResult_SkipProc(HSD_GObj* gobj)
+{
+    (void) gobj;
+    gm_801A4B60();
+}
+#endif
+
 void gm_Scene_Results_OnEnter(void* arg0_)
 {
     ResultsMatchInfo* arg0 = arg0_;
@@ -1760,6 +1772,25 @@ void gm_Scene_Results_OnEnter(void* arg0_)
 
     PAD_STACK(36);
 
+#ifdef TARGET_PC
+    /* "Post match results screen" off: leave at once. The mode's results
+     * exit (gmVsMelee_ExitResults: KO counts, records, unlocks) still runs
+     * when the scene ends, so only the screen itself is skipped. Online the
+     * setting is the host's (RULES), so both peers leave together. */
+    if (!pc_is_results_screen_enabled()) {
+        HSD_GObj* skip;
+        memzero(&lbl_8046DBE8, sizeof(lbl_8046DBE8));
+        /* From the first tick: the scene loop clears an end request made
+         * before it starts. */
+        skip = GObj_Create(0xE, 0xF, 0);
+        if (skip != NULL) {
+            HSD_GObj_SetupProc(skip, gmResult_SkipProc, 0);
+        } else {
+            gm_801A4B60();
+        }
+        return;
+    }
+#endif
     memzero(&lbl_8046DBE8, sizeof(lbl_8046DBE8));
     lbl_8046DBE8.x1 = 0;
     lbl_8046DBE8.x0_0 = false;

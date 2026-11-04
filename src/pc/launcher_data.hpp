@@ -49,7 +49,8 @@ struct Preferences {
     bool custom_textures = true;
     bool unlock_all = false;
     int hud_mode = 0;
-    bool magnifier = true;  // the off-screen magnifying glass (off suits widescreen)
+    bool magnifier = true;       // the off-screen magnifying glass (off suits widescreen)
+    bool results_screen = true;  // the results screen after a match
     bool frozen_stadium = false;
     bool free_camera = false;
     bool ucf = false;

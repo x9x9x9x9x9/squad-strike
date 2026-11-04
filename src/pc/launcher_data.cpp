@@ -410,7 +410,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
         } else if (key == "custom_textures" || key == "unlock_all" || key == "frozen_stadium" ||
                    key == "free_camera" || key == "ucf" || key == "reverb" ||
                    key == "squad_strike" || key == "stage_expansion" || key == "sd_remix" ||
-                   key == "show_ping" || key == "vibration" || key == "magnifier")
+                   key == "show_ping" || key == "vibration" || key == "magnifier" ||
+                   key == "results_screen")
         {
             int value;
             if (row >> value && (value == 0 || value == 1)) {
@@ -438,6 +439,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
                     prefs.rumble = value;
                 else if (key == "magnifier")
                     prefs.magnifier = value;
+                else if (key == "results_screen")
+                    prefs.results_screen = value;
             }
         } else if (key == "hud_mode") {
             int value;
@@ -492,6 +495,7 @@ bool save_preferences(
          << "menu_button " << prefs.menu_button << '\n'
          << "stage_list " << prefs.stage_list << '\n'
          << "magnifier " << prefs.magnifier << '\n'
+         << "results_screen " << prefs.results_screen << '\n'
          << "keys";
     for (int code : prefs.keys)
         text << ' ' << code;
