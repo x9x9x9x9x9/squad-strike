@@ -73,6 +73,11 @@
               </span>
               <button id="hud-mode" class="value">Classic (4:3)</button>
             </div>
+            <div class="row" data-desc="The bubble that shows a fighter off the edge of the screen. Off suits widescreen.">
+              <span class="name">Magnifying glass<span class="detail">The bubble that shows a fighter off the edge of the screen. Off suits widescreen.</span>
+              </span>
+              <button id="magnifier" class="value">On</button>
+            </div>
             <div class="row" data-desc="Anti-aliasing RESTART">
               <span class="name">Anti-aliasing <span class="badge">RESTART</span>
               </span>

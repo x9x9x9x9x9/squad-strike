@@ -138,6 +138,44 @@ void AuroraGetWindowSize(u32* w, u32* h) {
 void AuroraSetPresentationAspect(float aspect) {}
 void AuroraSetViewportPolicy(AuroraViewportPolicy policy) {}
 
+/* The bubble's own draw (ifMagnify_802FB8C0), with the "Magnifying glass"
+ * setting on and off. */
+static bool magnifier_on = true;
+static int bubble_draws, arrows, arrows_cleared;
+bool pc_is_magnifier_enabled(void) {
+    return magnifier_on;
+}
+void HSD_GObj_JObjCallback(HSD_GObj* obj, intptr_t code) {
+    ++bubble_draws;
+}
+void un_802FD928(u8 slot, u8 kind, GXColor* color) {
+    ++arrows;
+}
+void un_802FD9D8(u8 slot) {
+    ++arrows_cleared;
+}
+Gm_PKind Player_GetPlayerSlotType(s32 slot) {
+    return Gm_PKind_Human;
+}
+int Player_GetTeam(int slot) {
+    return 0;
+}
+bool gm_8016B168(void) {
+    return false;
+}
+u32 gm_80160854(u8 a, u8 b, u8 c, u8 d) {
+    return 0;
+}
+GXColor gm_80160968(u32 i) {
+    return background;
+}
+void HSD_JObjSetMtxDirtySub(HSD_JObj* jobj) {}
+bool ftLib_GetScreenPos(HSD_GObj* obj, S32Vec2* pos) {
+    pos->x = -200; /* off the left edge */
+    pos->y = 240;
+    return true;
+}
+
 int main(void) {
     image.width = image.height = 64;
     ifMagnify_804A1DE0.player[0].idesc = &image;
@@ -160,5 +198,27 @@ int main(void) {
     ifMagnify_802FBBDC(&camera_gobj, 0);
     assert(copies == 0 && draws == 0);
     assert(!ifMagnify_804A1DE0.player[0].state.is_offscreen);
+
+    {
+        static HSD_GObj bubble_gobj, bubble_root;
+        static HSD_JObj bubble_jobj, root_jobj;
+        ifMagnifyPlayer* player = &ifMagnify_804A1DE0.player[0];
+        controller.state.hud_enabled = 1;
+        bubble_gobj.user_data = player;
+        bubble_root.hsd_obj = &root_jobj;
+        player->jobj = &bubble_jobj;
+        player->gobj = &bubble_root;
+        player->state.is_offscreen = 1;
+        ifMagnify_802FB8C0(&bubble_gobj, 0);
+        assert(bubble_draws == 1 && player->state.edge == 2);
+        /* Off: nothing drawn, but the edge (which fighter.c reads) and the
+         * off-screen state still update. */
+        magnifier_on = false;
+        bubble_draws = arrows = 0;
+        player->state.edge = 0;
+        ifMagnify_802FB8C0(&bubble_gobj, 0);
+        assert(bubble_draws == 0 && arrows == 0 && arrows_cleared > 0);
+        assert(player->state.edge == 2 && player->state.is_offscreen);
+    }
     puts("PASS: magnifier fills its texture and clears its full scratch viewport at every aspect");
 }

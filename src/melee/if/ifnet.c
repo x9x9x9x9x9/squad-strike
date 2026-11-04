@@ -86,8 +86,9 @@ static void ifNet_Think(HSD_GObj* gobj)
     /* "Ping: 34ms", Slippi-style: the round trip to the opponent, with the
      * link-quality marks and a desync warning. The launcher / F1 Online
      * page's "Ping display" turns it off; the desync warning stays, since
-     * a desynced match is no longer a match. MELEE_NET_DEBUG adds the input
-     * delay and the rollback count. */
+     * a desynced match is no longer a match. MELEE_NET_HUD_DEBUG adds the
+     * input delay and the rollback count (not MELEE_NET_DEBUG, which
+     * RUN-AND-LOG.bat sets for its log: the HUD stays "Ping: 34ms" there). */
     char line[160], debug[48] = "", ping_text[16];
     bool show = pc_is_ping_display_enabled();
     ping = ifNet_SmoothPing(ping);
@@ -121,7 +122,7 @@ void ifNet_Create(void)
     ifNet.text = NULL;
     ifNet.gobj = NULL;
     if (!pc_net_stats(&ping, &delay, &rollbacks)) return;
-    const char* debug = getenv("MELEE_NET_DEBUG");
+    const char* debug = getenv("MELEE_NET_HUD_DEBUG");
     ifNet.debug = debug && debug[0] && strcmp(debug, "0");
     ifNet.line[0] = ifNet.chat[0] = 0;
     ifNet.window_start = pc_monotonic_ns() / 1000000u;

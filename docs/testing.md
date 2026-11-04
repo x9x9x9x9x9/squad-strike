@@ -45,7 +45,7 @@ SDL_VIDEO_DRIVER=wayland python3 tools/net_test.py --scenes --minutes 2
 Use the display backend appropriate to your session. Run live tests sequentially;
 competing game instances and builds affect pacing. The scene test requires both
 peers to enter CSS, SSS, VS, Results, CSS, SSS and VS at matching frame numbers.
-`MELEE_NET_DEBUG=1` adds XFB wait timing and rollback HUD detail.
+`MELEE_NET_DEBUG=1` adds XFB wait timing to the log; `MELEE_NET_HUD_DEBUG=1` adds the input delay and rollback count to the ping HUD.
 Physical button-to-photon comparison still requires hardware measurement.
 
 ## Smoke tests

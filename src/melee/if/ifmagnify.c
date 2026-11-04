@@ -33,6 +33,7 @@
 #ifdef TARGET_PC
 #include "pc/widescreen.h"
 #include "pc/net.h"
+#include "pc/pc.h"
 #endif
 
 static HSD_WObjDesc ifMagnify_803F97C0 = { 0, { 0.0F, 0.0F, 300.0F }, 0 };
@@ -218,6 +219,15 @@ void ifMagnify_802FB8C0(HSD_GObj* gobj, intptr_t code)
             translate.z = 0.0f;
             HSD_JObjSetTranslate(player->gobj->hsd_obj, &translate);
 
+#ifdef TARGET_PC
+            /* "Magnifying glass" off: the bubble and its name-tag arrow are
+             * not drawn. Everything above still runs, so the edge and the
+             * off-screen state the simulation reads stay as they were. */
+            if (!pc_is_magnifier_enabled()) {
+                un_802FD9D8((u8) slot);
+                return;
+            }
+#endif
             HSD_GObj_JObjCallback(gobj, code);
             if ((player->state.edge == 4) || (player->state.edge == 2)) {
                 ifMagnify_GetPlayerColor(&color, slot);

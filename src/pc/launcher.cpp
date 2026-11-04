@@ -326,8 +326,8 @@ class Launcher final : public Rml::EventListener {
     std::vector<std::string> page_focus() const {
         switch (tab) {
         case 0:
-            return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
-                "filter-mode", "fps", "custom-textures", "backend", "performance"};
+            return {"display", "sync", "resolution", "aspect", "hud-mode", "magnifier", "aa",
+                "filter", "filter-mode", "fps", "custom-textures", "backend", "performance"};
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
@@ -583,6 +583,7 @@ class Launcher final : public Rml::EventListener {
         text("filter-mode", filter_name(prefs.filter_mode));
         text("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         text("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
+        text("magnifier", prefs.magnifier ? "On" : "Off");
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         text("squad-strike", prefs.squad_strike ? "On" : "Off");
         text("stage-expansion", prefs.stage_expansion ? "On" : "Off");
@@ -802,6 +803,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("hud-mode")->Focus();
+        } else if (id == "magnifier") {
+            prefs.magnifier = !prefs.magnifier;
+            save();
+            refresh_settings();
+            element("magnifier")->Focus();
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
             save();
@@ -1409,8 +1415,8 @@ public:
     std::vector<std::string> page_focus() const {
         switch (tab) {
         case 0:
-            return {"display", "sync", "resolution", "aspect", "hud-mode", "aa", "filter",
-                "filter-mode", "custom-textures", "backend"};
+            return {"display", "sync", "resolution", "aspect", "hud-mode", "magnifier", "aa",
+                "filter", "filter-mode", "custom-textures", "backend"};
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale"};
         case 2:
@@ -1614,6 +1620,7 @@ public:
         label("filter-mode", filter_name(prefs.filter_mode));
         label("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         label("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
+        label("magnifier", prefs.magnifier ? "On" : "Off");
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         label("squad-strike", prefs.squad_strike ? "On" : "Off");
         label("stage-expansion", prefs.stage_expansion ? "On" : "Off");
@@ -1880,6 +1887,8 @@ public:
             pc_textures_reload();
         } else if (id == "hud-mode") {
             prefs.hud_mode = (prefs.hud_mode + 1) % 2;
+        } else if (id == "magnifier") {
+            prefs.magnifier = !prefs.magnifier;
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
         } else if (id == "squad-strike") {
@@ -2325,6 +2334,13 @@ extern "C" bool pc_is_ucf_enabled(void) {
     }
     static const char* env = std::getenv("MELEE_UCF");
     return env ? env[0] != '0' : prefs.ucf;
+}
+/* The off-screen magnifying glass: drawn or not. Display only (the bubble's
+ * state, which off-screen damage reads, keeps updating), so it is a local
+ * choice even in netplay. */
+extern "C" bool pc_is_magnifier_enabled(void) {
+    static const char* env = std::getenv("MELEE_MAGNIFIER");
+    return env ? env[0] != '0' : prefs.magnifier;
 }
 extern "C" int pc_get_hud_mode(void) {
     return prefs.hud_mode;

@@ -174,14 +174,27 @@ void GXSetChanAmbColor(GXChannelID id, GXColor color) {
   u32 reg = 0;
   u32 colIdx;
 
+  // As the SDK does: GX_COLORn writes the register's RGB and keeps its
+  // alpha byte, which belongs to GX_ALPHAn (and the reverse below); only
+  // GX_COLORnAn writes all four. Callers cache the two halves separately
+  // (HSD_SetupChannel), so overwriting the alpha here left GX_ALPHA0 with
+  // COLOR0's alpha: Warlock / Falcon Punch's rim light lit the whole body.
   switch (id) {
   case GX_COLOR0:
+    reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
+          (static_cast<u32>(color.b) << 8) | (__gx->ambColor[0] & 0xFF);
+    colIdx = 0;
+    break;
   case GX_COLOR0A0:
     reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
           (static_cast<u32>(color.b) << 8) | static_cast<u32>(color.a);
     colIdx = 0;
     break;
   case GX_COLOR1:
+    reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
+          (static_cast<u32>(color.b) << 8) | (__gx->ambColor[1] & 0xFF);
+    colIdx = 1;
+    break;
   case GX_COLOR1A1:
     reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
           (static_cast<u32>(color.b) << 8) | static_cast<u32>(color.a);
@@ -208,14 +221,23 @@ void GXSetChanMatColor(GXChannelID id, GXColor color) {
   u32 reg = 0;
   u32 colIdx;
 
+  // The same RGB / alpha split as GXSetChanAmbColor.
   switch (id) {
   case GX_COLOR0:
+    reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
+          (static_cast<u32>(color.b) << 8) | (__gx->matColor[0] & 0xFF);
+    colIdx = 0;
+    break;
   case GX_COLOR0A0:
     reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
           (static_cast<u32>(color.b) << 8) | static_cast<u32>(color.a);
     colIdx = 0;
     break;
   case GX_COLOR1:
+    reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
+          (static_cast<u32>(color.b) << 8) | (__gx->matColor[1] & 0xFF);
+    colIdx = 1;
+    break;
   case GX_COLOR1A1:
     reg = (static_cast<u32>(color.r) << 24) | (static_cast<u32>(color.g) << 16) |
           (static_cast<u32>(color.b) << 8) | static_cast<u32>(color.a);
