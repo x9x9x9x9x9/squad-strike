@@ -226,10 +226,15 @@ static void netStageSel_TextCreate(void)
  * cooldown table, neither of which is in sync at this point (the peer's
  * pick lands on a different frame on each side). Draw from the seed
  * instead, over the stages the synced random-stage switches allow. */
+static int ace_random_count(int* out);
+static int pstadium_cell(void);
+
 static int netStageSel_Random(void)
 {
-    int allowed[NUM_STAGES];
+    int allowed[NUM_STAGES + GrAce_Count];
     int n = 0;
+    int ace[GrAce_Count];
+    int m, k;
     /* NUM_STAGES is 29 and the table holds 30: the last entry is the RANDOM
      * button, not a stage (StageListInfo table above, stkind 0). The bound
      * already excludes it; the stkind test says so out loud, because a
@@ -241,11 +246,85 @@ static int netStageSel_Random(void)
             allowed[n++] = i;
         }
     }
+    /* The ACE stages whose Random Stage switch is on (stage_mask, synced in
+     * RULES; which are offered is the host's say, also synced): entries
+     * past the cells, -1 - stage. */
+    m = ace_random_count(ace);
+    for (k = 0; k < m; k++) {
+        allowed[n++] = -1 - ace[k];
+    }
+    grAce_Pick = GrAce_None;
     if (n == 0) {
         return 0;
     }
     u32 r = netStageSel_Mix() * 22695477u + 1u;
-    return allowed[(r >> 8) % (u32) n];
+    int pick = allowed[(r >> 8) % (u32) n];
+    if (pick < 0 && pstadium_cell() >= 0) {
+        grAce_Pick = -1 - pick;
+        pc_log_line("sss: random ACE stage %s", grAce_Name(grAce_Pick));
+        return pstadium_cell();
+    }
+    return pick < 0 ? allowed[0] : pick;
+}
+
+/* The ACE stages "Random" may land on: offered here, their Random Stage
+ * switch on (GRACE_SWITCH_BIT), not in a ranked session (no ACE tiles
+ * there). Writes them to out and returns how many. */
+static int ace_random_count(int* out)
+{
+    int k, m = 0;
+    if (pc_rank_session_active() || pstadium_cell() < 0) {
+        return 0;
+    }
+    for (k = GrAce_None + 1; k < GrAce_Count; k++) {
+        if (grAce_Offered(k) &&
+            gm_IsStageUnlocked((u16) GRACE_SWITCH_BIT(k)))
+        {
+            out[m++] = k;
+        }
+    }
+    return m;
+}
+
+/// Pokemon Stadium's cell, which an ACE pick reports (as its tile does).
+static int pstadium_cell(void)
+{
+    int i;
+    for (i = 0; i < NUM_STAGES; i++) {
+        if (mnStageSel_803F06D0[i].stkind == St_Kind_PStadium) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* "Random" offline: the disc's roll (cooldowns and all) over the disc
+ * stages, or, by the count of switches on, one of the ACE stages, which then
+ * becomes ace_random. */
+static int ace_random; /* GrAceStage the last offline Random landed on */
+static int mnStageSel_RandomWithAce(void)
+{
+    int ace[GrAce_Count];
+    int m = ace_random_count(ace);
+    int n = 0, i;
+
+    ace_random = GrAce_None;
+    for (i = 0; i < NUM_STAGES; i++) {
+        if (mnStageSel_803F06D0[i].stkind != 0 &&
+            (u8) gm_80164330(mnStageSel_803F06D0[i].xA))
+        {
+            n++;
+        }
+    }
+    if (m != 0) {
+        int r = HSD_Randi(n + m);
+        if (r >= n) {
+            ace_random = ace[r - n];
+            pc_log_line("sss: random ACE stage %s", grAce_Name(ace_random));
+            return pstadium_cell();
+        }
+    }
+    return mnStageSel_802599EC();
 }
 #endif
 
@@ -275,6 +354,23 @@ int mnStageSel_802599EC(void)
         }
     }
     if (i == NUM_STAGES) {
+#ifdef TARGET_PC
+        /* With only ACE switches on (or none offered), no disc stage passes
+         * and the loop below would never end: Battlefield. */
+        for (i = 0; i < NUM_STAGES; i++) {
+            if ((u8) gm_80164330(mnStageSel_803F06D0[i].xA)) {
+                break;
+            }
+        }
+        if (i == NUM_STAGES) {
+            for (i = 0; i < NUM_STAGES; i++) {
+                if (mnStageSel_803F06D0[i].stkind == St_Kind_Battle) {
+                    return i;
+                }
+            }
+            return 0;
+        }
+#endif
         for (i = 0; i < NUM_STAGES; i++) {
             mnStageSel_803F06D0[i].x4 = 0;
         }
@@ -760,8 +856,10 @@ void mnStageSel_80259C28(void)
          * the live RNG's cooldown table differs per machine. */
         goto skip_randomize;
     }
-#endif
+    mnStageSel_804D6CAE = mnStageSel_RandomWithAce();
+#else
     mnStageSel_804D6CAE = mnStageSel_802599EC();
+#endif
 skip_randomize:
 #ifdef TARGET_PC
     grStadium_FrozenPick = frozen_hover && frozen_shown() &&
@@ -770,6 +868,11 @@ skip_randomize:
         pc_log_line("sss: Pokemon Stadium picked frozen");
     }
     grAce_Pick = ace_hovered() ? ace_hover : GrAce_None;
+    if (ace_random != GrAce_None) {
+        grAce_Pick = ace_random;
+        grStadium_FrozenPick = false;
+        ace_random = GrAce_None;
+    }
     if (grAce_Pick != GrAce_None) {
         pc_log_line("sss: ACE stage %s picked", grAce_Name(grAce_Pick));
     }

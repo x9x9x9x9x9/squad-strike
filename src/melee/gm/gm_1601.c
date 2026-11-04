@@ -2376,15 +2376,15 @@ u16 gm_801641CC(u8 arg0)
 void gm_801641E4(u8 stage, u8 enable)
 {
     if (enable) {
-        gmMainLib_GetGamePrefs()->stage_mask |= 1 << stage;
+        gmMainLib_GetGamePrefs()->stage_mask |= 1u << stage;
     } else {
-        gmMainLib_GetGamePrefs()->stage_mask &= ~(1 << stage);
+        gmMainLib_GetGamePrefs()->stage_mask &= ~(1u << stage);
     }
 }
 
 bool gm_IsStageUnlocked(u16 stkind)
 {
-    if ((1 << stkind) & gmMainLib_GetGamePrefs()->stage_mask) {
+    if ((1u << stkind) & gmMainLib_GetGamePrefs()->stage_mask) {
         return true;
     }
     return false;

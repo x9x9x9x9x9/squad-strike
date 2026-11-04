@@ -169,8 +169,9 @@ void gmVsMelee_EnterCss(GameModeState* state, VsModeData* vs,
 
 #ifdef TARGET_PC
 /* VS Melee, and LAN / Direct online (gmonlinemode.c, onEnterLobby: the host's
- * rules are what the match is played under), start on 4 stocks instead of the
- * 2-minute timer, once per launch: changes made after that stay, and are
+ * rules are what the match is played under), start on 4 stocks with an
+ * 8-minute stock match time limit instead of the 2-minute timer, once per
+ * launch: changes made after that stay, and are
  * saved as usual. MELEE_DEFAULT_STOCK=0 keeps the saved rules. */
 void gmVsMelee_DefaultStockOnce(void)
 {
@@ -184,6 +185,7 @@ void gmVsMelee_DefaultStockOnce(void)
         GameRules* rules = gmMainLib_GetGameRules();
         rules->mode = Mode_Stock;
         rules->stock_count = 4;
+        rules->stock_time_limit = 8;
     }
 }
 #endif

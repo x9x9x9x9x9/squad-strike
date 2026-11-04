@@ -20,7 +20,21 @@
 #include <sysdolphin/baselib/memory.h>
 #include <sysdolphin/baselib/sislib.h>
 
-#define NUM_STAGES 29
+/* The disc's 29 stages; on PC the three ACE stages (gr/grace.h) follow, at
+ * the bottom of the right column, each on its own stage_mask bit
+ * (GRACE_SWITCH_BIT). The right column then has 17 rows, so the rows are
+ * spaced a little closer to fit the same height. */
+#define NUM_DISC_STAGES 29
+#ifdef TARGET_PC
+#include <melee/gr/grace.h>
+#define NUM_STAGES (NUM_DISC_STAGES + GrAce_Count - 1)
+#else
+#define NUM_STAGES NUM_DISC_STAGES
+#endif
+/// First right-column index, and the left column's length.
+#define SW_COL 15
+#define SW_LAST (NUM_STAGES - 1)
+#define SW_RIGHT_ROWS (NUM_STAGES - SW_COL)
 
 typedef struct MnStageSwData {
     u8 x0;
@@ -47,10 +61,14 @@ static u8 mnStageSw_803ED4C4[NUM_STAGES] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
     0x0B, 0x0A, 0x18, 0x1A, 0x1C, 0x0C, 0x0D, 0x0E, 0x0F, 0x10,
     0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x19, 0x1B,
+#ifdef TARGET_PC
+    GRACE_SWITCH_BIT(GrAce_MetalCavern), GRACE_SWITCH_BIT(GrAce_WarioWare),
+    GRACE_SWITCH_BIT(GrAce_Colosseum),
+#endif
 };
 
 /// Stage switch icon indices
-static u8 mnStageSw_stageIcons[NUM_STAGES] = {
+static u8 mnStageSw_stageIcons[NUM_DISC_STAGES] = {
     0x08, 0x09, 0x11, 0x0A, 0x0C, 0x06, 0x0B, 0x07, 0x0E, 0x0D,
     0x1D, 0x17, 0x0F, 0x10, 0x12, 0x13, 0x14, 0x15, 0x1A, 0x1B,
     0x1C, 0x16, 0x18, 0x1F, 0x20, 0x21, 0x22, 0x23, 0x24,
@@ -74,6 +92,34 @@ extern StaticModelDesc MenMainCursorSs_Top;
 /* 236998 */ static void fn_80236998(HSD_GObj* gobj);
 /* 236CBC */ static HSD_GObj* mnStageSw_80236CBC(s8 arg0);
 
+/// Whether the switch with this stage_mask bit can be set: its stage is
+/// unlocked (an ACE stage: offered, grAce_Offered).
+static bool sw_avail(u8 id)
+{
+#ifdef TARGET_PC
+    if (id >= NUM_DISC_STAGES) {
+        return grAce_Offered(id - GRACE_SWITCH_BIT(0));
+    }
+#endif
+    return gm_80164430(gm_801641CC(id)) != 0;
+}
+
+/// The row of a menu index within its column.
+static inline u8 sw_row(u8 idx)
+{
+    return idx < SW_COL ? idx : idx - SW_COL;
+}
+
+/// The distance between rows: the model's, closer when the right column is
+/// longer than the model's 15.
+static f32 sw_step(f32 model_step)
+{
+    if (SW_RIGHT_ROWS > SW_COL) {
+        return model_step * (f32) (SW_COL - 1) / (f32) (SW_RIGHT_ROWS - 1);
+    }
+    return model_step;
+}
+
 /// Sync stage toggle states from user data to unlock system.
 /// For each stage, if it's unlocked, set its enable state from user_data[i+2].
 /// Stack padding required to match original frame size.
@@ -87,7 +133,7 @@ static void mnStageSw_8023593C(HSD_GObj* gobj)
 
     for (i = 0; i < NUM_STAGES; i++) {
         p = mnStageSw_803ED4C4 + (u8) i;
-        if (gm_80164430(gm_801641CC(*p)) != 0) {
+        if (sw_avail(*p)) {
             gm_801641E4(mnStageSw_803ED4C4[i], user_data[i + 2]);
         }
     }
@@ -98,46 +144,54 @@ static void mnStageSw_802359C8(MnStageSwData* data)
     f32 start_y;
     HSD_Text* text;
     f32 delta_y;
-    f32 step_y;
+    f32 font;
     s32 i;
+    u8 id;
 
     start_y = -1.6f + HSD_JObjGetTranslationY(data->x2C);
-    step_y = HSD_JObjGetTranslationY(data->x2C);
-    delta_y = HSD_JObjGetTranslationY(data->x30);
-    (void) delta_y;
-    delta_y -= step_y;
+    delta_y = sw_step(HSD_JObjGetTranslationY(data->x30) -
+                      HSD_JObjGetTranslationY(data->x2C));
+    font = 0.0521f * sw_step(1.0f);
 
-    for (i = 0; i < 15; i++) {
-        text = HSD_SisLib_803A5ACC(
-            0, mn_804D6BB5, 1.0f + HSD_JObjGetTranslationX(data->x2C),
-            -((delta_y * (f32) i) + start_y), 17.5f, 160.0f, 300.0f);
-        data->x40[i] = text;
-        text->font_size.x = 0.0521f;
-        text->font_size.y = 0.0521f;
-        text->default_alignment = 2;
-        text->default_fitting = 1;
-        if (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) i])) != 0) {
-            HSD_SisLib_803A6368(text,
-                                mnStageSw_stageIcons[mnStageSw_803ED4C4[i]]);
-        } else {
-            HSD_SisLib_803A6368(text, 0x25);
+    for (i = 0; i < NUM_STAGES; i++) {
+        HSD_JObj* col = i < SW_COL ? data->x2C : data->x34;
+        f32 x = 1.0f + HSD_JObjGetTranslationX(col);
+        f32 y = -((delta_y * (f32) sw_row(i)) + start_y);
+        id = mnStageSw_803ED4C4[i];
+#ifdef TARGET_PC
+        if (id >= NUM_DISC_STAGES) {
+            /* A name of its own (no disc string): a text with a buffer. */
+            text = HSD_SisLib_803A6754(0, mn_804D6BB5);
+            text->pos_x = x;
+            text->pos_y = y;
+            text->pos_z = 17.5f;
+            text->box_size_x = 160.0f;
+            text->box_size_y = 300.0f;
+        } else
+#endif
+        {
+            text = HSD_SisLib_803A5ACC(0, mn_804D6BB5, x, y, 17.5f, 160.0f,
+                                       300.0f);
         }
-    }
-
-    for (i = 15; i < NUM_STAGES; i++) {
-        text = HSD_SisLib_803A5ACC(
-            0, mn_804D6BB5, 1.0f + HSD_JObjGetTranslationX(data->x34),
-            -((delta_y * (f32) (i - 15)) + start_y), 17.5f, 160.0f, 300.0f);
         data->x40[i] = text;
-        text->font_size.x = 0.0521f;
-        text->font_size.y = 0.0521f;
+        text->font_size.x = font;
+        text->font_size.y = font;
         text->default_alignment = 2;
         text->default_fitting = 1;
-        if (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) i])) != 0) {
-            HSD_SisLib_803A6368(text,
-                                mnStageSw_stageIcons[mnStageSw_803ED4C4[i]]);
-        } else {
+        if (!sw_avail(id)) {
             HSD_SisLib_803A6368(text, 0x25);
+#ifdef TARGET_PC
+        } else if (id >= NUM_DISC_STAGES) {
+            /* Sized and right-aligned to the box like the disc's names: the
+             * x is the box's right edge, in text units. */
+            text->font_size.x = font * 0.65f;
+            text->font_size.y = font * 0.65f;
+            text->default_kerning = 1;
+            HSD_SisLib_803A6B98(text, 160.0f / 0.65f, 0.0f,
+                                grAce_Name(id - GRACE_SWITCH_BIT(0)));
+#endif
+        } else {
+            HSD_SisLib_803A6368(text, mnStageSw_stageIcons[id]);
         }
     }
 }
@@ -148,15 +202,15 @@ static inline bool isPageEmpty(u8 arg0)
     u8 start;
     u8 end;
 
-    if (arg0 < 15) {
+    if (arg0 < SW_COL) {
         start = 0;
-        end = 14;
+        end = SW_COL - 1;
     } else {
-        start = 15;
-        end = 28;
+        start = SW_COL;
+        end = SW_LAST;
     }
     for (i = start; i <= end; i++) {
-        if (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) i])) != 0) {
+        if (sw_avail(mnStageSw_803ED4C4[(u8) i])) {
             return false;
         }
     }
@@ -177,19 +231,19 @@ static s32 mnStageSw_80235C58(u8 arg0)
     s32 prev;
     s32 i;
 
-    if (arg0 < 15) {
+    if (arg0 < SW_COL) {
         low = 0;
-        high = 14;
+        high = SW_COL - 1;
     } else {
-        low = 15;
-        high = 28;
+        low = SW_COL;
+        high = SW_LAST;
     }
     if (isPageEmpty(arg0)) {
         return -1;
     }
 
     if (arg0 < NUM_STAGES &&
-        gm_80164430(gm_801641CC(mnStageSw_803ED4C4[arg0])) != 0)
+        sw_avail(mnStageSw_803ED4C4[arg0]))
     {
         return arg0;
     }
@@ -203,12 +257,12 @@ static s32 mnStageSw_80235C58(u8 arg0)
         temp = idx - i;
         prev = temp;
         if (low_bound <= prev &&
-            gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) prev])) != 0)
+            sw_avail(mnStageSw_803ED4C4[(u8) prev]))
         {
             return prev;
         }
         if (next <= high_bound &&
-            gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) curr])) != 0)
+            sw_avail(mnStageSw_803ED4C4[(u8) curr]))
         {
             return idx + i;
         }
@@ -229,17 +283,17 @@ static void mnStageSw_80235DC8(const u8* user_data, s32 buttons)
         do {
             switch (idx) {
             case 0:
-                mn_804A04F0.hovered_selection = 14;
+                mn_804A04F0.hovered_selection = SW_COL - 1;
                 break;
-            case 15:
-                mn_804A04F0.hovered_selection = 28;
+            case SW_COL:
+                mn_804A04F0.hovered_selection = SW_LAST;
                 break;
             default:
                 mn_804A04F0.hovered_selection = idx - 1;
                 break;
             }
             idx = mn_804A04F0.hovered_selection;
-        } while (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[idx])) == 0);
+        } while (!sw_avail(mnStageSw_803ED4C4[idx]));
         mn_804A04F0.confirmed_selection = user_data[idx + 2];
         return;
     }
@@ -247,33 +301,35 @@ static void mnStageSw_80235DC8(const u8* user_data, s32 buttons)
     if (buttons & 2) {
         do {
             switch (idx) {
-            case 14:
+            case SW_COL - 1:
                 mn_804A04F0.hovered_selection = 0;
                 break;
-            case 28:
-                mn_804A04F0.hovered_selection = 15;
+            case SW_LAST:
+                mn_804A04F0.hovered_selection = SW_COL;
                 break;
             default:
                 mn_804A04F0.hovered_selection = idx + 1;
                 break;
             }
             idx = mn_804A04F0.hovered_selection;
-        } while (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[idx])) == 0);
+        } while (!sw_avail(mnStageSw_803ED4C4[idx]));
         mn_804A04F0.confirmed_selection = user_data[idx + 2];
         return;
     }
 
     if (buttons & 4) {
-        if (idx >= 15 && idx < NUM_STAGES) {
-            selection = mnStageSw_80235C58(idx - 15);
+        if (idx >= SW_COL && idx < NUM_STAGES) {
+            /* The right column's extra rows land on the left's last. */
+            selection = mnStageSw_80235C58(
+                idx - SW_COL < SW_COL ? idx - SW_COL : SW_COL - 1);
             if (selection != -1) {
                 mn_804A04F0.hovered_selection = (u8) selection;
                 mn_804A04F0.confirmed_selection =
                     user_data[(u8) selection + 2];
             }
         }
-    } else if ((buttons & 8) && idx < 15) {
-        selection = mnStageSw_80235C58(idx + 15);
+    } else if ((buttons & 8) && idx < SW_COL) {
+        selection = mnStageSw_80235C58(idx + SW_COL);
         if (selection != -1) {
             mn_804A04F0.hovered_selection = (u8) selection;
             mn_804A04F0.confirmed_selection = user_data[(u8) selection + 2];
@@ -377,8 +433,8 @@ static void mnStageSw_80236178(MnStageSwData* data, u8 idx)
     jobj = data->x28;
     HSD_JObjClearFlagsAll(jobj, JOBJ_HIDDEN);
 
-    delta = HSD_JObjGetTranslationY(data->x30) -
-            HSD_JObjGetTranslationY(data->x2C);
+    delta = sw_step(HSD_JObjGetTranslationY(data->x30) -
+                    HSD_JObjGetTranslationY(data->x2C));
 
     if (idx < 15) {
         ref_jobj = data->x2C;
@@ -446,8 +502,8 @@ static void mnStageSw_80236548(HSD_GObj* gobj, u8 arg1, u8 arg2)
         HSD_JObjAnimAll(hover_anim_jobj);
         cursor_jobj = data->x28;
         HSD_JObjClearFlagsAll(cursor_jobj, JOBJ_HIDDEN);
-        delta_y = HSD_JObjGetTranslationY(data->x30) -
-                  HSD_JObjGetTranslationY(data->x2C);
+        delta_y = sw_step(HSD_JObjGetTranslationY(data->x30) -
+                          HSD_JObjGetTranslationY(data->x2C));
         (void) delta_y;
         if (sel < 15) {
             x = HSD_JObjGetTranslationX(data->x2C);
@@ -637,8 +693,8 @@ static inline void mnStageSw_SetCursorPosition(MnStageSwData* user_data)
     cursor = user_data->x28;
     hovered = user_data->x1;
     HSD_JObjClearFlagsAll(cursor, JOBJ_HIDDEN);
-    y_spacing = HSD_JObjGetTranslationY(user_data->x30) -
-                HSD_JObjGetTranslationY(user_data->x2C);
+    y_spacing = sw_step(HSD_JObjGetTranslationY(user_data->x30) -
+                        HSD_JObjGetTranslationY(user_data->x2C));
     if (hovered < 15) {
         HSD_JObjSetTranslateX(cursor, HSD_JObjGetTranslationX(user_data->x2C));
         HSD_JObjSetTranslateY(cursor,
@@ -661,7 +717,7 @@ static inline void mnStageSw_InitUserData(MnStageSwData* user_data, s8 state)
     user_data->x1 = (u8) mn_804A04F0.hovered_selection;
     user_data->x1F = state;
     for (i = 0; (u8) i < NUM_STAGES; i++) {
-        if (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[(u8) i])) != 0) {
+        if (sw_avail(mnStageSw_803ED4C4[(u8) i])) {
             user_data->x2[(u8) i] = gm_IsStageUnlocked(mnStageSw_803ED4C4[i]);
         } else {
             user_data->x2[(u8) i] = 0;
@@ -709,7 +765,7 @@ static inline HSD_JObj* mnStageSw_CreateCursor(MnStageSwData* user_data,
     } else {
         HSD_JObjSetFlagsAll(hover_anim_jobj, JOBJ_HIDDEN);
     }
-    if (gm_80164430(gm_801641CC(mnStageSw_803ED4C4[idx])) == 0) {
+    if (!sw_avail(mnStageSw_803ED4C4[idx])) {
         HSD_JObjSetFlagsAll(cursor_jobj, JOBJ_HIDDEN);
     }
     return cursor_jobj;
@@ -750,8 +806,8 @@ static HSD_GObj* mnStageSw_80236CBC(s8 arg0)
     }
 
     mn_804A04F0.confirmed_selection = user_data->x2[user_data->x1];
-    y_spacing = HSD_JObjGetTranslationY(user_data->x30) -
-                HSD_JObjGetTranslationY(user_data->x2C);
+    y_spacing = sw_step(HSD_JObjGetTranslationY(user_data->x30) -
+                        HSD_JObjGetTranslationY(user_data->x2C));
     for (i = 0; i < NUM_STAGES; i++) {
         HSD_JObj* cursor_jobj;
 

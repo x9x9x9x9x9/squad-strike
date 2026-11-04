@@ -445,6 +445,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
             float value;
             if (row >> value && std::isfinite(value) && value >= 0.0f && value <= 1.0f)
                 (key == "music_volume" ? prefs.music_volume : prefs.sfx_volume) = value;
+        } else if (key == "stage_list") {
+            row >> prefs.stage_list;
         } else if (key == "install_id") {
             row >> std::hex >> prefs.install_id;
         }
@@ -486,6 +488,7 @@ bool save_preferences(
           * vibration start off for everyone. */
          << "vibration " << prefs.rumble << '\n'
          << "menu_button " << prefs.menu_button << '\n'
+         << "stage_list " << prefs.stage_list << '\n'
          << "keys";
     for (int code : prefs.keys)
         text << ' ' << code;

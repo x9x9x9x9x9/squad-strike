@@ -138,6 +138,9 @@ uint64_t pc_unlock_state_all(void);
 /* Per-install random id, generated once and kept in launcher.cfg
  * (src/pc/launcher.cpp); the LAN lobby's host election key. */
 uint64_t pc_install_id(void);
+/* Once per install: whether to give the save this build's Random Stage list
+ * (gmMainLib_8015FA34). */
+bool pc_take_stage_list_reset(void);
 /* Build identity peers must share to play (the app version, src/pc/version.cpp). */
 const char* pc_app_rev(void);
 

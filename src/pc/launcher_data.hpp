@@ -59,6 +59,7 @@ struct Preferences {
     bool sd_remix = false;        // SD Remix characters (needs its files; at boot)
     float music_volume = 1.0f;
     float sfx_volume = 1.0f;
+    int stage_list = 0;       // Random Stage defaults applied (pc_take_stage_list_reset)
     uint64_t install_id = 0;  // random once per install (LAN host election); 0 = not yet
 };
 DiscInfo inspect_disc(const std::string& path);

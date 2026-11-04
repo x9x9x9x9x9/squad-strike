@@ -2297,6 +2297,18 @@ extern "C" bool pc_is_frozen_stadium_enabled(void) {
 extern "C" bool pc_is_free_camera_enabled(void) {
     return !pc_net_deterministic() && prefs.free_camera;
 }
+/* True once per install (per launcher.cfg): this build's Random Stage list
+ * replaces whatever the save holds, the first time it runs. */
+extern "C" bool pc_take_stage_list_reset(void) {
+    if (prefs.stage_list >= 1) {
+        return false;
+    }
+    prefs.stage_list = 1;
+    std::string error;
+    if (!launcher::save_preferences(config_path, prefs, error))
+        SDL_Log("%s", error.c_str());
+    return true;
+}
 extern "C" uint64_t pc_install_id(void) {
     return prefs.install_id;
 }

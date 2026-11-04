@@ -45,6 +45,11 @@ typedef enum GrAceStage {
     GrAce_Count,
 } GrAceStage;
 
+/// An ACE stage's Random Stage switch: its bit in GamePrefs.stage_mask
+/// (the disc's 29 stages use bits 0-28). On by default; the Random Stage
+/// menu (mnstagesw.c) lists them after Dream Land N64's column.
+#define GRACE_SWITCH_BIT(stage) (28 + (stage))
+
 #ifdef TARGET_PC
 /// The ACE stage the stage select screen picked for the next match, or
 /// GrAce_None. Set on the stage select screen (and MELEE_DEBUG_VS_ACE).

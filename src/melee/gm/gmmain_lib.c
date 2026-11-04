@@ -35,13 +35,23 @@
 GameRules gmMainLib_DefaultGameRules = {
     0,
     0x34,
+#ifdef TARGET_PC
+    1,  // mode: stock
+    2,  // time limit
+    4,  // stock count
+#else
     0,  // mode
     2,  // time limit
     3,  // stock count
+#endif
     0,  // handicap
     10, // damage ratio
     0,
+#ifdef TARGET_PC
+    8,     // stock time limit (minutes)
+#else
     0,     // stock time limit
+#endif
     false, // friendly fire
     true,  // pause
     0,     // score display
@@ -56,9 +66,22 @@ GameRules gmMainLib_DefaultGameRules = {
     /* unk_14 */ -1,
 };
 
+#ifdef TARGET_PC
+/* Random Stage switches (stage_mask, bit = menu switch id, see
+ * mnStageSw_803ED4C4 and lbl_803B7808 in gm_1601.c): Yoshi's Story, Fountain
+ * of Dreams, Pokemon Stadium, Onett, Mushroom Kingdom, Jungle Japes, Yoshi's
+ * Island, Green Greens, Fourside, Flat Zone, Battlefield, Final Destination,
+ * Dream Land N64, and the three ACE stages (bits 29-31, GRACE_SWITCH_BIT). */
+#define PC_DEFAULT_STAGE_MASK 0xE7A32AB0u
+struct GamePrefs gmMainLib_DefaultGamePrefs = {
+    2, U64_MAX, { true, true, true, true }, 0, true, LANG_JP,
+    PC_DEFAULT_STAGE_MASK,
+};
+#else
 struct GamePrefs gmMainLib_DefaultGamePrefs = {
     2, U64_MAX, { true, true, true, true }, 0, true, LANG_JP, U32_MAX,
 };
+#endif
 
 GXRenderModeObj gmMainLib_803D4A80 = {
     VI_TVMODE_NTSC_PROG,
@@ -1367,6 +1390,16 @@ void gmMainLib_8015FA34(s32 arg0)
         gm_8017297C();
         gm_801741FC();
     }
+#ifdef TARGET_PC
+    /* A save from before this build's Random Stage list, or one whose
+     * switches were never touched (the old all-on default, every bit set),
+     * gets the list; once per install, after which the save's own stays. */
+    if (pc_take_stage_list_reset() ||
+        gmMainLib_GetGamePrefs()->stage_mask == U32_MAX)
+    {
+        gmMainLib_GetGamePrefs()->stage_mask = PC_DEFAULT_STAGE_MASK;
+    }
+#endif
     setupAudioVideo();
 }
 
