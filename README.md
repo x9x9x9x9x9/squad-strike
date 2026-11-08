@@ -40,6 +40,12 @@ data is included.
   Fourside, Mushroom Kingdom I and II, Flat Zone and more. On by default; the
   ACE tiles follow this setting too.
 - **Loser picks the stage** between games online.
+- **Random stage list:** Random picks from a tournament-style list by
+  default (Yoshi's Story, Fountain of Dreams, Pokémon Stadium, Onett,
+  Mushroom Kingdom, Jungle Japes, Yoshi's Island, Green Greens, Fourside,
+  Flat Zone, Battlefield, Final Destination, Dream Land N64 and the three ACE
+  stages). Change it under VS Mode → Rules → Additional Rules → Random Stage,
+  where the ACE stages now have their own switches.
 
 
 <img width="1787" height="1437" alt="squad fourside" src="https://github.com/user-attachments/assets/f945fb7e-97a4-48a7-9f82-d5aa91b0537f" />
@@ -148,7 +154,10 @@ The launcher's **Settings** button and the in-game F1 overlay share the same
 settings:
 
 - **Gameplay:** Unlock everything, Squad Strike, Stage Expansion, SD Remix
-  characters, Free camera, Universal Controller Fix (UCF 0.8), Rumble.
+  characters, Free camera, Universal Controller Fix (UCF 0.8), Rumble, Post
+  match results screen (online, the host's choice is used).
+- **Video:** Magnifying glass: turn off the bubble that shows a fighter off
+  the edge of the screen (handy in widescreen).
 - **Online:** your connect code, a friend's code, input delay, ping display.
 - **Graphics / Audio / Controls:** resolution up to 10x, MSAA, filtering,
   post-processing, volume, button remapping.

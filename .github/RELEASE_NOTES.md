@@ -6,6 +6,23 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
+## What's new in v1.0.1
+
+- **Default rules:** 4 stocks with an 8:00 time limit, and a new default
+  Random Stage list. The ACE stages get Random Stage switches, and Random
+  can land on them.
+- **Random characters** are now evenly spread, and P1 and P2 never get the
+  same fighter in the same squad position.
+- **Match timer** shows (counting up) in untimed stock matches.
+- **Warlock Punch / Falcon Punch** (and Kirby's copies): fixed the flat
+  purple / orange body; it's a faint glow again, as on console.
+- **Same fighter, same costume** (outside teams): the second player is
+  tinted lighter, as in Slippi.
+- **New settings:** Post match results screen (Gameplay; online the host
+  decides) and Magnifying glass (Video).
+- **Ping display** is always the short "Ping: 34ms", even with RUN-AND-LOG.bat.
+- The log now records each sound bank loaded, to track down missing sounds.
+
 ## Download
 
 | System | File |
