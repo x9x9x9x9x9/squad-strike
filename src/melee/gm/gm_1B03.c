@@ -8,18 +8,45 @@
 #include <dolphin/types.h>
 #include <melee/mn/types.h>
 
+#ifdef TARGET_PC
+#include <melee/ft/fighter.h>
+#include <melee/ft/types.h>
+#include <melee/gm/gmvs.h>
+#include <melee/pl/player.h>
+#endif
+
 /**
  * Update character tints
  *
  * If any two players are the same character, team, and subcolor (tint),
  * increment the tint of one of them.
  */
-void gm_SetupSubColors(StartMeleeData* start)
-{
+void gm_SetupSubColors(StartMeleeData* start) {
     ssize_t i;
     ssize_t j;
 
     if (start->rules.is_teams != true) {
+#ifdef TARGET_PC
+        /* Free-for-all, as Slippi does: two players on the same character
+         * in the same costume (online each picks freely, and squads can
+         * repeat), the later port is tinted so they can be told apart. */
+        for (i = 0; i < GM_MAX_PLAYERS; i++) {
+            start->players[i].sub_color = 0;
+            if (start->players[i].slot_type == Gm_PKind_NA) {
+                continue;
+            }
+            for (j = 0; j < i; j++) {
+                if (start->players[j].slot_type != Gm_PKind_NA &&
+                    start->players[i].ckind == start->players[j].ckind &&
+                    start->players[i].color == start->players[j].color &&
+                    start->players[i].sub_color == start->players[j].sub_color)
+                {
+                    start->players[i].sub_color++;
+                    j = -1; /* recheck against everyone with the new tint */
+                }
+            }
+        }
+#endif
         return;
     }
 
@@ -38,10 +65,43 @@ void gm_SetupSubColors(StartMeleeData* start)
     }
 }
 
-static inline void player_standings_inline(StartMeleeData* arg0,
-                                           MatchEnd* arg1, int i,
-                                           u32 is_big_loser, int var_r7)
-{
+#ifdef TARGET_PC
+void gm_PcRetintDuplicates(void) {
+    /* The same rule mid-match (a squad member swapped in): from the
+     * players' current character and costume, retinting the fighters out. */
+    int i, j, k;
+    s8 tint[GM_MAX_PLAYERS];
+
+    if (gm_8016B168()) {
+        return; /* teams: the game's own tints stand */
+    }
+    for (i = 0; i < GM_MAX_PLAYERS; i++) {
+        tint[i] = 0;
+        if (Player_GetPlayerSlotType(i) == Gm_PKind_NA) {
+            continue;
+        }
+        for (j = 0; j < i; j++) {
+            if (Player_GetPlayerSlotType(j) != Gm_PKind_NA &&
+                Player_GetPlayerCharacter(i) == Player_GetPlayerCharacter(j) &&
+                Player_GetCostumeId(i) == Player_GetCostumeId(j) && tint[i] == tint[j])
+            {
+                tint[i]++;
+                j = -1;
+            }
+        }
+        Player_SetSubColor(i, tint[i]);
+        for (k = 0; k < 2; k++) {
+            HSD_GObj* gobj = Player_GetEntityAtIndex(i, k);
+            if (gobj != NULL) {
+                GET_FIGHTER(gobj)->sub_color = (u8)tint[i];
+            }
+        }
+    }
+}
+#endif
+
+static inline void player_standings_inline(
+    StartMeleeData* arg0, MatchEnd* arg1, int i, u32 is_big_loser, int var_r7) {
     if (is_big_loser == 0 && var_r7 > 0) {
         s8 var_r6 = arg1->player_standings[i].ckind;
         if (var_r6 == 0x12 || var_r6 == 0x13) {
@@ -59,16 +119,13 @@ static inline void player_standings_inline(StartMeleeData* arg0,
     }
 }
 
-static inline int gm_801B0474_inline(MatchEnd* arg1, int i)
-{
+static inline int gm_801B0474_inline(MatchEnd* arg1, int i) {
     if (arg1->match_kind == 1) {
         if (arg1->outcome == OUTCOME_TIMEOUT) {
             return arg1->player_standings[i].stocks;
         } else {
             u8 var_r7 = arg1->player_standings[i].stocks;
-            if (arg1->player_standings[i].x28 < arg1->frame_count ||
-                var_r7 != 0)
-            {
+            if (arg1->player_standings[i].x28 < arg1->frame_count || var_r7 != 0) {
                 return var_r7;
             }
         }
@@ -76,8 +133,7 @@ static inline int gm_801B0474_inline(MatchEnd* arg1, int i)
     return 1;
 }
 
-void gm_SetupSuddenDeath(StartMeleeData* start, MatchEnd* end)
-{
+void gm_SetupSuddenDeath(StartMeleeData* start, MatchEnd* end) {
     int var_r7;
     int i;
 
@@ -89,22 +145,17 @@ void gm_SetupSuddenDeath(StartMeleeData* start, MatchEnd* end)
         if (start->players[i].slot_type != Gm_PKind_NA) {
             var_r7 = gm_801B0474_inline(end, i);
             if (end->is_teams == 1) {
-                player_standings_inline(
-                    start, end, i,
-                    end->team_standings[end->player_standings[i].team]
-                        .is_big_loser,
-                    var_r7);
-            } else {
                 player_standings_inline(start, end, i,
-                                        end->player_standings[i].is_big_loser,
-                                        var_r7);
+                    end->team_standings[end->player_standings[i].team].is_big_loser, var_r7);
+            } else {
+                player_standings_inline(
+                    start, end, i, end->player_standings[i].is_big_loser, var_r7);
             }
         }
     }
 }
 
-void gm_801B05F4(PlayerInitData* player, int slot)
-{
+void gm_801B05F4(PlayerInitData* player, int slot) {
     player->slot = slot + 1;
     if (slot == 2) {
         slot = 3;
@@ -114,9 +165,7 @@ void gm_801B05F4(PlayerInitData* player, int slot)
     player->team = slot;
 }
 
-void gm_SetupHumanPlayer(PlayerInitData* player, u8 ckind, u8 color, u8 stocks,
-                         u8 slot)
-{
+void gm_SetupHumanPlayer(PlayerInitData* player, u8 ckind, u8 color, u8 stocks, u8 slot) {
     player->slot_type = Gm_PKind_Human;
     player->ckind = ckind;
     player->color = color;
@@ -124,9 +173,7 @@ void gm_SetupHumanPlayer(PlayerInitData* player, u8 ckind, u8 color, u8 stocks,
     gm_801B05F4(player, slot);
 }
 
-void gm_SetupCpuPlayer(PlayerInitData* arg0, u8 ckind, u8 color, u8 stocks,
-                       u8 slot)
-{
+void gm_SetupCpuPlayer(PlayerInitData* arg0, u8 ckind, u8 color, u8 stocks, u8 slot) {
     arg0->slot_type = Gm_PKind_Cpu;
     arg0->ckind = ckind;
     arg0->color = color;
@@ -135,9 +182,8 @@ void gm_SetupCpuPlayer(PlayerInitData* arg0, u8 ckind, u8 color, u8 stocks,
     arg0->team = 4;
 }
 
-void gm_801B06B0(CSSData* css_data, u8 type, s8 c_kind, s8 stocks, s8 color,
-                 u8 arg5, u8 level, u8 slot)
-{
+void gm_801B06B0(
+    CSSData* css_data, u8 type, s8 c_kind, s8 stocks, s8 color, u8 arg5, u8 level, u8 slot) {
     gm_InitVsMode(&css_data->vs);
     css_data->match_type = type;
     css_data->unk_0x0 = slot + 1;
@@ -150,9 +196,7 @@ void gm_801B06B0(CSSData* css_data, u8 type, s8 c_kind, s8 stocks, s8 color,
     css_data->vs.start.players[0].stocks = stocks;
 }
 
-void gm_801B0730(CSSData* css_data, s8* c_kind, u8* stocks, u8* color,
-                 u8* nametag, u8* level)
-{
+void gm_801B0730(CSSData* css_data, s8* c_kind, u8* stocks, u8* color, u8* nametag, u8* level) {
     s32 slot;
 
     slot = css_data->unk_0x0 - 1;
@@ -173,9 +217,7 @@ void gm_801B0730(CSSData* css_data, s8* c_kind, u8* stocks, u8* color,
     }
 }
 
-void gm_801B07B4(CSSData* css_data, s8 c_kind, s8 stocks, s8 color, u8 arg4,
-                 u8 level, u8 arg6)
-{
+void gm_801B07B4(CSSData* css_data, s8 c_kind, s8 stocks, s8 color, u8 arg4, u8 level, u8 arg6) {
     s32 var_r0;
 
     if (arg6 == 0) {
@@ -190,9 +232,7 @@ void gm_801B07B4(CSSData* css_data, s8 c_kind, s8 stocks, s8 color, u8 arg4,
     css_data->vs.start.players[var_r0].nametag = arg4;
 }
 
-void gm_801B07E8(CSSData* css_data, s8* c_kind, s8* stocks, s8* color,
-                 s8* arg4, u8* level)
-{
+void gm_801B07E8(CSSData* css_data, s8* c_kind, s8* stocks, s8* color, s8* arg4, u8* level) {
     s32 slot;
 
     if ((css_data->unk_0x0 - 1) == 0) {

@@ -1,5 +1,7 @@
 #include "gmsquad.h"
 
+#include "gm_1B03.h"
+
 #ifdef TARGET_PC
 
 #include <stdio.h>
@@ -506,6 +508,7 @@ static void swap_in(s32 slot, GmSquadMember* m)
     Player_SetPlayerCharacter(slot, m->ckind);
     Player_SetCostumeId(slot, m->color);
     Player_80031AD0(slot); /* create the new fighter(s) */
+    gm_PcRetintDuplicates(); /* same fighter and costume as the other side */
     fn_8016E124();         /* Kirby copies for everyone now present */
     Player_80031848(slot);
 
