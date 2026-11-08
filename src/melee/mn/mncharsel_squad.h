@@ -391,7 +391,9 @@ static bool mnCharSel_SquadTakesXY(int port)
     return squad_member_under_cursor(port, &owner) >= 0;
 }
 
-static void squad_add(int target, u8 ck)
+/// color: the colour a new member starts in (-1: the default, or the one
+/// the door previews).
+static void squad_add_color(int target, u8 ck, int color)
 {
     int i;
     u8 shown_ck, shown_color;
@@ -427,13 +429,19 @@ static void squad_add(int target, u8 ck)
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
         if (gmSquad_rows[target][i].ckind == GMSQUAD_NONE) {
             gmSquad_rows[target][i].ckind = ck;
-            gmSquad_rows[target][i].color = preview ? shown_color : 0;
+            gmSquad_rows[target][i].color =
+                color >= 0 ? (u8) color : preview ? shown_color : 0;
             squad_fix_color(target, i, 0);
             sfxForward();
             return;
         }
     }
     lbAudioAx_80024030(3); /* squad full */
+}
+
+static void squad_add(int target, u8 ck)
+{
+    squad_add_color(target, ck, -1);
 }
 
 /* Frames L is held to clear a squad: 1.5 s. */
@@ -529,7 +537,12 @@ static void squad_random_pick(int target, struct CSSCursorData* cursor)
         return;
     }
     if (gmSquad_Count(target) < GMSQUAD_EXTRA) {
-        squad_add(target, pool[squad_random(target, gmSquad_Count(target)) % (u32) n]);
+        /* A random fighter in a random costume (a taken one moves on to
+         * the next free, as squad_fix_color does). */
+        u8 ck = pool[squad_random(target, gmSquad_Count(target)) % (u32) n];
+        u32 colors = (u32) squad_num_colors(ck);
+        u32 color = squad_random(target, 0x40 + gmSquad_Count(target));
+        squad_add_color(target, ck, colors > 0 ? (int) (color % colors) : 0);
         return;
     }
     if (cursor->x5 == 1 && cursor->x6 == target && squad_coin_held(target)) {

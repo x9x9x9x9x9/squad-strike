@@ -2123,12 +2123,30 @@ void mnCharSel_8025FB50(u8 door, s32 arg1)
         mnCharSel_803F0DFC.doors[door].sel_icon_prev)
     {
         u8 costume;
+#ifdef TARGET_PC
+        /* Random lands in a random costume, not always the default (the
+         * next free one when another player has it). */
+        u8 n = (u8) gm_GetNumCostumesForCKind(
+            (&icons[0].char_kind)[icon_offset]);
+        u8 start = n > 0 ? (u8) HSD_Randi(n) : 0;
+        for (costume = 0; costume < n; costume++) {
+            mnCharSel_803F0DFC.doors[door].costume =
+                (u8) ((start + costume) % n);
+            if (!isDuplicateCostumeExact(door)) {
+                break;
+            }
+        }
+        if (costume == n) {
+            mnCharSel_803F0DFC.doors[door].costume = 0;
+        }
+#else
         for (costume = 0;; costume++) {
             mnCharSel_803F0DFC.doors[door].costume = costume;
             if (!isDuplicateCostumeExact(door)) {
                 break;
             }
         }
+#endif
     }
 
     mnCharSel_804A0BD0[door]->x5 = 0;

@@ -11,8 +11,9 @@ You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 - **Default rules:** 4 stocks with an 8:00 time limit, and a new default
   Random Stage list. The ACE stages get Random Stage switches, and Random
   can land on them.
-- **Random characters** are now evenly spread, and P1 and P2 never get the
-  same fighter in the same squad position.
+- **Random characters** are now evenly spread, come in a random costume
+  (not always the default), and P1 and P2 never get the same fighter in the
+  same squad position.
 - **Match timer** shows (counting up) in untimed stock matches.
 - **Warlock Punch / Falcon Punch** (and Kirby's copies): fixed the flat
   purple / orange body; it's a faint glow again, as on console.
