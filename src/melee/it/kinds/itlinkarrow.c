@@ -166,9 +166,39 @@ void it_802A8330(HSD_GObj* gobj)
     }
 }
 
+#ifdef TARGET_PC
+/* The arrow Link (or Kirby with Link's bow) still points at may already be
+ * gone: its gobj freed, or on the item list with no Item left. Drawing the
+ * bow then read through a freed item (a crash online, Link's neutral B,
+ * itLinkArrow_802A850C reading user_data NULL). Only a live arrow is used;
+ * the fighter's code then lets go of it as if it had been fired. */
+static bool itLinkArrow_PcLive(Item_GObj* gobj)
+{
+    HSD_GObj* cur;
+    if (gobj == NULL) {
+        return false;
+    }
+    for (cur = HSD_GObjPLinkHead[9]; cur != NULL; cur = cur->next) {
+        if (cur == gobj) {
+            Item* ip = cur->user_data;
+            return ip != NULL && (ip->kind == It_Kind_Link_Arrow ||
+                                  ip->kind == It_Kind_CLink_Arrow ||
+                                  ip->kind == It_Kind_Kirby_LinkArrow ||
+                                  ip->kind == It_Kind_Kirby_CLinkArrow);
+        }
+    }
+    return false;
+}
+#endif
+
 void it_802A8398(Item_GObj* gobj, Vec3* pos, Vec3* pos2)
 {
     Item* item;
+#ifdef TARGET_PC
+    if (!itLinkArrow_PcLive(gobj)) {
+        return;
+    }
+#endif
     if (gobj != NULL) {
         item = GET_ITEM(gobj);
         if (item != NULL) {
@@ -259,9 +289,9 @@ static inline void itLinkArrow_802A850C_inline_2(Item_GObj* gobj,
 bool itLinkArrow_802A850C(Item_GObj* gobj, Vec3* arg1, Vec3* arg2, f32 arg3,
                           f32 arg4, f32 arg5)
 {
-    Item* ip = GET_ITEM(gobj);
-    HSD_JObj* jobj = gobj->hsd_obj;
-    itLinkArrowAttributes* attr = DP(itLinkArrowAttributes, ip->xC4_article_data->x4_specialAttributes);
+    Item* ip;
+    HSD_JObj* jobj;
+    itLinkArrowAttributes* attr;
     u8 _pad1[4];
     Vec3 rot;
     u8 _pad2[4];
@@ -272,6 +302,16 @@ bool itLinkArrow_802A850C(Item_GObj* gobj, Vec3* arg1, Vec3* arg2, f32 arg3,
     u8 _pad4[4];
     Quaternion quat;
     PAD_STACK(12);
+
+#ifdef TARGET_PC
+    if (!itLinkArrow_PcLive(gobj)) {
+        return false;
+    }
+#endif
+    ip = GET_ITEM(gobj);
+    jobj = gobj->hsd_obj;
+    attr = DP(itLinkArrowAttributes,
+              ip->xC4_article_data->x4_specialAttributes);
 
     ip->xDD4_itemVar.linkarrow.x94 = arg3;
     it_80275158(gobj, attr->x0 + attr->x18);
