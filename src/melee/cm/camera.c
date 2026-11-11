@@ -2,6 +2,9 @@
 
 #include <Runtime/platform.h>
 #include <pc/pc.h>
+#ifdef TARGET_PC
+#include <pc/widescreen.h>
+#endif
 
 #include <melee/ft/forward.h>
 #include <sysdolphin/baselib/forward.h>
@@ -4398,6 +4401,62 @@ bool Camera_80030CFC(CmSubject* cam_box, f32 tolerance)
     lbVector_Add(&sp20, &cam_box->bone_pos);
     return Camera_80030BBC(&sp20, NULL);
 }
+
+#ifdef TARGET_PC
+/* Camera_80030BBC against the widescreen frame: the game projects with its
+ * 4:3 camera, and widescreen only narrows the projection when the frame is
+ * drawn (pc/widescreen.c), so a point past the 4:3 edge can still be on a
+ * 16:9 screen. */
+static bool Camera_PcOnWideScreen(Vec3* pos, f32 scale)
+{
+    Vec3 point;
+    HSD_CObj* cobj = GET_COBJ(Camera_80030A50());
+    Scissor scissor;
+    f32 center;
+
+    if (lbVector_WorldToScreen(cobj, pos, &point, 1) == NULL ||
+        point.x > 2.1474836e9f || point.x < -2.1474836e9f ||
+        point.y > 2.1474836e9f || point.y < -2.1474836e9f)
+    {
+        return false;
+    }
+    HSD_CObjGetScissor(cobj, &scissor);
+    center = 0.5f * (scissor.left + scissor.right);
+    point.x = center + (point.x - center) / scale;
+    return point.x >= scissor.left && point.x < scissor.right &&
+           point.y >= scissor.top && point.y < scissor.bottom;
+}
+
+bool Camera_PcSubjectOnWideScreen(CmSubject* cam_box, f32 tolerance)
+{
+    Vec3 eye_pos;
+    Vec3 interest;
+    Vec3 near;
+    Vec3 dir;
+    f32 range;
+    f32 scale = pc_widescreen_scale();
+
+    if (scale <= 1.0f) {
+        return false;
+    }
+    if (Camera_PcOnWideScreen(&cam_box->bone_pos, scale)) {
+        return true;
+    }
+    /* The edge of the subject's sphere nearest the view axis, as
+     * Camera_80030CFC tests it. */
+    HSD_CObjGetEyePosition(GET_COBJ(Camera_80030A50()), &eye_pos);
+    HSD_CObjGetInterest(GET_COBJ(Camera_80030A50()), &interest);
+    lbVector_8000E838(&interest, &eye_pos, &cam_box->bone_pos, &near);
+    lbVector_Diff(&near, &cam_box->bone_pos, &dir);
+    lbVector_Normalize(&dir);
+    range = cam_box->ext.v.z + tolerance;
+    dir.x *= range;
+    dir.y *= range;
+    dir.z *= range;
+    lbVector_Add(&dir, &cam_box->bone_pos);
+    return Camera_PcOnWideScreen(&dir, scale);
+}
+#endif
 
 void Camera_80030DE4(f32 arg8, f32 arg9)
 {

@@ -601,6 +601,14 @@ bool ftLib_UpdateScreenVisibility(HSD_GObj* gobj)
                 if (Camera_80030CFC(fp->x890_cameraBox, 15)) {
                     return true;
                 }
+#ifdef TARGET_PC
+                /* Past the 4:3 edge but on a widescreen frame: still drawn
+                 * (it used to vanish there). x221F_b0 keeps the 4:3 answer,
+                 * which the magnifying glass and off-screen damage read. */
+                if (Camera_PcSubjectOnWideScreen(fp->x890_cameraBox, 15)) {
+                    return true;
+                }
+#endif
                 return false;
             }
         }

@@ -141,6 +141,10 @@
 /* 030BBC */ bool Camera_80030BBC(Vec3*, S32Vec2*);
 /* 030CD8 */ bool Camera_80030CD8(CmSubject*, S32Vec2*);
 /* 030CFC */ bool Camera_80030CFC(CmSubject*, float);
+#ifdef TARGET_PC
+/// Camera_80030CFC against the widescreen frame (false in 4:3).
+bool Camera_PcSubjectOnWideScreen(CmSubject* cam_box, float tolerance);
+#endif
 /* 030DE4 */ void Camera_80030DE4(f32, f32);
 /* 030DF8 */ void Camera_80030DF8(void);
 /* 030E10 */ float Camera_80030E10(void);
