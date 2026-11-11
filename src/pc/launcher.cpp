@@ -1125,7 +1125,13 @@ public:
                     text("disc-name", display_name);
                     text("disc-path", prefs.disc);
                     text("disc-info", info.message);
-                    status("Ready to play / Disc not verified.");
+                    /* Verifying is optional (Play works either way); a disc
+                     * verified before, unchanged since, says so instead of
+                     * "not verified", which read as a step to do each time. */
+                    status(
+                        !prefs.verified_disc.empty() && prefs.verified_disc == selected_identity ?
+                            "Ready to play / Disc verified." :
+                            "Ready to play.");
                     save();
                 } else {
                     if (prefs.disc == pending_path) {
@@ -1155,9 +1161,16 @@ public:
                         supported = false;
                     if (identity(prefs.disc) != verification_identity)
                         status("Disc changed during verification. Verify it again.", true);
-                    else
+                    else {
                         status(checked.message, checked.state == launcher::VerifyState::Mismatch ||
                                                     checked.state == launcher::VerifyState::Error);
+                        /* Remembered until the image changes, so the next
+                         * launch says "Disc verified." without asking again. */
+                        prefs.verified_disc = checked.state == launcher::VerifyState::Verified ?
+                                                  verification_identity :
+                                                  std::string();
+                        save();
+                    }
                     controls();
                     element("verify")->Focus();
                 }

@@ -26,6 +26,7 @@ struct Preferences {
     std::array<int, 22> keys = default_keys;
     int menu_button = SDL_GAMEPAD_BUTTON_BACK;
     std::string disc;
+    std::string verified_disc;        // identity() of the disc image last verified as a match
     std::string net_name = "PLAYER";  // pre-TAG#NUM builds; only a default-code hint now
     std::string net_code;    // the TAG#NUM connect code chosen; empty: a default from the key
     std::string net_target;  // empty hosts our own connect code

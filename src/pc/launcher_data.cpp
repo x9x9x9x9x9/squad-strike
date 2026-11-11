@@ -368,6 +368,10 @@ Preferences load_preferences(const std::filesystem::path& path) {
             std::string value;
             if (row >> std::quoted(value))
                 prefs.disc = value;
+        } else if (key == "verified_disc") {
+            std::string value;
+            if (row >> std::quoted(value))
+                prefs.verified_disc = value;
         } else if (key == "vsync" || key == "fullscreen") {
             int value;
             if (row >> value && (value == 0 || value == 1))
@@ -472,7 +476,8 @@ bool save_preferences(
     text << "net_name " << std::quoted(prefs.net_name) << "\nnet_code "
          << std::quoted(prefs.net_code) << "\nnet_target " << std::quoted(prefs.net_target)
          << "\nnet_delay " << prefs.net_delay << "\nnet_port " << prefs.net_port << "\n";
-    text << "disc " << std::quoted(prefs.disc) << "\nvsync " << prefs.vsync << "\nfullscreen "
+    text << "disc " << std::quoted(prefs.disc) << "\nverified_disc "
+         << std::quoted(prefs.verified_disc) << "\nvsync " << prefs.vsync << "\nfullscreen "
          << prefs.fullscreen << "\nscale " << prefs.scale << '\n'
          << "render_scale " << prefs.render_scale << "\nvolume " << prefs.volume << "\nmsaa "
          << prefs.msaa << "\nanisotropy " << prefs.anisotropy << "\nwidescreen " << prefs.widescreen
