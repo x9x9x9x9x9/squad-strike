@@ -272,32 +272,24 @@ void pc_audio_set_reverb(bool on) {
     s_aux_on = on;
 }
 
-/* Helper to identify whether a voice belongs to an HPS music stream or SFX.
- * In Melee, music is streamed in 64 KiB ring buffer blocks (DSP-ADPCM), acquired
- * at priority 0x1D (29), and updated via AXSetVoiceLoopAddr / CurrentAddr / EndAddr. */
+/* Whether a voice plays an HPS music stream (music volume) or a sound effect
+ * (SFX volume). Only the stream code marks voices: pc_audio_mark_stream when
+ * it acquires one, and the loop/end/current address setters, which only the
+ * stream ring buffer calls. Not the voice priority: streams acquire at 0x1D,
+ * but so does any sound effect whose .sem script asks for priority 0x1C
+ * (synth acquires at priority + 1), e.g. Kirby's inhale. Those sounds then
+ * followed the music volume, and were silent with music turned off. */
 static bool is_music_stream(Voice* v) {
-    if (v->vpb.pb.addr.format != AX_FORMAT_ADPCM) {
-        return false;
+    return v->is_stream && v->vpb.pb.addr.format == AX_FORMAT_ADPCM;
+}
+
+void pc_audio_mark_stream(struct _AXVPB* p) {
+    if (p == NULL) {
+        return;
     }
-    if (v->is_stream) {
-        return true;
-    }
-    if ((u32)v->vpb.priority == 0x1D) {
-        v->is_stream = true;
-        return true;
-    }
-    /* HPS music stream ring buffer detection: HPS blocks have 64 KiB spacing
-     * (0x10000 bytes = 0x20000 in nibble-addressed ADPCM).
-     * When looping across 64 KiB boundaries between ring buffer blocks: */
-    if (v->vpb.pb.addr.loopFlag) {
-        u32 diff = v->loop_addr > v->cur_addr ? (v->loop_addr - v->cur_addr) :
-                                                (v->cur_addr - v->loop_addr);
-        if (diff >= 0x10000) {
-            v->is_stream = true;
-            return true;
-        }
-    }
-    return false;
+    audio_lock();
+    ((Voice*)p)->is_stream = true;
+    audio_unlock();
 }
 
 static void mix_voice(Voice* v, float* out) {
@@ -872,9 +864,6 @@ AXVPB* AXAcquireVoice(u32 priority, void (*callback)(void*), u32 userContext) {
         pick->vpb.priority = (int)priority;
         pick->vpb.callback = callback;
         pick->vpb.userContext = userContext;
-        if (priority == 0x1D) {
-            pick->is_stream = true;
-        }
     }
     audio_unlock();
     return pick ? &pick->vpb : NULL;
@@ -900,11 +889,7 @@ void AXFreeVoice(AXVPB* p) {
  * The mutex is recursive, so callers inside s_frame_callback safely re-enter it. */
 void AXSetVoicePriority(AXVPB* p, u32 priority) {
     audio_lock();
-    Voice* v = (Voice*)p;
     p->priority = (int)priority;
-    if (priority == 0x1D) {
-        v->is_stream = true;
-    }
     audio_unlock();
 }
 

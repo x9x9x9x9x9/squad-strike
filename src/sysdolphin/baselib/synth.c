@@ -1490,6 +1490,9 @@ void HSD_SynthPStreamHeaderCallback(int arg0, uintptr_t arg1, void* arg2,
         if (node->voice_count == 2) {
             node->voice[1] = AXAcquireVoice(0x1D, dropcallback, 0);
             HSD_ASSERTMSG(0x5CF, node->voice[1], "entry->voice[1]");
+#ifdef TARGET_PC
+            pc_audio_mark_stream(node->voice[1]);
+#endif
         }
         node->x14 = 0.00003125f * (f32) entry[2].v;
         for (i = 0; i < node->voice_count; i++) {
@@ -1560,6 +1563,9 @@ int HSD_SynthPStreamStart(int entrynum, u8 vol, u8 vol2, int channel)
     }
     HSD_Synth_804D7764 = entrynum;
     voice = AXAcquireVoice(0x1D, dropcallback, 0);
+#ifdef TARGET_PC
+    pc_audio_mark_stream(voice);
+#endif
     idx = voice->index;
     voice_node = &hsd_SynthSFXNodes[idx];
     HSD_Synth_804D7750 += 0x40;

@@ -157,6 +157,10 @@ float pc_audio_get_sfx_volume(void);
 /* false bypasses the aux effects (stage reverb and echo); the dry mix is
  * unchanged. On by default. */
 void pc_audio_set_reverb(bool on);
+/* Marks an AX voice as an HPS music stream, so it follows the music volume
+ * (src/sysdolphin/baselib/synth.c calls this where it acquires one). */
+struct _AXVPB;
+void pc_audio_mark_stream(struct _AXVPB* voice);
 
 /* Texture replacements (src/pc/textures.cpp) */
 void pc_textures_init(void);
