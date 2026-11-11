@@ -8,7 +8,7 @@ jobs:
       - name: Install MinGW-w64 toolchain (x86_64)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends mingw-w64 ninja-build
+          sudo apt-get install -y --no-install-recommends mingw-w64 ninja-build cabextract
           sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix
           sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix
       - name: Build and package
@@ -16,6 +16,7 @@ jobs:
           TARGET_ARCH: x86_64
         run: tools/package_windows.sh
       - name: Symbolize
+        if: always()
         run: |
           EXE=build-win/melee.exe
           x86_64-w64-mingw32-objdump -f "$EXE" | head
