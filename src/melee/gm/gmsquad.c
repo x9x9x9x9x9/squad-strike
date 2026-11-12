@@ -44,6 +44,10 @@ static s8 s_stocks;
 /* Each player's lineup in fighting order (the order it was picked). */
 static GmSquadMember s_lineup[GMSQUAD_PORTS][GMSQUAD_SIZE];
 static u8 s_lineup_count[GMSQUAD_PORTS];
+/* Which of its lineup each player is fighting as. Counted per respawn and
+ * not from the stock count: in a team battle stocks also move between
+ * teammates. */
+static u8 s_index[GMSQUAD_PORTS];
 
 static void init(void)
 {
@@ -68,6 +72,23 @@ bool gmSquad_ModeAllowed(void)
                gmOnline_GetKind() == ONLINE_KIND_DIRECT;
     default:
         return false;
+    }
+}
+
+int gmSquad_MaxExtra(int players)
+{
+    return players > 2 ? 1 : GMSQUAD_EXTRA;
+}
+
+u8 gmSquad_TeamColor(u8 ckind, u8 team)
+{
+    switch (team) { /* as character select does (mnCharSel_8025DB34) */
+    case 1:
+        return gm_801692BC(ckind);
+    case 2:
+        return gm_80169290(ckind);
+    default:
+        return gm_80169264(ckind);
     }
 }
 
@@ -307,13 +328,44 @@ void gmSquad_OnEnterVs(StartMeleeData* start)
             any = true;
         }
     }
-    if (!any || players != 2) {
+    if (!any || players < 2) {
         return;
     }
     s_live = true;
-    s_stocks = (s8) gmSquad_StocksFor();
     memset(s_lineup, GMSQUAD_NONE, sizeof(s_lineup));
     memset(s_lineup_count, 0, sizeof(s_lineup_count));
+    memset(s_index, 0, sizeof(s_index));
+    /* Character select keeps squads within gmSquad_MaxExtra and in team
+     * colours; hold to both here too, whatever built the table. */
+    s_stocks = 1;
+    for (i = 0; i < GMSQUAD_PORTS; i++) {
+        int k, extra = 0;
+        if (start->players[i].slot_type == Gm_PKind_NA) {
+            continue;
+        }
+        for (k = 0; k < GMSQUAD_EXTRA; k++) {
+            GmSquadMember* m = &gmSquad_rows[i][k];
+            if (m->ckind == GMSQUAD_NONE) {
+                continue;
+            }
+            if (extra >= gmSquad_MaxExtra(players)) {
+                m->ckind = GMSQUAD_NONE;
+                m->color = 0;
+                continue;
+            }
+            extra++;
+            if (start->rules.is_teams) {
+                m->color = gmSquad_TeamColor(m->ckind, start->players[i].team);
+            }
+        }
+        if (gmSquad_coin_pos[i] != GMSQUAD_NONE && gmSquad_coin_pos[i] > extra) {
+            gmSquad_coin_pos[i] = (u8) extra;
+        }
+        if (extra + 1 > s_stocks) {
+            s_stocks = (s8) (extra + 1);
+        }
+    }
+    s_stocks *= GMSQUAD_STOCKS_PER_FIGHTER;
     for (i = 0; i < GM_MAX_PLAYERS; i++) {
         int k;
         if (start->players[i].slot_type == Gm_PKind_NA) {
@@ -357,8 +409,9 @@ bool gmSquad_StockIconFrame(int slot, int i, f32* frame)
         return false; /* the fighter out now: the game's own icon */
     }
     ps = Player_GetPtrForSlot(slot);
+    (void) ps;
     /* Stock i from the left is lost after i more KOs: whoever fights then. */
-    index = (s_stocks - ps->stocks) / GMSQUAD_STOCKS_PER_FIGHTER + i;
+    index = s_index[slot] + i;
     if (index >= s_lineup_count[slot]) {
         index = s_lineup_count[slot] - 1;
     }
@@ -449,44 +502,56 @@ void gmSquad_WarmFiles(void)
     }
 }
 
-/* The squad member due now for this player, or NULL to respawn as is. */
-static GmSquadMember* due_member(s32 slot)
+/* The lineup position this player's next fighter has, or -1 to respawn as
+ * is: not a squad player, nobody left after the one out now, or no stock
+ * to come back with. */
+static int next_index(s32 slot)
 {
     StaticPlayer* ps;
-    int lost;
     int index;
-    GmSquadMember* m;
 
     if (!s_live || slot < 0 || slot >= GMSQUAD_PORTS) {
-        return NULL;
+        return -1;
     }
     ps = Player_GetPtrForSlot(slot);
     if (ps->pkind != Gm_PKind_Human && ps->pkind != Gm_PKind_Cpu) {
-        return NULL;
+        return -1;
     }
     if (ps->player_state != 2 || ps->stocks <= 0) {
-        return NULL;
+        return -1;
     }
-    lost = s_stocks - ps->stocks;
-    if (lost <= 0 || lost % GMSQUAD_STOCKS_PER_FIGHTER != 0) {
-        return NULL;
-    }
-    index = lost / GMSQUAD_STOCKS_PER_FIGHTER;
-    if (index <= 0 || index >= s_lineup_count[slot]) {
-        return NULL;
-    }
-    m = &s_lineup[slot][index];
-    if (m->ckind >= ChKind_Max ||
-        (m->ckind == ps->ckind && m->color == ps->costume_id))
+    index = s_index[slot] + 1;
+    if (index >= s_lineup_count[slot] ||
+        s_lineup[slot][index].ckind >= ChKind_Max)
     {
-        return NULL; /* the same fighter in the same costume: respawn as is */
+        return -1;
     }
-    return m;
+    return index;
+}
+
+/* Whether the fighter out now already is this member (same fighter in the
+ * same costume): it respawns as is. */
+static bool is_out(s32 slot, GmSquadMember* m)
+{
+    StaticPlayer* ps = Player_GetPtrForSlot(slot);
+    return m->ckind == ps->ckind && m->color == ps->costume_id;
 }
 
 bool gmSquad_HoldRespawn(s32 slot, s32 subchar)
 {
-    if (s_respawning || subchar != 0 || due_member(slot) == NULL) {
+    int index;
+    if (s_respawning || subchar != 0) {
+        return false;
+    }
+    if (slot >= 0 && slot < GMSQUAD_PORTS && s_held[slot]) {
+        return true; /* already waiting for gmSquad_OnVsFrame */
+    }
+    index = next_index(slot);
+    if (index < 0) {
+        return false;
+    }
+    if (is_out(slot, &s_lineup[slot][index])) {
+        s_index[slot] = (u8) index;
         return false;
     }
     /* Don't swap here: this can run inside the dying fighter's own
@@ -510,7 +575,7 @@ static void swap_in(s32 slot, GmSquadMember* m)
     Player_SetPlayerCharacter(slot, m->ckind);
     Player_SetCostumeId(slot, m->color);
     Player_80031AD0(slot); /* create the new fighter(s) */
-    gm_PcRetintDuplicates(); /* same fighter and costume as the other side */
+    gm_PcRetintDuplicates(); /* same fighter and costume as someone else */
     fn_8016E124();         /* Kirby copies for everyone now present */
     Player_80031848(slot);
 
@@ -537,9 +602,15 @@ void gmSquad_OnVsFrame(void)
             continue;
         }
         s_held[slot] = false;
-        m = due_member(slot);
-        if (m != NULL) {
-            swap_in(slot, m);
+        {
+            int index = next_index(slot);
+            if (index >= 0) {
+                m = &s_lineup[slot][index];
+                s_index[slot] = (u8) index;
+                if (!is_out(slot, m)) {
+                    swap_in(slot, m);
+                }
+            }
         }
         s_respawning = true;
         fn_8016719C(slot, 0);

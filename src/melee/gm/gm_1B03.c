@@ -72,9 +72,9 @@ void gm_PcRetintDuplicates(void) {
     int i, j, k;
     s8 tint[GM_MAX_PLAYERS];
 
-    if (gm_8016B168()) {
-        return; /* teams: the game's own tints stand */
-    }
+    /* Teams: teammates on the same character (all in the team's costume),
+     * as gm_SetupSubColors tells them apart. */
+    bool teams = gm_8016B168();
     for (i = 0; i < GM_MAX_PLAYERS; i++) {
         tint[i] = 0;
         if (Player_GetPlayerSlotType(i) == Gm_PKind_NA) {
@@ -83,7 +83,9 @@ void gm_PcRetintDuplicates(void) {
         for (j = 0; j < i; j++) {
             if (Player_GetPlayerSlotType(j) != Gm_PKind_NA &&
                 Player_GetPlayerCharacter(i) == Player_GetPlayerCharacter(j) &&
-                Player_GetCostumeId(i) == Player_GetCostumeId(j) && tint[i] == tint[j])
+                (teams ? Player_GetTeam(i) == Player_GetTeam(j)
+                       : Player_GetCostumeId(i) == Player_GetCostumeId(j)) &&
+                tint[i] == tint[j])
             {
                 tint[i]++;
                 j = -1;

@@ -1,13 +1,19 @@
 #ifndef MELEE_GM_GMSQUAD_H
 #define MELEE_GM_GMSQUAD_H
 
-/* PC only: Squad Strike (Smash Ultimate's tag team) for 1v1 VS matches.
+/* PC only: Squad Strike (Smash Ultimate's tag team) for VS matches.
  *
  * Each player builds a squad of up to four fighters on the character select
  * screen: the coin pick and up to three more added with Z, fighting in the
  * order they were picked. Every fighter
  * gets one stock; when one is KO'd, the next drops in on the revival
  * platform. Ported from the "Squad Strike v4" Gecko codes for Dolphin.
+ *
+ * With three or four players (doubles, or a free-for-all) a squad is two
+ * fighters: the match loads eight fighters at most, which is what the
+ * enlarged heaps below hold. In a team battle a member wears its team's
+ * colour, and a stock taken from a teammate brings the taker back as the
+ * fighter it had last.
  *
  * On PC the preload heap and ARAM are enlarged (lbheap.c, lbmemory.c, pc.h),
  * so every squad member's files are preloaded on character select and
@@ -61,6 +67,11 @@ int gmSquad_Lineup(int port, u8 coin_ck, u8 coin_color,
 
 /// Squads may exist in the current game mode (VS, or LAN/Direct online).
 bool gmSquad_ModeAllowed(void);
+/// How many fighters a player may add to the coin pick with this many
+/// players in the match: GMSQUAD_EXTRA for a 1v1, one with more.
+int gmSquad_MaxExtra(int players);
+/// The costume this character wears on this team (0 red, 1 blue, 2 green).
+u8 gmSquad_TeamColor(u8 ckind, u8 team);
 int gmSquad_Count(int port);
 bool gmSquad_Any(void);
 /// Stocks a squad match gives everyone: the biggest squad's size.

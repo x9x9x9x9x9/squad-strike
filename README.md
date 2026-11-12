@@ -2,7 +2,7 @@
 
 A mod of [melee-pc](https://github.com/999sian/melee-pc), the native PC port of
 Super Smash Bros. Melee. It adds **Squad Strike** (teams of up to four
-fighters in a 1v1), three stages from the **ACE build**, **SD Remix**
+fighters in a 1v1, two each in doubles), three stages from the **ACE build**, **SD Remix**
 characters, **Stage Expansion** layouts, a FROZEN Pokémon Stadium pick,
 Slippi-style connect codes for online play, and better controller support.
 
@@ -126,8 +126,12 @@ With Squad Strike on, in a 4 stock VS match:
 - Your squad is listed on screen in fighting order. A coin still in your
   hand isn't a pick yet; it joins the order where you drop it.
 - Holding a CPU's coin, **Z** builds that CPU's squad.
-- An error sound means the squad is full, every colour of that fighter is
-  taken, or there are more than two players (squads are for 1v1s).
+- With three or four players (doubles or a free-for-all) a squad is two
+  fighters: your coin pick and one more. In a team battle squad members wear
+  their team's colour, and a stock taken from a teammate brings you back as
+  the fighter you had last.
+- An error sound means the squad is full or every colour of that fighter is
+  taken.
 
 ## Stage select
 
