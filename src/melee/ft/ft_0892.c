@@ -129,7 +129,14 @@ void ft_800895E0(Fighter* fp, int arg1)
     union Struct2070 sp14;
     union Struct2070 spC;
 
+#ifdef TARGET_PC
+    /* Not through a pointer to the native int: the union is stored in
+     * GameCube byte order here, so that read came back byte-swapped (every
+     * move's attack id read 0 and its state-kind and flag bits were wrong). */
+    val.x2070_int = arg1;
+#else
     val = *(union Struct2070*) &arg1;
+#endif
     if (val.x0.x2073 == 0 || val.x0.x2073 != fp->x2070.x0.x2073) {
         fp->x2074.x2088 = plAttack_80037B08();
     }
