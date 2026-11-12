@@ -380,9 +380,13 @@ struct NetSession {
     } link[NET_LINKS];
     int local, remote, delay;
     /* Controller ports as bit masks: the ones the local stream speaks for,
-     * the ones the remote stream does, and the ones that have a controller
-     * whatever WIRE_PRESENT says (each side's player). */
-    uint8_t own_local, own_remote, primary;
+     * the ones each link's remote stream does, and the ones that have a
+     * controller whatever WIRE_PRESENT says (each side's player). */
+    uint8_t own_local, own_link[NET_LINKS], primary;
+    /* A party (docs/party-plan.md): more than two computers in a star. The
+     * host has a link per guest (nlinks); a guest has one, to the host, and
+     * its seat is its port. */
+    bool party;
     uint32_t session; /* 0 on the guest until the host's first packet */
     /* How long to wait for the peer's first datagram, ms. CONNECT_TIMEOUT_MS
      * for a session the user dialled by hand (the other end may simply be
@@ -430,6 +434,17 @@ struct NetSession {
     bool synctest;
 };
 extern struct NetSession net;
+
+/* Links in use: one, or a party host's one per guest. */
+static inline int links(void) {
+    return net.nlinks > 1 ? net.nlinks : 1;
+}
+
+/* Run the statement once per link with t_li on it, then put t_li back.
+ * No break, continue or return inside. */
+#define FOR_LINKS()                                                                                \
+    for (int li_ = 0, li_save_ = t_li; li_ < links() ? (t_li = li_, 1) : (t_li = li_save_, 0);     \
+         li_++)
 
 /* ---- net.c ------------------------------------------------------------ */
 

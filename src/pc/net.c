@@ -377,10 +377,35 @@ static int32_t simulated_upto(void) {
 
 /* Newest frame whose checksum is final: simulated with real inputs on both
  * sides and not awaiting a rollback. */
+/* Newest frame every link's real input is in for. */
+static int32_t all_have(void) {
+    int32_t have = s_remote_have_l[0];
+    for (int i = 1; i < links(); i++) {
+        if (s_remote_have_l[i] < have) {
+            have = s_remote_have_l[i];
+        }
+    }
+    return have;
+}
+
+static bool any_left(void) {
+    for (int i = 0; i < links(); i++) {
+        if (s_peer_left_l[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The port the peer on this link puts in its headers. */
+static int link_remote(void) {
+    return net.nlinks > 1 ? t_li + 1 : net.remote;
+}
+
 static int32_t confirmed_frame(void) {
     int32_t f = simulated_upto();
-    if (f > s_remote_have) {
-        f = s_remote_have;
+    if (f > all_have()) {
+        f = all_have();
     }
     if (s_rb_frame >= 0 && f >= s_rb_frame) {
         f = s_rb_frame - 1;
@@ -447,6 +472,9 @@ static void sock_err_note(const char* what, int e) {
 
 /* One sendto with error translation (caller holds tx_lock). */
 int net_sendto(const void* buf, size_t len) {
+    if (NL.peer_len == 0) {
+        return (int)len; /* a party guest that has not been heard from yet */
+    }
     int r =
         (int)sendto(net.sock, (const char*)buf, len, 0, (struct sockaddr*)&NL.peer, NL.peer_len);
     if (r < 0) {
@@ -480,6 +508,7 @@ static void send_packet(Packet* pk) {
  * so a lost packet costs half a frame instead of a whole one. Runs on SDL's
  * timer thread; it only touches the frozen packet copy, the held queue and
  * the reliable transmit queue. Removes itself once the session is gone. */
+static void tx_timer_link(uint64_t now);
 static Uint32 SDLCALL tx_timer(void* ud, SDL_TimerID id, Uint32 interval) {
     (void)ud;
     (void)id;
@@ -489,9 +518,22 @@ static Uint32 SDLCALL tx_timer(void* ud, SDL_TimerID id, Uint32 interval) {
         SDL_UnlockMutex(net.tx_lock);
         return 0;
     }
+    uint64_t now = SDL_GetTicksNS();
+    FOR_LINKS() {
+        tx_timer_link(now);
+    }
+    int32_t seen = atomic_load_explicit(&s_frame_pub, memory_order_relaxed);
+    SDL_UnlockMutex(net.tx_lock);
+    /* Outside the lock: the log write must not hold up the sender, and the
+     * stuck thread it signals may itself be waiting on this mutex. */
+    net_watchdog_tick(seen);
+    return interval;
+}
+
+/* tx_timer's work for one link (tx_lock held). */
+static void tx_timer_link(uint64_t now) {
     tx_flush();
     rel_service();
-    uint64_t now = SDL_GetTicksNS();
     /* Mid-frame resend pacing:
      * On clean links (low loss, low jitter, low rollback depth), disable redundant
      * mid-frame retransmissions to prevent bufferbloat and network congestion.
@@ -509,18 +551,48 @@ static Uint32 SDLCALL tx_timer(void* ud, SDL_TimerID id, Uint32 interval) {
         send_packet(&s_last_pkt);
         s_last_send_ns = now;
     }
-    int32_t seen = atomic_load_explicit(&s_frame_pub, memory_order_relaxed);
-    SDL_UnlockMutex(net.tx_lock);
-    /* Outside the lock: the log write must not hold up the sender, and the
-     * stuck thread it signals may itself be waiting on this mutex. */
-    net_watchdog_tick(seen);
-    return interval;
 }
 
-static void send_inputs(void) {
-    /* The local sample taken at frame f is the input for frame f + delay. */
+/* The stream this link is sent. For one peer that is the local ring. A
+ * party host relays: each guest gets the host's own input and the other
+ * guests', so the stream runs only as far as every other guest's real
+ * input does. */
+static int32_t tx_newest(void) {
     int32_t newest = s_wrote;
-    if (newest < 0) {
+    for (int j = 0; j < links(); j++) {
+        if (j != t_li && s_remote_have_l[j] < newest) {
+            newest = s_remote_have_l[j];
+        }
+    }
+    return newest;
+}
+
+static WirePad tx_pad(int32_t f) {
+    WirePad w = s_local_ring[f & (RING - 1)];
+    for (int j = 0; j < links(); j++) {
+        if (j == t_li) {
+            continue;
+        }
+        for (int port = 0; port < 4; port++) {
+            if (net.own_link[j] & (1u << port)) {
+                w.p[port] = s_remote_ring_l[j][f & (RING - 1)].p[port];
+            }
+        }
+    }
+    return w;
+}
+
+/* The remote frame the time-sync advantage is measured against. A party
+ * guest's stream from the host is held back by the slowest other guest, so
+ * it measures against the host's own newest frame instead. */
+static int32_t sync_have(void) {
+    return net.party && net.nlinks <= 1 ? s_remote_newest : s_remote_have;
+}
+
+static void send_link(void) {
+    /* The local sample taken at frame f is the input for frame f + delay. */
+    int32_t newest = tx_newest();
+    if (s_wrote < 0) {
         return; /* do not send input packets until the first local frame exists */
     }
     Packet pk;
@@ -561,21 +633,21 @@ static void send_inputs(void) {
     }
     if (count < 1) {
         count = 0;
-        first = newest64;
+        first = s_wrote; /* nothing to carry: a relay waiting on another guest */
     }
     s_red_target = (int)count;
     for (int32_t i = 0; i < count; i++) {
-        pk.pads[i] = s_local_ring[(first + i) & (RING - 1)];
+        pk.pads[i] = tx_pad((int32_t)(first + i));
     }
     pk.count = (uint8_t)count;
     pk.first = (int32_t)first;
-    pk.newest = newest;
+    pk.newest = s_wrote; /* our own newest, however far the relayed stream runs */
     pk.ck_frame = confirmed_frame();
     pk.ck = pk.ck_frame >= 0 ? s_ck_ring[pk.ck_frame & (RING - 1)] : 0;
     /* How far this simulation has run past the newest input the peer has
      * given us. The peer compares it with its own and only the side that is
      * further ahead gives a frame back (net_sync.c time_sync). */
-    int32_t adv = net.frame - 1 - s_remote_have;
+    int32_t adv = net.frame - 1 - sync_have();
     pk.adv = (int8_t)(adv < -127 ? -127 : adv > 127 ? 127 : adv);
     atomic_store_explicit(&s_adv_pub, pk.adv, memory_order_relaxed);
     atomic_store_explicit(&s_want_resend,
@@ -592,6 +664,12 @@ static void send_inputs(void) {
     if (newest != s_send_frame) {
         s_send_frame = newest;
         s_send_ns = now;
+    }
+}
+
+static void send_inputs(void) {
+    FOR_LINKS() {
+        send_link();
     }
 }
 
@@ -815,7 +893,7 @@ static void on_inputs(const Packet* pk, bool reordered) {
      * the reorder as phase error. (tx_timer restamps its resends, so those
      * carry an adv as fresh as any.) */
     if (!reordered) {
-        adv_note(pk->adv, net.frame - 1 - s_remote_have);
+        adv_note(pk->adv, net.frame - 1 - sync_have());
     }
     if (pk->newest > s_remote_newest) {
         s_remote_newest = pk->newest;
@@ -1047,6 +1125,16 @@ bool pc_net_send_datagram(const void* data, size_t size, uint32_t address, uint1
  * player. */
 static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, socklen_t from_len) {
     Hdr* h = buf;
+    if (net.nlinks > 1) {
+        /* A party host: the sender's seat names its link. Everything below
+         * (the MAC under that link's key, the address pin) then holds the
+         * datagram to that guest. */
+        if (n < (int)sizeof(Hdr) || h->player < 1 || h->player > net.nlinks) {
+            s_rx_bad_player_l[0]++;
+            return;
+        }
+        t_li = h->player - 1;
+    }
     if (s_datagram_handler && from->ss_family == AF_INET) {
         const struct sockaddr_in* a = (const struct sockaddr_in*)from;
         if (s_datagram_handler(buf, (size_t)n, a->sin_addr.s_addr, ntohs(a->sin_port)))
@@ -1140,7 +1228,7 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
         }
         return;
     }
-    if (h->player != net.remote) {
+    if (h->player != link_remote()) {
         s_rx_bad_player++;
         return;
     }
@@ -1167,7 +1255,7 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
         const Rel* rel = buf;
         is_rules = h->magic == 'R' && rel->type == REL_RULES && ntohs(rel->len) == sizeof(Rules);
     }
-    bool learn_session = net.session == 0 && net.local == 1 && h->session != 0 && is_rules;
+    bool learn_session = net.session == 0 && net.local != 0 && h->session != 0 && is_rules;
     bool guest_preamble = !s_heard && net.local == 0 && h->session == 0;
     if (h->session != net.session && !learn_session && !guest_preamble) {
         s_rx_bad_sess++;
@@ -1237,15 +1325,19 @@ static bool rx_pump(void) {
             continue; /* empty datagram: nothing to parse */
         }
         SDL_LockMutex(s_rx_lock);
+        int li = t_li; /* rx_datagram moves it to the sender's link */
         rx_datagram(&u, n, &from, from_len);
+        t_li = li;
         SDL_UnlockMutex(s_rx_lock);
     }
     if (net.sim_rx_delay_ns != 0) {
         SDL_LockMutex(s_rx_lock);
         uint64_t now = SDL_GetTicksNS();
-        for (Held* h; (h = held_due(s_rx_held, now)) != NULL;) {
-            h->release_ns = 0;
-            rx_dispatch(h->buf, h->len);
+        FOR_LINKS() {
+            for (Held* h; (h = held_due(s_rx_held, now)) != NULL;) {
+                h->release_ns = 0;
+                rx_dispatch(h->buf, h->len);
+            }
         }
         SDL_UnlockMutex(s_rx_lock);
     }
@@ -1281,7 +1373,14 @@ static uint64_t rx_heard_ns(void) {
 
 /* Apply what the receive thread queued, in arrival order (game thread): the
  * frame loop calls this once per fresh tick and wait_remote() once a turn. */
+static void recv_link(void);
 void recv_inputs(void) {
+    FOR_LINKS() {
+        recv_link();
+    }
+}
+
+static void recv_link(void) {
     atomic_store(&s_frame_pub, net.frame);
     if (s_rx_thread == NULL) {
         rx_pump();
@@ -1338,17 +1437,31 @@ static unsigned s_rb_recent_n;
  * tick): the state dump beside it is the first pass only. */
 static uint8_t s_sim_n[RING]; /* times each frame index was simulated */
 
+/* The ring entry frame f's pad for this port comes from: the local stream,
+ * or the link whose remote stream owns the port (link 0's for a port
+ * nobody owns; head_from_wire gives such a port no controller). */
+static const WirePad* port_stream(int port, int32_t f) {
+    unsigned bit = 1u << port;
+    if (net.own_local & bit) {
+        return &s_local_ring[f & (RING - 1)];
+    }
+    for (int i = 1; i < links(); i++) {
+        if (net.own_link[i] & bit) {
+            return &s_remote_ring_l[i][f & (RING - 1)];
+        }
+    }
+    return &s_remote_ring_l[0][f & (RING - 1)];
+}
+
 static void dump_rings_around(int32_t f) {
     for (int32_t i = f - 16; i <= f + 1; i++) {
         if (i < 0 || i > net.frame || i <= net.frame - RING) {
             continue;
         }
-        const WirePad* m = &s_local_ring[i & (RING - 1)];
-        const WirePad* t = &s_remote_ring[i & (RING - 1)];
         /* The four ports in order, each from the stream that owns it. */
         const WireOne* w[4];
         for (int k = 0; k < 4; k++) {
-            w[k] = (net.own_local & (1u << k)) ? &m->p[k] : &t->p[k];
+            w[k] = &port_stream(k, i)->p[k];
         }
         pc_log_line("net: ring f%d %04x/%d,%d %04x/%d,%d %04x/%d,%d %04x/%d,%d ck %08x x%u%s", i,
             w[0]->button, w[0]->stickX, w[0]->stickY, w[1]->button, w[1]->stickX, w[1]->stickY,
@@ -1380,7 +1493,14 @@ static void dump_rings_around(int32_t f) {
 /* Every frame both peers have confirmed and the peer reported a checksum
  * for, oldest first, each once. A frame the peer never reported is left for
  * the next call until a later one is compared or it ages out of the rings. */
+static void check_desync_link(void);
 static void check_desync(void) {
+    FOR_LINKS() {
+        check_desync_link();
+    }
+}
+
+static void check_desync_link(void) {
     if (net.desync_reported || net.hs == HS_PENDING) {
         return;
     }
@@ -1630,7 +1750,7 @@ static bool wait_remote(int32_t need) {
         if (s_remote_have >= need) {
             break;
         }
-        if (s_peer_left) {
+        if (any_left()) {
             return false;
         }
         net_watchdog_heartbeat();
@@ -1900,9 +2020,26 @@ static bool second_allowed(void) {
 /* The ports each stream speaks for (docs/party-plan.md). Two computers:
  * each side's player, and that port + 2 for a second player there. */
 static void own_ports(void) {
-    net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
-    net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
-    net.own_remote = (uint8_t)(1u << net.remote | 1u << (net.remote + 2));
+    memset(net.own_link, 0, sizeof net.own_link);
+    if (net.nlinks > 1) {
+        /* Party host: port 0 is ours, each guest's seat its link's. */
+        net.own_local = 1u;
+        net.primary = 1u;
+        for (int i = 0; i < net.nlinks; i++) {
+            net.own_link[i] = (uint8_t)(1u << (i + 1));
+            net.primary |= net.own_link[i];
+        }
+    } else if (net.party) {
+        /* Party guest: our seat is ours; the host's stream speaks for every
+         * other port, and WIRE_PRESENT says which of them are taken. */
+        net.own_local = (uint8_t)(1u << net.local);
+        net.own_link[0] = (uint8_t)(0xFu & ~net.own_local);
+        net.primary = (uint8_t)(net.own_local | 1u);
+    } else {
+        net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
+        net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
+        net.own_link[0] = (uint8_t)(1u << net.remote | 1u << (net.remote + 2));
+    }
 }
 
 /* This frame's sample of the local players, as it goes on the wire. */
@@ -1940,13 +2077,22 @@ static void local_to_wire(WirePad* w) {
 }
 
 /* One frame of the queue head: each port from the stream that owns it. */
-static void head_from_wire(PADStatus* head, const WirePad* mine, const WirePad* theirs) {
+static void head_from_wire(PADStatus* head, const WirePad* mine, const WirePad* theirs, int32_t f) {
+    unsigned owned = net.own_local;
+    for (int i = 0; i < links(); i++) {
+        owned |= net.own_link[i];
+    }
     for (int port = 0; port < 4; port++) {
         unsigned bit = 1u << port;
-        const WireOne* w = (net.own_local & bit) ? &mine->p[port] : &theirs->p[port];
-        bool present =
-            (net.primary & bit) != 0 || ((w->button & WIRE_PRESENT) != 0 && second_allowed());
-        if (!present || ((net.own_local | net.own_remote) & bit) == 0) {
+        /* mine and theirs are the local stream and link 0's with whatever
+         * write_head substituted (the neutral lead-in, the audit's poison);
+         * a party host's other links come straight from their rings. */
+        const WireOne* w = (net.own_local & bit)   ? &mine->p[port] :
+                           (net.own_link[0] & bit) ? &theirs->p[port] :
+                                                     &port_stream(port, f)->p[port];
+        bool present = (net.primary & bit) != 0 ||
+                       ((w->button & WIRE_PRESENT) != 0 && (second_allowed() || net.party));
+        if (!present || (owned & bit) == 0) {
             memset(&head[port], 0, sizeof head[port]);
             head[port].err = PAD_ERR_NO_CONTROLLER;
             continue;
@@ -1969,7 +2115,19 @@ static void audit_reset(void);
 static bool s_seen_remote_l[NET_LINKS];
 #define s_seen_remote (s_seen_remote_l[t_li])
 
+static void session_reset_link(void);
 static void session_reset(void) {
+    /* Per link, last to first so the session's own state (which every pass
+     * resets again) ends up reset with t_li back on link 0. */
+    for (int i = NET_LINKS - 1; i >= 0; i--) {
+        t_li = i;
+        session_reset_link();
+    }
+    net.nlinks = 1;
+    net.party = false;
+}
+
+static void session_reset_link(void) {
     scene_handoff_reset();
     s_seed_have = false;
     s_lockstep = snapshot_state_region_missing() != NULL;
@@ -2074,19 +2232,31 @@ void pc_net_disconnect(void) {
         SDL_WaitThread(s_rx_thread, NULL);
         s_rx_thread = NULL;
     }
-    s_rxq_head = s_rxq_n = 0;
-    if (!s_peer_left) {
-        /* Tell the peer why so it need not wait out the silence; sent
-         * as a 5-packet burst so NAT/firewall drops are tolerated. */
+    FOR_LINKS() {
+        s_rxq_head = s_rxq_n = 0;
+    }
+    {
+        /* Tell every peer that has not itself left why, so it need not wait
+         * out the silence; sent as a 5-packet burst so NAT/firewall drops
+         * are tolerated. */
         uint8_t why = s_status == PC_NET_PEER_OK ? PC_NET_PEER_LEFT : (uint8_t)s_status;
+        bool told = false;
         net.sim_hold = false; /* straight out: the held queue dies with the socket */
         for (int i = 0; i < 5; i++) {
             SDL_LockMutex(net.tx_lock);
-            send_bye(why);
+            FOR_LINKS() {
+                if (!s_peer_left) {
+                    send_bye(why);
+                    told = true;
+                }
+            }
             SDL_UnlockMutex(net.tx_lock);
+            if (!told) {
+                break;
+            }
             SDL_Delay(4);
         }
-        if (s_status == PC_NET_PEER_OK) {
+        if (told && s_status == PC_NET_PEER_OK) {
             s_status = PC_NET_PEER_LEFT;
         }
     }
@@ -2099,8 +2269,10 @@ void pc_net_disconnect(void) {
     /* After the BYE burst above, which still needed the key to be accepted:
      * the nonces it was derived from are dead with the session, so the key
      * does not outlive it in this process's memory either. */
-    net_key_clear();
-    s_mac_seen = false;
+    FOR_LINKS() {
+        net_key_clear();
+        s_mac_seen = false;
+    }
     rules_restore();
     HSD_PadLibData.qtype = 0;
     SDL_UnlockMutex(net.tx_lock);
@@ -2178,6 +2350,55 @@ static bool addr_is_host(const struct sockaddr* sa) {
                a->sin6_addr.s6_addr[0] != 0xff;
     }
     return false;
+}
+
+/* A party from the environment (tests and the command line; the menus set
+ * the same fields):
+ *   host:  MELEE_NET_PARTY=ip:port,ip:port[,ip:port]  its guests, by seat
+ *   guest: MELEE_NET_SEAT=1..3                        with MELEE_NET=<host>
+ * Called from connect_impl after session_reset, before own_ports. */
+#define PARTY_DELAY 3
+static void party_env(int family) {
+    const char* seat = getenv("MELEE_NET_SEAT");
+    const char* list = getenv("MELEE_NET_PARTY");
+    if (seat != NULL && seat[0] >= '1' && seat[0] <= '0' + NET_LINKS && seat[1] == '\0') {
+        net.party = true;
+        net.local = seat[0] - '0';
+        net.remote = 0;
+        return;
+    }
+    if (list == NULL || list[0] == '\0' || net.local != 0) {
+        return;
+    }
+    int n = 0;
+    char buf[256];
+    snprintf(buf, sizeof buf, "%s", list);
+    for (char* tok = strtok(buf, ","); tok != NULL && n < NET_LINKS; tok = strtok(NULL, ",")) {
+        char* colon = strrchr(tok, ':');
+        if (colon == NULL) {
+            break;
+        }
+        *colon = '\0';
+        struct addrinfo hints, *res = NULL;
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = family;
+        hints.ai_socktype = SOCK_DGRAM;
+        if (getaddrinfo(tok, colon + 1, &hints, &res) != 0 || res == NULL) {
+            pc_log_line("net: party: cannot resolve %s:%s", tok, colon + 1);
+            break;
+        }
+        memcpy(&net.link[n].peer, res->ai_addr, res->ai_addrlen);
+        net.link[n].peer_len = (socklen_t)res->ai_addrlen;
+        freeaddrinfo(res);
+        n++;
+    }
+    if (n < 2) {
+        pc_log_line("net: MELEE_NET_PARTY needs two or three guest addresses; ignored");
+        return;
+    }
+    net.party = true;
+    net.nlinks = n;
+    pc_log_line("net: party host with %d guests", n);
 }
 
 static bool connect_impl(
@@ -2284,6 +2505,7 @@ static bool connect_impl(
     HSD_PadLibData.qtype = 2;
     net.local = player ? 1 : 0;
     net.remote = 1 - net.local;
+    party_env(family);
     own_ports();
     /* A hand-typed address may be a peer the user has not started yet, so it
      * keeps the long wait. One handed over from matchmaking (pc_net_connect_
@@ -2298,6 +2520,14 @@ static bool connect_impl(
     net.delay = net.delay_auto ? 2 : delay ? atoi(delay) : s_configured_delay;
     if (net.delay < 0 || net.delay >= RING / 2) {
         net.delay = 2;
+    }
+    if (net.party) {
+        /* One delay for the whole party, fixed: the host's pick-and-announce
+         * is a two-computer exchange (docs/party-plan.md, step 4). */
+        net.delay_auto = false;
+        if (delay == NULL || strcmp(delay, "auto") == 0) {
+            net.delay = s_configured_delay >= 0 ? s_configured_delay : PARTY_DELAY;
+        }
     }
     net.delay_next = net.delay;
     s_wrote = net.delay - 1; /* frames 0..delay-1 stay neutral on both sides */
@@ -2323,6 +2553,9 @@ static bool connect_impl(
     bool rc_bad =
         rc_ms != NULL && (rc_end == rc_ms || *rc_end != '\0' || rc_want < 0 || rc_want > INT32_MAX);
     s_rc_window_ms = rc_bad ? RECONNECT_MS : (int32_t)rc_want;
+    if (net.party) {
+        s_rc_window_ms = 0; /* no resume in a party yet: a silent link ends it */
+    }
     sim_env(bind_port);
     /* The host names the session; the guest takes it from the first packet. */
     net.session = net.local == 0 ?
@@ -2342,7 +2575,10 @@ static bool connect_impl(
      * frame. */
     const char* key = getenv("MELEE_NET_KEY");
     if (key != NULL && key[0] != '\0') {
-        net_key_direct(key);
+        for (int i = NET_LINKS - 1; i >= 0; i--) {
+            t_li = i; /* every link a party host may have */
+            net_key_direct(key);
+        }
         pc_log_line("net: datagrams authenticated from MELEE_NET_KEY (the handshake will not "
                     "rekey this session)");
     }
@@ -2448,7 +2684,7 @@ void pc_net_poll(void) {
     }
     recv_inputs();
     send_inputs(); /* includes reliable retransmits while simulation is parked */
-    if (s_peer_left) {
+    if (any_left()) {
         pc_net_disconnect();
     }
 }
@@ -2617,7 +2853,22 @@ bool pc_net_resim(void) {
 
 /* Every input wait, including a failed snapshot, has the same disconnect
  * handling. A failed snapshot must not allow a speculative tick to run. */
+static bool wait_input_link(int32_t need, const char* reason);
 static bool wait_input(int32_t need, const char* reason) {
+    /* Every link in turn; the wait on one keeps the others fed
+     * (wait_remote sends and receives on all of them). */
+    for (int i = 0; i < links(); i++) {
+        t_li = i;
+        bool ready = wait_input_link(need, reason);
+        t_li = 0;
+        if (!ready) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool wait_input_link(int32_t need, const char* reason) {
     int32_t have = s_remote_have;
     uint64_t t0 = SDL_GetTicksNS();
     bool ready = wait_remote(need);
@@ -2646,7 +2897,7 @@ static bool wait_input(int32_t need, const char* reason) {
      * usual case once one-way delay is high enough to stall every
      * frame. Without this the stalling side never ends the test and the
      * harness kills it, which reads as a netplay failure. */
-    if (s_peer_left) {
+    if (any_left()) {
         exit_if_test_done();
     }
     pc_net_disconnect();
@@ -2663,6 +2914,15 @@ static void predict(int32_t f) {
     static const WirePad neutral;
     s_remote_ring[f & (RING - 1)] =
         s_remote_have >= 0 ? s_remote_ring[s_remote_have & (RING - 1)] : neutral;
+}
+
+/* Predict frame f on every link whose real input for it is not in. */
+static void predict_missing(int32_t f) {
+    FOR_LINKS() {
+        if (s_remote_have < f) {
+            predict(f);
+        }
+    }
 }
 
 /* Snapshot before a predicted frame. Behind the barrier nothing is taken
@@ -2857,7 +3117,7 @@ static void write_head(PADStatus* head, int32_t f) {
         wrong.p[net.remote].button ^= 0x0100; /* A */
         theirs = &wrong;
     }
-    head_from_wire(head, mine, theirs);
+    head_from_wire(head, mine, theirs, f);
     if (!s_seen_remote && (theirs->p[net.remote].button & ~WIRE_PRESENT) != 0) {
         s_seen_remote = true;
         pc_log_line("net: first remote button press (%04x) at frame %d",
@@ -2881,13 +3141,11 @@ static PADStatus* unconsume(void) {
 /* Set up the re-run of frame f: refresh its snapshot if it is still
  * predicted (the old one holds the discarded timeline), then feed it. */
 static bool resim_prepare(int32_t f) {
-    if (f > s_remote_have) {
+    if (f > all_have()) {
         if (!snap_predicted(f) && !wait_input(f, "replay snapshot")) {
             return false;
         }
-        if (f > s_remote_have) {
-            predict(f);
-        }
+        predict_missing(f);
     }
     PADStatus* head = unconsume();
     if (head == NULL) {
@@ -3196,7 +3454,7 @@ static void fresh_tick(PADStatus* head, bool raw) {
             }
         }
         recv_inputs();
-        if (s_peer_left) {
+        if (any_left()) {
             exit_if_test_done();
             pc_net_disconnect();
             return;
@@ -3252,13 +3510,11 @@ static void fresh_tick(PADStatus* head, bool raw) {
         if ((net.frame % SYNC_INTERVAL) == 0 && net.frame > 0) {
             time_sync();
         }
-        if (s_remote_have < net.frame) {
+        if (all_have() < net.frame) {
             if (!snap_predicted(net.frame) && !wait_input(net.frame, "snapshot fallback")) {
                 return;
             }
-            if (s_remote_have < net.frame) {
-                predict(net.frame);
-            }
+            predict_missing(net.frame);
         }
         /* Re-resolve the slot the next HSD_PadRenewMasterStatus will read.
          * The pointer this tick started with was taken before wait_remote
@@ -3650,7 +3906,7 @@ bool pc_net_after_tick(bool scene_ending) {
              * f4676 under --delay 50 --loss 3 --jitter, one frame after a
              * rollback to 4675). Drop it instead. */
             Snapshot* stale = snap_slot(g);
-            if (g <= s_remote_have && stale->frame == g) {
+            if (g <= all_have() && stale->frame == g) {
                 stale->frame = -1;
             }
             s_resim_run++;

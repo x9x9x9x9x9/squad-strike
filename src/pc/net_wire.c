@@ -216,9 +216,12 @@ uint32_t ready_hash(Ready rd, uint32_t session) {
  * repeats, and a recording of one session verifies under no other key. */
 static const char KEY_LABEL[] = "melee-pc netplay session key v1";
 static const char KEY_LABEL_DIRECT[] = "melee-pc netplay direct key v1";
-static uint8_t s_key[32];
-static bool s_key_on;     /* s_key holds a key for the session in progress */
-static bool s_key_pinned; /* from MELEE_NET_KEY: the handshake must not rekey */
+static uint8_t s_key_l[NET_LINKS][32];
+#define s_key (s_key_l[t_li])
+static bool s_key_on_l[NET_LINKS]; /* s_key holds a key for the session in progress */
+#define s_key_on (s_key_on_l[t_li])
+static bool s_key_pinned_l[NET_LINKS]; /* from MELEE_NET_KEY: the handshake must not rekey */
+#define s_key_pinned (s_key_pinned_l[t_li])
 
 static void put32(uint8_t* p, uint32_t v) {
     p[0] = (uint8_t)(v >> 24);

@@ -131,10 +131,11 @@ static bool s_rules_frozen;
 static unsigned s_rules_flags; /* PC_RULE_* */
 static bool s_rules_saved;     /* guest: s_rules_orig holds its own values */
 static Rules s_rules_orig;
-static uint64_t s_nonce_local;   /* ours this session; 0: not drawn yet */
-static uint32_t s_nonce_session; /* net.session s_nonce_local was drawn for */
-static uint64_t s_nonce_peer;    /* theirs, from RULES (guest) or READY (host) */
-static bool s_unlock_saved;      /* s_unlock_orig holds what the player had */
+static uint64_t s_nonce_local;             /* ours this session; 0: not drawn yet */
+static uint32_t s_nonce_session;           /* net.session s_nonce_local was drawn for */
+static uint64_t s_nonce_peer_l[NET_LINKS]; /* theirs, from RULES (guest) or READY (host) */
+#define s_nonce_peer (s_nonce_peer_l[t_li])
+static bool s_unlock_saved; /* s_unlock_orig holds what the player had */
 static uint64_t s_unlock_orig;
 /* One log line per refusal class per session (the log-line rule): a peer, or
  * a stale process at its address, that keeps resending must not flood it. */
@@ -165,7 +166,8 @@ static struct {
     uint8_t type;
     uint8_t len; /* 0: nothing pending */
     uint8_t wire[sizeof(Rules)];
-} s_hs_tx;
+} s_hs_tx_l[NET_LINKS];
+#define s_hs_tx (s_hs_tx_l[t_li])
 
 uint32_t pc_net_seed(void) {
     return net.seed;
@@ -173,6 +175,29 @@ uint32_t pc_net_seed(void) {
 
 int pc_net_handshake_state(void) {
     return net.hs;
+}
+
+/* Party host: which guests' READY is in. The handshake is done when all
+ * are; one guest's, when its own is. */
+static bool s_hs_ready_l[NET_LINKS];
+#define s_hs_ready (s_hs_ready_l[t_li])
+
+static bool hs_all_ready(void) {
+    for (int i = 0; i < links(); i++) {
+        if (!s_hs_ready_l[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool hs_any_ready(void) {
+    for (int i = 0; i < links(); i++) {
+        if (s_hs_ready_l[i]) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static void hs_done(void) {
@@ -525,7 +550,7 @@ static void on_ready(const uint8_t* payload, int len) {
         hs_drop(LOG_READY_GUEST, "READY", "we are the guest");
         return;
     }
-    if (net.hs == HS_DONE) {
+    if (net.hs == HS_DONE || (net.nlinks > 1 && s_hs_ready)) {
         hs_drop(LOG_READY_DONE, "READY", "already done");
         return;
     }
@@ -567,7 +592,7 @@ static void on_ready(const uint8_t* payload, int len) {
          * Both were ours and the guest can apply only one, so its answer is
          * the agreed frame. If that frame has already gone by here, the
          * match layer's ready barrier refuses the start. */
-        if (rd.start_frame != s_hs_prev_start) {
+        if (rd.start_frame != s_hs_prev_start || net.nlinks > 1) {
             hs_drop(LOG_READY_START, "READY", "start_frame we never sent");
             return;
         }
@@ -582,7 +607,10 @@ static void on_ready(const uint8_t* payload, int len) {
     SDL_LockMutex(net.tx_lock);
     net_key_session(s_nonce_local, rd.nonce);
     SDL_UnlockMutex(net.tx_lock);
-    hs_done();
+    s_hs_ready = true;
+    if (net.nlinks <= 1 || hs_all_ready()) {
+        hs_done();
+    }
 }
 
 /* Reliable types below 0x10: the match handshake. */
@@ -611,7 +639,13 @@ static bool hs_send_rules(void) {
     s_hs_rules.hash = rules_hash(s_hs_rules, net.session);
     Rules w = s_hs_rules;
     wire_rules(&w);
-    return hs_send(REL_RULES, &w, sizeof w);
+    bool sent = true;
+    FOR_LINKS() {
+        if (!s_hs_ready && !hs_send(REL_RULES, &w, sizeof w)) {
+            sent = false;
+        }
+    }
+    return sent;
 }
 
 /* Host: the start went by with no READY, so the RULES out there can only be
@@ -633,9 +667,20 @@ static void hs_reissue(void) {
 static bool hs_poll(int32_t* start_frame) {
     if (net.hs == HS_PENDING) {
         recv_inputs();
-        hs_flush(); /* after recv_inputs: a 'K' just read may be what freed the slot */
+        FOR_LINKS() {
+            hs_flush(); /* after recv_inputs: a 'K' just read may be what freed the slot */
+        }
         if (net.hs == HS_PENDING && net.hs_host && net.tick_frame >= net.start_frame) {
-            hs_reissue();
+            if (net.nlinks > 1 && hs_any_ready()) {
+                /* Some guests hold the start frame that just passed and
+                 * cannot be given another. */
+                net.hs = HS_FAILED;
+                pc_log_line("net: party handshake failed: not every guest was READY by "
+                            "start_frame=%d",
+                    net.start_frame);
+            } else {
+                hs_reissue();
+            }
         }
         /* Re-checked: recv_inputs() or the flush above may have just finished
          * the handshake, and a done one is not timed out. */
@@ -664,6 +709,7 @@ bool pc_net_host_match(uint32_t seed, int32_t* start_frame) {
             return false;
         }
         net.hs = HS_PENDING;
+        memset(s_hs_ready_l, 0, sizeof s_hs_ready_l);
         s_hs_t0 = SDL_GetTicksNS();
         net.seed = seed;
         seed_apply();
