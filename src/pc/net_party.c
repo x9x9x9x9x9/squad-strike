@@ -116,7 +116,7 @@ static const PcNetIdentity* s_id;
 static uint8_t s_compat[20];
 static int s_state = PC_PARTY_OFF;
 static const char* s_why;
-static bool s_host, s_calling;
+static bool s_is_host, s_calling;
 static char s_target[PC_CODE_SIZE];
 static uint64_t s_party, s_join_nonce;
 static int s_size, s_seat;
@@ -219,7 +219,7 @@ static void fail(const char* why) {
 static void reset(void) {
     s_state = PC_PARTY_OFF;
     s_why = NULL;
-    s_host = s_calling = s_shaped = s_handshake_done = false;
+    s_is_host = s_calling = s_shaped = s_handshake_done = false;
     s_target[0] = '\0';
     s_size = s_seat = 0;
     s_cand_n = 0;
@@ -702,7 +702,7 @@ static bool after_handoff(const void* data, size_t n, uint32_t address, uint16_t
     if (n < 8 || ntohl(r->magic) != PARTY_MAGIC) {
         return false;
     }
-    if (!s_host && n == sizeof *r && r->type == 'W' && r->phase == PH_GO &&
+    if (!s_is_host && n == sizeof *r && r->type == 'W' && r->phase == PH_GO &&
         address == s_host_ep.address && port == s_host_ep.port &&
         memcmp(r, &s_go, sizeof *r - sizeof r->signature - sizeof r->echo_ms) == 0)
     {
@@ -730,9 +730,9 @@ static void connect_session(void) {
         }
         const Member* m = &s_m[i];
         bool direct = s_via[s_seat][i] < 0;
-        if (s_host || i == 0) {
-            seats[i].address = s_host ? m->ep.address : s_host_ep.address;
-            seats[i].port = s_host ? m->ep.port : s_host_ep.port;
+        if (s_is_host || i == 0) {
+            seats[i].address = s_is_host ? m->ep.address : s_host_ep.address;
+            seats[i].port = s_is_host ? m->ep.port : s_host_ep.port;
         } else if (direct) {
             if (!m->reached) {
                 fail("The party's shape does not match what this computer reached");
@@ -773,8 +773,8 @@ static void connect_session(void) {
 static void connect_poll(void) {
     pc_net_poll();
     if (!s_handshake_done) {
-        s_handshake_done = s_host ? pc_net_host_match(s_seed, &s_start_frame) :
-                                    pc_net_guest_wait_match(&s_seed, &s_start_frame);
+        s_handshake_done = s_is_host ? pc_net_host_match(s_seed, &s_start_frame) :
+                                       pc_net_guest_wait_match(&s_seed, &s_start_frame);
     }
     if (pc_net_handshake_state() == 3) {
         fail("match handshake failed");
@@ -783,7 +783,7 @@ static void connect_poll(void) {
     if (!s_handshake_done) {
         return;
     }
-    int links = s_host ? pc_net_party_links() : 1;
+    int links = s_is_host ? pc_net_party_links() : 1;
     bool all = true;
     for (int i = 0; i < links; i++) {
         pc_net_party_use_link(i);
@@ -818,13 +818,13 @@ static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep
     if (j->version != PARTY_VERSION) {
         return;
     }
-    if (s_host && s_state != PC_PARTY_FAIL) {
+    if (s_is_host && s_state != PC_PARTY_FAIL) {
         if (j->type == 'J' && n == sizeof(PartyJoin)) {
             host_join(data, ep);
         } else if (j->type == 'S' && n == sizeof(PartyStatus)) {
             host_status(data, ep);
         }
-    } else if (!s_host && s_state != PC_PARTY_FAIL) {
+    } else if (!s_is_host && s_state != PC_PARTY_FAIL) {
         if (j->type == 'W' && n == sizeof(PartyRoster)) {
             guest_roster(data, ep);
         } else if (j->type == 'P' && n == sizeof(PartyPunch) && s_state != PC_PARTY_OFF) {
@@ -837,7 +837,7 @@ bool pc_party_datagram(const void* data, size_t size, const struct pc_dht_endpoi
     if (size < 8 || ntohl(*(const uint32_t*)data) != PARTY_MAGIC) {
         return false;
     }
-    if (s_id != NULL && (s_host || s_calling)) {
+    if (s_id != NULL && (s_is_host || s_calling)) {
         receive(data, size, from);
     }
     return true;
@@ -904,7 +904,7 @@ bool pc_party_host(void) {
         fail("random source failed");
         return false;
     }
-    s_host = true;
+    s_is_host = true;
     s_size = 1;
     s_seat = 0;
     memcpy(s_m[0].seat.code, s_id->code, sizeof s_m[0].seat.code);
@@ -916,7 +916,7 @@ bool pc_party_host(void) {
 }
 
 bool pc_party_start(void) {
-    if (!s_host || s_state != PC_PARTY_LOBBY || s_size < 3) {
+    if (!s_is_host || s_state != PC_PARTY_LOBBY || s_size < 3) {
         return false;
     }
     s_state = PC_PARTY_PUNCH;
@@ -934,7 +934,7 @@ void pc_party_stop(void) {
     if (s_id != NULL && s_state != PC_PARTY_OFF && s_state != PC_PARTY_FAIL &&
         s_state != PC_PARTY_CONNECT && s_state != PC_PARTY_READY)
     {
-        if (s_host) {
+        if (s_is_host) {
             while (s_size > 1) {
                 host_drop(s_size - 1, "sent home (party closed)");
             }
@@ -942,7 +942,7 @@ void pc_party_stop(void) {
             status_send(PH_LEAVE);
         }
     }
-    bool was = s_state != PC_PARTY_OFF || s_host || s_calling;
+    bool was = s_state != PC_PARTY_OFF || s_is_host || s_calling;
     reset();
     if (was) {
         pc_net_set_datagram_handler(NULL);
@@ -960,7 +960,7 @@ void pc_party_poll(void) {
         return;
     }
     uint64_t now = SDL_GetTicks();
-    if (s_host) {
+    if (s_is_host) {
         host_poll(now);
     } else if (s_calling) {
         guest_poll(now);
@@ -979,7 +979,7 @@ bool pc_party_active(void) {
 }
 
 bool pc_party_is_host(void) {
-    return s_host;
+    return s_is_host;
 }
 
 void pc_party_view(PcPartyView* out) {
@@ -998,7 +998,7 @@ void pc_party_view(PcPartyView* out) {
         if (i == s_seat) {
             continue;
         }
-        if (s_host) {
+        if (s_is_host) {
             out->ping_ms[i] = s_m[i].rtt[0] != 0xFFFF && s_m[i].heard_ms != 0 ? s_m[i].rtt[0] : -1;
         } else {
             out->ping_ms[i] = s_m[i].rtt_ms;
