@@ -394,6 +394,10 @@ struct NetSession {
     bool party;
     int party_size; /* computers in it, the host included */
     uint8_t link_seat[NET_LINKS], relay[NET_LINKS];
+    /* Host: the longest one-way trip between any two computers as the lobby
+     * measured it (a relayed pair's through its relay), which the delay has
+     * to cover along with the host's own links. 0 unknown. */
+    uint32_t party_trip_us;
     uint32_t session; /* 0 on the guest until the host's first packet */
     /* How long to wait for the peer's first datagram, ms. CONNECT_TIMEOUT_MS
      * for a session the user dialled by hand (the other end may simply be

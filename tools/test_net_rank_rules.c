@@ -39,6 +39,9 @@ int pc_net_peer_status(void) {
     return 0;
 }
 void pc_net_peer_status_clear(void) {}
+int pc_net_party_size(void) {
+    return 0;
+}
 unsigned pc_rank_session_stocks(void) {
     return tiebreak ? 1 : 4;
 }

@@ -268,6 +268,18 @@ static CSSDoorsData mnCharSel_803F0DFC = {
         0x00, 0x00, 0x00, 0x00, 11.0F, 17.0F, 19.0F, 24.6 } },
 };
 
+#ifdef TARGET_PC
+/* The team colour a door starts the next character select on (0 red, 1
+ * blue, 2 green). The table outlives the scene, so an online party sets all
+ * four on every computer alike before entering (gmonlinemode.c). */
+void mnCharSel_PcSetDoorTeam(int door, int team)
+{
+    if (door >= 0 && door < 4 && team >= 0 && team < 3) {
+        mnCharSel_803F0DFC.doors[door].team = (u8) team;
+    }
+}
+#endif
+
 static CSSTag mnCharSel_803F0E8C[4] = {
     { NULL, 0x70, 0x73, 0x74, 0x72, 0x71 },
     { NULL, 0x75, 0x78, 0x79, 0x77, 0x76 },

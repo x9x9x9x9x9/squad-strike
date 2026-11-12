@@ -362,7 +362,10 @@ int scene_kind(void) {
 
 bool pc_net_chat_available(void) {
     int scene = scene_kind();
-    return net.active && (scene == GS_CSS || scene == GS_RESULTS || scene == GS_ONLINE_LOBBY);
+    /* Not in a party yet: a message goes to one computer, and four players
+     * would each see a different conversation. */
+    return net.active && !net.party &&
+           (scene == GS_CSS || scene == GS_RESULTS || scene == GS_ONLINE_LOBBY);
 }
 
 bool in_fight(void) {
@@ -2215,6 +2218,7 @@ static void session_reset(void) {
     }
     net.nlinks = 1;
     net.party = false;
+    net.party_trip_us = 0;
 }
 
 static void session_reset_link(void) {
@@ -2532,6 +2536,7 @@ static struct {
     int seat, size;
     PcNetPartySeat seats[4];
     int8_t via[4][4];
+    int worst_rtt_ms;
 } s_party_cfg;
 static int8_t s_party_via[4][4];
 
@@ -2546,6 +2551,8 @@ static void party_cfg(void) {
         return;
     }
     memcpy(s_party_via, s_party_cfg.via, sizeof s_party_via);
+    net.party_trip_us = (uint32_t)s_party_cfg.worst_rtt_ms * 500u;
+    s_party_cfg.worst_rtt_ms = 0;
     for (int i = 0; i < net.nlinks; i++) {
         const PcNetPartySeat* p = &s_party_cfg.seats[net.link_seat[i]];
         struct sockaddr_in a;
@@ -2752,13 +2759,10 @@ static bool connect_impl(
     if (net.delay < 0 || net.delay >= RING / 2) {
         net.delay = 2;
     }
-    if (net.party) {
-        /* One delay for the whole party, fixed: the host's pick-and-announce
-         * is a two-computer exchange (docs/party-plan.md, step 4). */
-        net.delay_auto = false;
-        if (delay == NULL || strcmp(delay, "auto") == 0) {
-            net.delay = s_configured_delay >= 0 ? s_configured_delay : PARTY_DELAY;
-        }
+    if (net.party && net.delay_auto) {
+        /* Until the host has measured its links and announced a delay that
+         * covers the slowest pair (net_sync.c). */
+        net.delay = PARTY_DELAY;
     }
     net.delay_next = net.delay;
     s_wrote = net.delay - 1; /* frames 0..delay-1 stay neutral on both sides */
@@ -2890,6 +2894,10 @@ bool pc_net_connect_party(intptr_t socket, int seat, int size, const PcNetPartyS
     bool ok = connect_impl((sock_t)socket, ip, first->port, seat != 0, seed) && net.party;
     s_party_cfg.on = false;
     return ok;
+}
+
+void pc_net_party_worst_trip(int rtt_ms) {
+    s_party_cfg.worst_rtt_ms = rtt_ms < 0 ? 0 : rtt_ms > 2000 ? 2000 : rtt_ms;
 }
 
 int pc_net_party_links(void) {

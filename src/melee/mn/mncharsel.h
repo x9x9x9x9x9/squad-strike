@@ -30,6 +30,9 @@
 /* 26688C */ void mnCharSel_Scene_OnEnter(void*);
 /* 2669F4 */ void mnCharSel_Scene_OnFrame(void);
 /* 266D70 */ void mnCharSel_Scene_OnExit(void*);
+#ifdef TARGET_PC
+void mnCharSel_PcSetDoorTeam(int door, int team);
+#endif
 
 typedef struct DISC_STRUCT MnSelectChrModels {
     /* 0x0 */ StaticModelDesc background;

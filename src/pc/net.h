@@ -85,6 +85,9 @@ bool pc_net_connect_party(intptr_t socket, int seat, int size, const PcNetPartyS
 /* Have the session agree its match by itself from the frame loop, as one
  * started from MELEE_NET does (a lobby with no menu to do it from). */
 void pc_net_direct_handshake(void);
+/* Host, before pc_net_connect_party: the longest round trip between any two
+ * computers of the party as the lobby measured it, ms. */
+void pc_net_party_worst_trip(int rtt_ms);
 /* Party: the number of computers this one is connected to directly, the seat
  * at the far end of each, and the link pc_net_send_reliable /
  * pc_net_recv_reliable work on until it is set back to 0 (game thread). */

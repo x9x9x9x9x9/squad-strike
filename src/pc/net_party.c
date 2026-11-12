@@ -410,6 +410,16 @@ static void host_shape(void) {
         }
     }
     s_shaped = true;
+    int worst = 0;
+    for (int a = 0; a < s_size; a++) {
+        for (int b = a + 1; b < s_size; b++) {
+            int r = s_via[a][b];
+            int t = r < 0 ? trip(a, b) : trip(a, r) + trip(r, b);
+            worst = t > worst && t < 999 ? t : worst;
+        }
+    }
+    pc_net_party_worst_trip(worst);
+    pc_log_line("party: slowest pair %d ms round trip", worst);
 }
 
 static void connect_session(void);

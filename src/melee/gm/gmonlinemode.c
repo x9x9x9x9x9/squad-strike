@@ -19,6 +19,7 @@
 #include <melee/if/if_2FD9.h>
 #include <melee/lb/types.h>
 #include <melee/mn/inlines.h>
+#include <melee/mn/mncharsel.h>
 #include <melee/mn/types.h>
 #include <sysdolphin/baselib/controller.h>
 #include <sysdolphin/baselib/random.h>
@@ -390,8 +391,25 @@ void onExitResults(GameModeState* state)
         /* The loser picks the next stage. A tie or a cancelled game leaves
          * the last chooser picking again. */
         MatchEnd* end = &gmVsMelee_ResultsEnterData.match_end;
+        int party = pc_net_party_size();
         if (rankedMode() || gm_WasMatchCanceled(end->outcome)) {
             /* keep the last chooser */
+        } else if (party >= 3) {
+            /* A party: the first player of a team that lost picks; with no
+             * teams, the player after the winner. No single winner: no
+             * change. */
+            if (end->is_teams && end->n_team_winners == 1) {
+                for (int i = 0; i < party; i++) {
+                    if (end->player_standings[i].pkind == Gm_PKind_Human &&
+                        end->player_standings[i].team != end->team_winners[0])
+                    {
+                        stage_chooser = i;
+                        break;
+                    }
+                }
+            } else if (!end->is_teams && end->n_winners == 1 && end->winners[0] < party) {
+                stage_chooser = (end->winners[0] + 1) % party;
+            }
         } else if (end->is_teams) {
             /* Team battle (CPU partners): the player whose team lost picks.
              * Both on one team, or no single winning team: no change. */
@@ -764,6 +782,57 @@ static const char* const peer_word[] = { "", "Peer left",
 
 static void lobbyCopyName(char* dst, const char* src);
 
+/* The character select a party walks into, the same on every computer: a
+ * door per player, and for four a team battle to start from (the players
+ * can still change teams, or turn them off). Teams are 1+3 against 2+4,
+ * unless a pair of players is connected through a third computer: those
+ * two feel each other a little late, which matters least between
+ * teammates, so they start on the same team. */
+static void partyDoors(const PcPartyView* party)
+{
+    int team[GM_MAX_PLAYERS] = { 0, 1, 0, 1 };
+    int a = -1, b = -1, pairs = 0;
+    for (int i = 0; i < party->size; i++) {
+        for (int j = i + 1; j < party->size; j++) {
+            if (party->via[i][j] >= 0 && pairs++ == 0) {
+                a = i;
+                b = j;
+            }
+        }
+    }
+    if (party->size == 4 && pairs >= 1) {
+        /* One relayed pair, or two that share nobody: each pair a team.
+         * Anything else (pairs that overlap) cannot all be teammates. */
+        bool fits = pairs == 1;
+        if (pairs == 2) {
+            fits = true;
+            for (int i = 0; i < 4; i++) {
+                for (int j = i + 1; j < 4; j++) {
+                    if (party->via[i][j] >= 0 && (i == a || i == b) != (j == a || j == b)) {
+                        fits = false;
+                    }
+                }
+            }
+        }
+        if (fits) {
+            for (int i = 0; i < 4; i++) {
+                team[i] = (i == a || i == b) ? 0 : 1;
+            }
+        }
+    }
+    for (int i = 0; i < GM_MAX_PLAYERS; ++i) {
+        online_vs.start.players[i].slot_type =
+            i < party->size ? Gm_PKind_Human : Gm_PKind_NA;
+        if (i < 4) {
+            online_vs.start.players[i].team = (u8) team[i];
+            mnCharSel_PcSetDoorTeam(i, team[i]);
+        }
+    }
+    online_vs.start.rules.is_teams = party->size == 4;
+    pc_log_line("lobby: party of %d, teams %s (%d %d %d %d)", party->size,
+                party->size == 4 ? "on" : "off", team[0], team[1], team[2], team[3]);
+}
+
 /* A party's lobby (pc/net_party.h): who is in, what it is waiting for, and
  * once the computers have tried each other, which pairs could not connect
  * directly and who carries them. */
@@ -847,6 +916,7 @@ static void partyFrame(OnlineLobbyView* view, u64 input)
         snprintf(view->message, sizeof view->message, "Connecting everyone to everyone...");
     }
     if (state == PC_PARTY_READY && pc_net_frame() >= pc_party_start_frame()) {
+        partyDoors(&party);
         *HSD_RandSeedPtr = pc_party_seed();
         pc_log_line("lobby: party entering CSS at frame %d, seed %u", pc_net_frame(),
                     pc_party_seed());

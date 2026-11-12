@@ -188,8 +188,45 @@ static void delay_apply(void) {
  * the split is for. Deciding is one side's job (the peers measure different
  * ping and jitter and would otherwise pick differently); applying is driven
  * by frame number alone, so both land on the same frame. */
+/* A party's announcement goes to every guest; one whose lane is full gets it
+ * on a later frame (and applies it late, as net_delay_rel allows). */
+static DelayMsg s_delay_msg;
+static uint8_t s_delay_untold;
+
+static void delay_tell(void) {
+    FOR_LINKS() {
+        if ((s_delay_untold & (1u << t_li)) != 0 &&
+            pc_net_send_reliable(REL_DELAY, &s_delay_msg, sizeof s_delay_msg))
+        {
+            s_delay_untold &= (uint8_t) ~(1u << t_li);
+        }
+    }
+}
+
+/* The round trip the delay has to cover: this link's, or in a party the
+ * slowest of the host's links and of the pairs the lobby measured. 0 until
+ * every link has a measurement. */
+static uint32_t delay_ping_us(void) {
+    if (!net.party) {
+        return NL.ping_us;
+    }
+    uint32_t worst = net.party_trip_us * 2;
+    for (int i = 0; i < net.nlinks; i++) {
+        if (net.link[i].ping_us == 0) {
+            return 0;
+        }
+        if (net.link[i].ping_us > worst) {
+            worst = net.link[i].ping_us;
+        }
+    }
+    return worst;
+}
+
 static void delay_auto(void) {
     delay_apply();
+    if (s_delay_untold != 0) {
+        delay_tell();
+    }
     /* Exactly one side announces, and it is the same side everywhere in the
      * netcode: player 1, net.local 0. That peer names the session id
      * (net.c), is the one a lobby connects as player 0 (net_lan.c,
@@ -204,7 +241,8 @@ static void delay_auto(void) {
     }
     bool fight = in_fight();
     uint64_t now_ms = SDL_GetTicks();
-    if (NL.ping_us == 0) {
+    uint32_t ping_us = delay_ping_us();
+    if (ping_us == 0) {
         return;
     }
     /* Crossing between menu and fight re-picks at once from the base the
@@ -218,7 +256,7 @@ static void delay_auto(void) {
             return;
         }
         s_delay_window_ms = now_ms;
-        uint32_t trip = NL.ping_us / 2 + jitter_us();
+        uint32_t trip = ping_us / 2 + jitter_us();
         int need = (int)((trip + FRAME_US - 1) / FRAME_US);
         /* Hysteresis: a trip sitting on a frame boundary would otherwise flip
          * between two delays for the rest of the match, one announcement per
@@ -240,7 +278,7 @@ static void delay_auto(void) {
         return;
     }
     int d = fight ? s_delay_base - ROLLBACK_COVER : s_delay_base + LOCKSTEP_PROCESSING;
-    bool lan = NL.ping_us < LAN_PING_US && jitter_us() < LAN_JITTER_US;
+    bool lan = ping_us < LAN_PING_US && jitter_us() < LAN_JITTER_US;
     int lo = !fight ? 1 : lan ? FIGHT_DELAY_LAN : FIGHT_DELAY_MIN;
     /* Lockstep must cover the trip; a 200 ms link needs about seven frames.
      * Fights still cap delay at four and use rollback for the rest. */
@@ -274,7 +312,11 @@ static void delay_auto(void) {
                barrier_lead > quick ? barrier_lead :
                                       quick;
     DelayMsg m = {htonl((uint32_t)d), htonl((uint32_t)(net.frame + lead))};
-    if (!pc_net_send_reliable(REL_DELAY, &m, sizeof m)) {
+    if (net.party) {
+        s_delay_msg = m;
+        s_delay_untold = (uint8_t)((1u << net.nlinks) - 1u);
+        delay_tell();
+    } else if (!pc_net_send_reliable(REL_DELAY, &m, sizeof m)) {
         return; /* lane full: the next window announces again */
     }
     net.delay_next = d;
@@ -283,7 +325,7 @@ static void delay_auto(void) {
     s_delay_acted_ms = now_ms;
     s_delay_fight = fight;
     pc_log_line("net: auto delay %d -> %d at frame %d (%s, ping %u ms, jitter %u ms)", net.delay, d,
-        net.delay_at, fight ? "fight" : "lockstep", NL.ping_us / 1000, jitter_us() / 1000);
+        net.delay_at, fight ? "fight" : "lockstep", ping_us / 1000, jitter_us() / 1000);
 }
 
 /* The host's announcement (REL_DELAY, reliable lane 1). The guest never
@@ -299,8 +341,8 @@ void net_delay_rel(const void* payload, int len) {
      * arriving here at the host is either a peer that has the roles confused
      * or one that has decided its own latency should be the host's -- either
      * way it must not retune this side. */
-    if (net.local == 0) {
-        pc_log_line("net: REL_DELAY from the guest ignored (the host announces)");
+    if (net.local == 0 || (net.party && net.link_seat[t_li] != 0)) {
+        pc_log_line("net: REL_DELAY from a guest ignored (the host announces)");
         return;
     }
     int d = (int)ntohl(m.delay);
@@ -531,6 +573,7 @@ uint64_t pc_net_catch_up_ns(uint64_t late_ns) {
 
 /* Session start: empty rings, no correction pending, no frame debt. */
 void sync_reset(void) {
+    s_delay_untold = 0;
     const char* mode = getenv("MELEE_NET_SYNC");
     net.sync_mode = mode == NULL                ? SYNC_ON :
                     strcmp(mode, "off") == 0    ? SYNC_OFF :

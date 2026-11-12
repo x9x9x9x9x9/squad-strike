@@ -6,26 +6,72 @@ players per computer; matchmaking stays 1v1.
 
 This file is the working plan. Update the status table when a step lands.
 
-## Topology: a star
+## Topology: direct where it can be, relayed where it cannot
 
-The host holds one link to each guest; guests hold one link, to the host.
+Every pair of computers talks directly, so a player's input reaches each of
+the other three in one trip. A pair that cannot connect (two routers that
+both refuse unsolicited UDP) goes through a third computer that reaches
+both; nobody chooses or configures this.
 
-- Only the host has to be reachable (its connect code, UPnP or a forwarded
-  port). Guests never talk to each other, so there is no guest-to-guest NAT
-  traversal.
-- A guest runs the ordinary two-computer session: one remote, one remote
-  input stream. The only difference is which ports that stream speaks for.
-- The host relays: what it sends guest A for frame f is its own input for f
-  plus the other guests' inputs for f, so it can only send A frames that
-  every other guest has delivered. A guest therefore sees the other guests
-  one extra hop late (their latency to the host plus the host's to it) and
-  predicts them meanwhile, like any late remote input.
+- `net.link[]` is one link per computer this one reaches directly, in seat
+  order (`net.link_seat[]`), so a guest's link 0 is always the host.
+- Each link's remote stream speaks for the far computer's port
+  (`net.own_link[]`), plus the port of any player that computer relays to
+  us. `net.relay[]` is the ports we forward on a link from the links that
+  own them (`tx_pad`, `tx_newest`: a relayed frame can only go out once its
+  owner delivered it).
+- `party_shape(seat, size, via)` (net.c) builds all three tables from one
+  description every computer holds alike: `via[a][b]` is the seat relaying
+  between a and b, or -1. The host is direct to everybody by construction
+  (they joined through it), so a relay always exists.
+- The host still settles what needs one voice: the rules and start frame
+  (RULES/READY with each guest), the frame a scene ends on
+  (`scene_hold_host`), and the input delay (`delay_auto`, announced on
+  every link).
+- Time sync: every link's frame-advantage samples feed the one estimator,
+  so each computer paces itself against the middle of the others; no
+  computer is the clock. A link that carries a relayed player measures
+  against the relay's own newest frame (`sync_have`).
 
-Rejected: a full mesh (pairwise NAT traversal, three links on every
-computer, and all of the link layer instanced everywhere); a separate hub
-process speaking the protocol to four unchanged clients (it would have to
-re-implement the authenticated handshake, the reliable channel, the scene
-hand-off and time sync as the "peer" of each client).
+The first version of this branch was a star (everything through the host).
+It is still expressible (`tools/net_party_test.py --star`) and is what a
+party degrades to when no guest pair can connect.
+
+## The lobby (net_party.c)
+
+One player picks "Host a party" in the Direct Connect hub and gives out
+their connect code. The others call that code exactly as they call anyone:
+net_match.c asks every address the code is found at whether a party is
+hosted there (`pc_party_candidate`), and a caller that gets a roster back
+joins the party instead of pairing.
+
+Four signed messages on the pairing socket:
+
+| | from -> to | what |
+|---|---|---|
+| J join | caller -> host | code, key, address on its own network |
+| W roster | host -> guest, 4 Hz | seats, addresses as the host sees them, phase, and once settled the shape and seed |
+| S status | guest -> host | which guests it reached, its trip to every computer |
+| P punch | guest <-> guest | opens both routers for the pair, times the trip |
+
+When the host presses START (3 or 4 computers) the guests punch each other
+at the address the host saw them at (the same socket and so, behind most
+routers, the same mapping), and at the local address too when both sit
+behind one public address. After at least 1.2 s and at most 5 s the host
+shapes the party (`host_shape`): mutual reach is direct; any other pair
+goes through whichever computer, direct to both, gives the shortest
+measured trip. Then every computer hands its socket to net.c
+(`pc_net_connect_party`) and the session's own handshake agrees the start
+frame.
+
+Keys: a host-guest link is keyed by the session handshake as in a
+two-computer session; a guest-guest link has no handshake, so it is keyed
+from the party id and the pair's two signed punch nonces.
+
+On the way into character select every computer opens a door per seat. Four
+players start as a team battle, 1+3 against 2+4, except that a relayed pair
+starts on the same team (they see each other a little late, which matters
+least between teammates). Players can change teams as usual.
 
 ## Wire: ports, not peers (step 1)
 
@@ -35,8 +81,7 @@ controller port. Each stream owns a fixed set of ports for the session:
 | session            | local stream owns     | remote stream owns        |
 |--------------------|-----------------------|---------------------------|
 | two computers      | local, local + 2      | remote, remote + 2        |
-| party, guest       | its seat              | every other port          |
-| party, host        | port 0                | per link: that guest's seat |
+| party              | its seat              | per link: the far seat, plus seats it relays to us |
 
 A port a stream owns but has no controller for has `WIRE_PRESENT` clear in
 its `button`; the queue head gets `PAD_ERR_NO_CONTROLLER` there. The codec
@@ -47,103 +92,57 @@ port costs one byte a frame.
 the rollback core cares how many players a stream carries: prediction,
 misprediction detection and resends all treat a `WirePad` as opaque bytes.
 
-## Host: three links (step 2)
+## Links (step 2)
 
-Everything that describes one peer moves from file statics into `struct
-Link` (net_internal.h); the host has up to three, a guest or a two-computer
-session one. A thread-local `L` names the link the running code is working
-on, and the old static names become macros onto it (`#define s_remote_have
-(L->remote_have)`), so the link code keeps its text. Per link:
+Everything that describes one peer is an array over `NET_LINKS` behind a
+macro of its old name (`#define s_remote_have (s_remote_have_l[t_li])`);
+the thread-local `t_li` is the link the running code works on, so the link
+code reads as it did for one peer. The core asks the links in aggregate:
+remote input for a frame is each link's ring for the ports it owns; a frame
+is confirmed when every link has it; the rollback target is the earliest
+misprediction over links.
 
-- address, session key, handshake state and nonces, reliable channel;
-- remote ring, `remote_have`, `rx_have`, remote checksums;
-- what the peer has acked (`last_acked`), tx sequence, RTT ring, loss and
-  ping estimates, rx sequence window;
-- time-sync estimator, resume state, silence/progress timers, peer-left.
-
-Per session (unchanged statics): the local ring and `s_wrote`, the frame
-counter, snapshots, audits, audio journal, pad queue.
-
-The core asks the links in aggregate:
-
-- remote input for frame f = each link's ring for the ports it owns;
-- `remote_have` = the minimum over links (a frame is confirmed when every
-  guest's input for it is in);
-- the rollback target = the earliest misprediction over links;
-- stall / time-sync slow-down = the largest any link asks for.
-
-Relay: the frames the host can send link i run up to `min(s_wrote,
-remote_have of every other link)`; its tx ring for i is the local ring
-merged with the other links' rings.
-
-Handshake: the host runs the existing handshake with each guest and gives
-all of them the same seed and start frame; the lobby start fence waits for
-all links. RULES are the host's, as now.
-
-Desync check: per link, host against that guest (a guest that parts from
-the host has parted from everyone).
-
-Disconnect: one guest leaving ends the session for all (first version).
-Resume after an interruption: per link, as now.
-
-## Session start (step 3)
-
-- Test/CLI: `MELEE_NET=host:<port>:<guests>` and the existing
-  `MELEE_NET=connect:...` with `MELEE_NET_SEAT=<1..3>`.
-  `tools/net_test.py --four` runs four instances on loopback.
-- Direct: the host opens a party on its connect code; guests enter the
-  host's code. The host assigns seats in arrival order (step 5).
-- LAN: the lobby lists a party and how many seats are taken (step 5).
-
-## Time sync (step 4)
-
-Two computers compare frame advantages (`adv`) and the one ahead gives a
-frame back. In a star each guest syncs against the host as now, but its
-`adv` must be measured against the host's own newest input (`pk->newest`),
-not against the relayed stream, which is held back by the slowest guest.
-The host takes the largest correction any link asks for.
+Desync check: per link. Disconnect: one computer leaving ends the session
+for all.
 
 ## Status
 
 | step | what | state |
 |------|------|-------|
 | 1 | port-indexed wire pads, ownership masks; two computers and two per computer unchanged | done |
-| 2a | per-link state as arrays over `NET_LINKS` behind macros of the old names, indexed by the thread-local `t_li` (this replaced the `struct Link` idea above: no types had to move) | done |
-| 2b | host with a link per guest: per-link send/receive/timers/gate, aggregate confirmed frame and waits, relay (`tx_newest`, `tx_pad`), handshake to all guests, a key per link | done |
-| 3 | `MELEE_NET_PARTY` / `MELEE_NET_SEAT` / `MELEE_NET_PARTY_SIZE`, `tools/net_party_test.py` | done |
-| 4 | time sync in a star, tuning with simulated latency | started: see below |
-| 5 | Direct/LAN party connect flow and menus | not started |
-| 6 | reliable messages on a host (scene hand-off, pause, chat), four doors on character select online, stage chooser, results | not started |
+| 2 | per-link state, a link per direct peer, relay masks, handshake to all guests, a key per link | done |
+| 3 | `MELEE_NET_SEAT` / `MELEE_NET_PARTY` / `MELEE_NET_PARTY_RELAY`, `tools/net_party_test.py` | done |
+| 4 | every pair direct, relay only for pairs that cannot connect | done |
+| 5 | lobby: join by the host's code, punch, measure, shape (net_party.c; `net_party_test.py --lobby [--block 13]`) | done on loopback; not yet run across real routers |
+| 6 | party screen and "Host a party" in the Direct hub, a door per seat, default teams, stage chooser | written; not run (the test disc has no menu files) |
+| 7 | auto delay for the party (host covers the slowest pair, announces on every link) | done |
+| 8 | reconnect window in a party | not started: a silent link still ends the session for everyone |
+| 9 | chat in a party | off in a party for now (a message reaches one computer only) |
 
 Measured on loopback (four instances, null backend, `MELEE_DEBUG_VS=four`,
-every player a self-mashing pad):
+every player a self-mashing pad; 30 ms one way per link, 20 ms jitter, 2%
+loss; about 10,400 frames, all four records identical in every run):
 
-- no simulated latency: 10,799 frames, all four records identical, no
-  rollbacks needed;
-- 30 ms one way per link (about 65 ms ping to the host), 20 ms jitter, 2%
-  loss: 10,436 frames, all four records identical, no desync; the host
-  rolled back 660 times (depth up to 3), each guest about 1,650 times
-  (depth up to 7, which is `WINDOW`: a guest sees the other guests two
-  hops late), 80 to 150 short stalls each.
+| shape | rollback depth, worst computer | rollbacks per computer |
+|---|---|---|
+| every pair direct | 3 | 90 to 760 |
+| one guest pair relayed through another guest | 7 | 360 to 1,970 |
+| star (everything through the host), earlier build | 7 | 660 host, about 1,650 each guest |
 
-What a party does not have yet (each is a two-computer exchange today):
+Known gaps:
 
-- **Time sync (step 4).** The host feeds every link's advantage samples
-  into the one estimator and guests measure against `pk->newest`
-  (`sync_have`). It held in the runs above but is not designed: the host
-  should not be steered by its slowest guest. `WINDOW` (7) is also tight
-  for guest-to-guest input at ordinary pings.
-- **Auto delay.** Fixed at `PARTY_DELAY` (3) or the configured delay.
-- **Resume.** `s_rc_window_ms` is 0 in a party: a silent link ends the
-  session for everyone.
-- **Reliable messages from the host other than the handshake and the
-  scene hand-off.** `pc_net_send_reliable` sends on the current link (link 0
-  on the game thread). The scene hand-off is done (`scene_hold_host`: the
-  host announces the latest frame of all once every guest's is in; measured
-  with `MELEE_DEBUG_VS_STOCKS=1`, the match ended and all four computers
-  entered the results scene on frame 483). The lobby's ready barrier
-  (`REL_READY_BARRIER`, net_lan.c and net_match.c), the delay announcement
-  and chat still go to one guest only.
-- **Starting one from the menus (step 5)** and everything the online mode
-  assumes about two players (step 6): `pc_net_local_player()` is 0 or 1 in
-  gmonlinemode.c, the stage chooser, the ping display, rumble's port map.
+- The lobby's connect path after the hand-over (`connect_poll`: handshake
+  and ready barrier driven from the lobby scene) is only exercised through
+  `MELEE_PARTY_TEST`, which lets the session agree its match the way a
+  `MELEE_NET` one does.
+- A guest that reaches the host only on its local network (same house as
+  the host) is seen by outside guests at an address they cannot use; those
+  pairs fall back to the relay.
+- The host covers relayed pairs with the trip the lobby measured, not a
+  live one.
+- One three-computer relayed run stopped with the host's main thread in
+  the renderer's frame drain; it did not repeat in two more runs and the
+  records to that point agreed. Unexplained.
+- The character-select door team table (`mnCharSel_803F0DFC`) outlives the
+  scene. A party sets all four doors on entry; a two-computer session does
+  not reset it.

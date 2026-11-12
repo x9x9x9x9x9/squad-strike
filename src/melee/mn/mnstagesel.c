@@ -196,7 +196,7 @@ static void netStageSel_Reset(void)
     }
     net_games++;
     net_chooser = gmOnline_StageChooser();
-    if (net_chooser < 0 || net_chooser > 1) {
+    if (net_chooser < 0 || net_chooser > 3) {
         net_chooser = 0;
     }
     pc_log_line("sss: P%d picks the stage", net_chooser + 1);
