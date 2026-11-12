@@ -83,8 +83,9 @@ void wire_packet(Packet* pk) {
     be32(&pk->ck_frame);
     be32(&pk->ck);
     for (int i = 0; i < pk->count && i < REDUNDANCY; i++) {
-        be16(&pk->pads[i].p[0].button);
-        be16(&pk->pads[i].p[1].button);
+        for (int k = 0; k < 4; k++) {
+            be16(&pk->pads[i].p[k].button);
+        }
     }
 }
 
@@ -95,8 +96,8 @@ void wire_packet(Packet* pk) {
  * window of a player holding shield is 40 bytes, not 256. GGRS does the same
  * with XOR plus RLE, GGPO with a list of changed bits; this form keeps every
  * pad byte-aligned and its worst case (all eight bytes changing every frame)
- * one byte a pad over raw. A WirePad is two such pads (the peer's two
- * players), each with its own mask byte. */
+ * one byte a pad over raw. A WirePad is four such pads (one per port),
+ * each with its own mask byte. */
 size_t pads_encode(const WirePad* pads, int count, uint8_t* out) {
     uint8_t prev[sizeof(WirePad)] = {0};
     size_t n = 0;

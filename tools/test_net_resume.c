@@ -428,6 +428,7 @@ static void setup(void) {
     net.active = true;
     net.local = 0;
     net.remote = 1;
+    own_ports();
     net.session = SESSION;
     net.seed = SEED;
     /* Mid-match means the match was agreed: session_established() is the
@@ -456,7 +457,7 @@ static void setup(void) {
     s_last_rx_ns = s_now;
     s_rc_window_ms = RECONNECT_MS;
     for (int32_t f = 0; f <= WROTE; f++) {
-        s_local_ring[f & (RING - 1)].p[0].button = (uint16_t)(0x1000 + f);
+        s_local_ring[f & (RING - 1)].p[net.local].button = (uint16_t)(0x1000 + f);
     }
     s_resume_sends = 0;
     s_rel_fail = 0;
@@ -496,7 +497,7 @@ static void peer_pads(int32_t first, int32_t last) {
     pk.ck_frame = -1;
     pk.count = (uint8_t)(last - first + 1);
     for (int i = 0; i < pk.count; i++) {
-        pk.pads[i].p[0].button = (uint16_t)(0x2000 + first + i);
+        pk.pads[i].p[net.remote].button = (uint16_t)(0x2000 + first + i);
     }
     peer_heard();
     on_inputs(&pk, false);
@@ -568,7 +569,7 @@ static void case_resume_inside_ring(void) {
     assert(s_remote_have == 199);
     /* Their ring refilled into ours, frame by frame. */
     for (int32_t f = HAVE + 1; f <= 199; f++) {
-        assert(s_remote_ring[f & (RING - 1)].p[0].button == (uint16_t)(0x2000 + f));
+        assert(s_remote_ring[f & (RING - 1)].p[net.remote].button == (uint16_t)(0x2000 + f));
     }
     /* Ours refilled toward them: the reconnect send starts above the frame
      * the peer reported and carries every frame we hold, up to REDUNDANCY. */
@@ -576,7 +577,7 @@ static void case_resume_inside_ring(void) {
     assert(s_tx_pkt.first == 196 && s_tx_pkt.newest == WROTE);
     assert(s_tx_pkt.count == WROTE - 196 + 1);
     for (int i = 0; i < s_tx_pkt.count; i++) {
-        assert(s_tx_pkt.pads[i].p[0].button == (uint16_t)(0x1000 + 196 + i));
+        assert(s_tx_pkt.pads[i].p[net.local].button == (uint16_t)(0x1000 + 196 + i));
     }
     assert(logged("net: interrupted at frame 200 (peer silent 3000 ms), reconnecting"));
     assert(logged("net: resumed at frame 200"));
@@ -950,6 +951,7 @@ static void case_session_learned_only_from_rules(void) {
     setup();
     net.local = 1; /* the guest */
     net.remote = 0;
+    own_ports();
     net.session = 0; /* not told one yet: this is the learning window */
     net.hs = HS_PENDING;
     struct sockaddr_in dst, src;
@@ -1121,7 +1123,7 @@ static void deliver_changed_input(void) {
     pk.count = FRAME - pk.first + 1;
     pk.ck_frame = -1;
     for (int i = 0; i < pk.count; i++) {
-        pk.pads[i].p[0].button = 0x100;
+        pk.pads[i].p[net.remote].button = 0x100;
     }
     on_inputs(&pk, false);
     s_step = NULL;
@@ -1269,14 +1271,14 @@ static void case_window_carries_every_unacked_frame(void) {
     assert(s_tx_pkt_valid);
     assert(s_tx_pkt.first == WROTE - 11 && s_tx_pkt.newest == WROTE);
     assert(s_tx_pkt.count == 12);
-    assert(s_tx_pkt.pads[11].p[0].button == (uint16_t)(0x1000 + WROTE));
+    assert(s_tx_pkt.pads[11].p[net.local].button == (uint16_t)(0x1000 + WROTE));
     assert(s_red_target == 12);
     /* A span wider than the packet: its oldest REDUNDANCY frames, so the
      * peer's contiguous mark can advance. */
     s_last_acked = WROTE - 50;
     send_inputs();
     assert(s_tx_pkt.first == WROTE - 49 && s_tx_pkt.count == REDUNDANCY);
-    assert(s_tx_pkt.pads[0].p[0].button == (uint16_t)(0x1000 + WROTE - 49));
+    assert(s_tx_pkt.pads[0].p[net.local].button == (uint16_t)(0x1000 + WROTE - 49));
     /* Nothing unacked: an empty packet at the newest frame, as before. */
     s_last_acked = WROTE;
     send_inputs();
@@ -1291,7 +1293,7 @@ static void case_window_carries_every_unacked_frame(void) {
  * pending, so we confirm through HAVE+8. */
 static void peer_pads_as_predicted(void) {
     for (int32_t f = HAVE + 1; f <= HAVE + 8; f++) {
-        s_remote_ring[f & (RING - 1)].p[0].button = (uint16_t)(0x2000 + f);
+        s_remote_ring[f & (RING - 1)].p[net.remote].button = (uint16_t)(0x2000 + f);
     }
     peer_pads(HAVE + 1, HAVE + 8);
     assert(s_rb_frame < 0);
@@ -1345,7 +1347,7 @@ static void case_desync_checks_every_reported_frame(void) {
  * mask promising bytes that are not there, refused rather than half-read. */
 static void case_pad_codec(void) {
     WirePad in[REDUNDANCY], out[REDUNDANCY];
-    uint8_t buf[REDUNDANCY * (sizeof(WirePad) + 2) + 1];
+    uint8_t buf[REDUNDANCY * (sizeof(WirePad) + 4) + 1];
     memset(in, 0, sizeof in);
     for (int i = 0; i < REDUNDANCY; i++) {
         in[i].p[0].button = 0x0120;
@@ -1354,7 +1356,7 @@ static void case_pad_codec(void) {
     }
     size_t n = pads_encode(in, REDUNDANCY, buf);
     assert(
-        n == 2 + 4 + 2 * (REDUNDANCY - 1)); /* 3 fields set, one spans 2 bytes; a mask per player */
+        n == 4 + 4 + 4 * (REDUNDANCY - 1)); /* 3 fields set, one spans 2 bytes; a mask per port */
     assert(pads_wire_len(buf, (int)n, REDUNDANCY) == (int)n);
     assert(pads_decode(buf, (int)n, REDUNDANCY, out) && memcmp(in, out, sizeof in) == 0);
     /* truncated, padded, and a count that reads past the end */
@@ -1373,7 +1375,7 @@ static void case_pad_codec(void) {
         }
     }
     n = pads_encode(in, REDUNDANCY, buf);
-    assert(n == REDUNDANCY * (sizeof(WirePad) + 2));
+    assert(n == REDUNDANCY * (sizeof(WirePad) + 4));
     assert(offsetof(Packet, pads) + n == PACKET_WIRE_MAX);
     assert(pads_decode(buf, (int)n, REDUNDANCY, out) && memcmp(in, out, sizeof in) == 0);
     assert(pads_encode(in, 0, buf) == 0 && pads_decode(buf, 0, 0, out));

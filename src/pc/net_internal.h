@@ -162,17 +162,20 @@ typedef struct WireOne {
     uint8_t triggerLeft, triggerRight;
 } WireOne;
 
-/* One frame of one peer's input: its player, and the second player on the
- * same computer if it has one (two players per computer: the host's drive
- * ports 1 and 3, the guest's 2 and 4). */
+/* One frame of one input stream: a pad per controller port. A stream owns
+ * a fixed set of ports for the session (net.own_local, net.own_remote) and
+ * the rest of its pads stay zero: on two computers each side's stream owns
+ * its player's port and, for a second player on the same computer, that
+ * port + 2 (docs/party-plan.md has the table). */
 typedef struct WirePad {
-    WireOne p[2];
+    WireOne p[4];
 } WirePad;
 
-/* Set in p[1].button on every frame the sender has a second player (no pad
- * button uses the bit); clear, that port has no controller. In band, so it
- * is predicted, rolled back and agreed on like the inputs themselves. */
-#define WIRE_SECOND 0x8000u
+/* Set in a pad's button on every frame its port has a controller (no pad
+ * button uses the bit); clear, the port has none. In band, so it is
+ * predicted, rolled back and agreed on like the inputs themselves. A
+ * stream's primary ports (net.primary) count as present without it. */
+#define WIRE_PRESENT 0x8000u
 
 /* Every datagram starts with this; one from another version, session or
  * address is dropped before its body is looked at. */
@@ -287,9 +290,9 @@ typedef struct SceneMsg {
     uint32_t frame; /* the frame its scene asked to end on */
 } __attribute__((packed)) SceneMsg;
 
-_Static_assert(sizeof(WireOne) == 8 && sizeof(WirePad) == 16, "wire layout");
+_Static_assert(sizeof(WireOne) == 8 && sizeof(WirePad) == 32, "wire layout");
 _Static_assert(sizeof(Hdr) == 7, "wire layout");
-_Static_assert(sizeof(Packet) == 27 + REDUNDANCY * 16, "wire layout");
+_Static_assert(sizeof(Packet) == 27 + REDUNDANCY * 32, "wire layout");
 _Static_assert(sizeof(Ack) == 13, "wire layout");
 _Static_assert(sizeof(Rel) == 11 + REL_MAX, "wire layout");
 _Static_assert(sizeof(RelAck) == 8 && sizeof(Bye) == 8, "wire layout");
@@ -360,6 +363,10 @@ struct NetSession {
     struct sockaddr_storage peer;
     socklen_t peer_len;
     int local, remote, delay;
+    /* Controller ports as bit masks: the ones the local stream speaks for,
+     * the ones the remote stream does, and the ones that have a controller
+     * whatever WIRE_PRESENT says (each side's player). */
+    uint8_t own_local, own_remote, primary;
     uint32_t session; /* 0 on the guest until the host's first packet */
     /* How long to wait for the peer's first datagram, ms. CONNECT_TIMEOUT_MS
      * for a session the user dialled by hand (the other end may simply be

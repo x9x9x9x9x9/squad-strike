@@ -1144,12 +1144,12 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
 /* Drain the socket through the gate, then release what the link simulator
  * held back. Runs on the receive thread, or on the game thread when there
  * is none. False on a hard socket error (sock_err_note logged it). */
-_Static_assert(HELD_BYTES + NET_MAC_LEN <= 1024, "a full input packet must fit rx_pump's buffer");
+_Static_assert(HELD_BYTES + NET_MAC_LEN <= 2048, "a full input packet must fit rx_pump's buffer");
 static bool rx_pump(void) {
     for (int budget = RX_BUDGET; budget > 0; budget--) {
         union {
             Hdr h;
-            uint8_t raw[1024];
+            uint8_t raw[2048];
         } u;
         struct sockaddr_storage from;
         socklen_t from_len = sizeof from;
@@ -1277,11 +1277,14 @@ static void dump_rings_around(int32_t f) {
         }
         const WirePad* m = &s_local_ring[i & (RING - 1)];
         const WirePad* t = &s_remote_ring[i & (RING - 1)];
-        pc_log_line(
-            "net: ring f%d p%d %04x/%d,%d %04x/%d,%d p%d %04x/%d,%d %04x/%d,%d ck %08x x%u%s", i,
-            net.local + 1, m->p[0].button, m->p[0].stickX, m->p[0].stickY, m->p[1].button,
-            m->p[1].stickX, m->p[1].stickY, net.remote + 1, t->p[0].button, t->p[0].stickX,
-            t->p[0].stickY, t->p[1].button, t->p[1].stickX, t->p[1].stickY,
+        /* The four ports in order, each from the stream that owns it. */
+        const WireOne* w[4];
+        for (int k = 0; k < 4; k++) {
+            w[k] = (net.own_local & (1u << k)) ? &m->p[k] : &t->p[k];
+        }
+        pc_log_line("net: ring f%d %04x/%d,%d %04x/%d,%d %04x/%d,%d %04x/%d,%d ck %08x x%u%s", i,
+            w[0]->button, w[0]->stickX, w[0]->stickY, w[1]->button, w[1]->stickX, w[1]->stickY,
+            w[2]->button, w[2]->stickX, w[2]->stickY, w[3]->button, w[3]->stickX, w[3]->stickY,
             s_ck_ring[i & (RING - 1)], s_sim_n[i & (RING - 1)],
             i > s_remote_have ? " predicted" : "");
     }
@@ -1805,9 +1808,9 @@ bool net_local_idle(void) {
     if (s_wrote < 0) {
         return true;
     }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 4; i++) {
         const WireOne* p = &s_local_ring[s_wrote & (RING - 1)].p[i];
-        if ((p->button & ~WIRE_SECOND) != 0 || p->stickX != 0 || p->stickY != 0 ||
+        if ((p->button & ~WIRE_PRESENT) != 0 || p->stickX != 0 || p->stickY != 0 ||
             p->substickX != 0 || p->substickY != 0 || p->triggerLeft != 0 || p->triggerRight != 0)
         {
             return false;
@@ -1826,7 +1829,15 @@ static bool second_allowed(void) {
     return s_second_allowed || net.direct;
 }
 
-/* This frame's sample of both local players, as it goes on the wire. */
+/* The ports each stream speaks for (docs/party-plan.md). Two computers:
+ * each side's player, and that port + 2 for a second player there. */
+static void own_ports(void) {
+    net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
+    net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
+    net.own_remote = (uint8_t)(1u << net.remote | 1u << (net.remote + 2));
+}
+
+/* This frame's sample of the local players, as it goes on the wire. */
 static void local_to_wire(WirePad* w) {
     static int force = -1, fake = -1;
     if (force < 0) {
@@ -1836,42 +1847,50 @@ static void local_to_wire(WirePad* w) {
         force = e != NULL ? (e[0] != '0') + 1 : 0;
         fake = getenv("MELEE_NET_TWO_FAKE") != NULL;
     }
-    to_wire(&w->p[0], &s_raw_last[0]);
-    memset(&w->p[1], 0, sizeof w->p[1]);
+    memset(w, 0, sizeof *w);
+    to_wire(&w->p[net.local], &s_raw_last[0]);
+    w->p[net.local].button &= (uint16_t)~WIRE_PRESENT;
+    w->p[net.local].button |= WIRE_PRESENT;
     bool on = force ? force == 2 : pc_is_net_two_players_enabled();
     if (!on || !second_allowed()) {
         return;
     }
+    WireOne* second = &w->p[net.local + 2];
     if (fake) {
         uint32_t x = (uint32_t)(s_wrote + 1) / 6u * 2654435761u + (uint32_t)net.local * 97u;
         x ^= x >> 15;
-        w->p[1].button = (uint16_t)(x & 0x0F00u); /* A B X Y */
-        w->p[1].stickX = (int8_t)((x >> 4 & 1) ? 90 : -90);
-        w->p[1].stickY = (int8_t)((x >> 5 & 3) == 0 ? 90 : 0);
+        second->button = (uint16_t)(x & 0x0F00u); /* A B X Y */
+        second->stickX = (int8_t)((x >> 4 & 1) ? 90 : -90);
+        second->stickY = (int8_t)((x >> 5 & 3) == 0 ? 90 : 0);
     } else if (s_raw_last[1].err != PAD_ERR_NONE) {
         return; /* no second controller right now */
     } else {
-        to_wire(&w->p[1], &s_raw_last[1]);
-        w->p[1].button &= (uint16_t)~WIRE_SECOND;
+        to_wire(second, &s_raw_last[1]);
+        second->button &= (uint16_t)~WIRE_PRESENT;
     }
-    w->p[1].button |= WIRE_SECOND;
+    second->button |= WIRE_PRESENT;
 }
 
-/* A peer's two wire pads into its two ports of the queue head. */
-static void peer_from_wire(PADStatus* head, int port, const WirePad* w) {
-    from_wire(&head[port], &w->p[0]);
-    if ((w->p[1].button & WIRE_SECOND) && second_allowed()) {
-        WireOne second = w->p[1];
-        second.button &= (uint16_t)~WIRE_SECOND;
-        from_wire(&head[port + 2], &second);
-        if (!s_seen_second[port]) {
-            s_seen_second[port] = true;
-            pc_log_line("net: second player on this %s computer: port %d",
-                port == net.local ? "(local)" : "peer's", port + 3);
+/* One frame of the queue head: each port from the stream that owns it. */
+static void head_from_wire(PADStatus* head, const WirePad* mine, const WirePad* theirs) {
+    for (int port = 0; port < 4; port++) {
+        unsigned bit = 1u << port;
+        const WireOne* w = (net.own_local & bit) ? &mine->p[port] : &theirs->p[port];
+        bool present =
+            (net.primary & bit) != 0 || ((w->button & WIRE_PRESENT) != 0 && second_allowed());
+        if (!present || ((net.own_local | net.own_remote) & bit) == 0) {
+            memset(&head[port], 0, sizeof head[port]);
+            head[port].err = PAD_ERR_NO_CONTROLLER;
+            continue;
         }
-    } else {
-        memset(&head[port + 2], 0, sizeof head[port + 2]);
-        head[port + 2].err = PAD_ERR_NO_CONTROLLER;
+        WireOne pad = *w;
+        pad.button &= (uint16_t)~WIRE_PRESENT;
+        from_wire(&head[port], &pad);
+        if (!(net.primary & bit) && !s_seen_second[port & 1]) {
+            s_seen_second[port & 1] = true;
+            pc_log_line("net: second player on this %s computer: port %d",
+                (net.own_local & bit) ? "(local)" : "peer's", port + 1);
+        }
     }
 }
 
@@ -2196,6 +2215,7 @@ static bool connect_impl(
     HSD_PadLibData.qtype = 2;
     net.local = player ? 1 : 0;
     net.remote = 1 - net.local;
+    own_ports();
     /* A hand-typed address may be a peer the user has not started yet, so it
      * keeps the long wait. One handed over from matchmaking (pc_net_connect_
      * socket, the only caller that passes a socket) belongs to a peer that
@@ -2760,19 +2780,19 @@ static void fight_reseed(int32_t f) {
 static void write_head(PADStatus* head, int32_t f) {
     static const WirePad neutral;
     const WirePad* mine = f >= net.delay ? &s_local_ring[f & (RING - 1)] : &neutral;
-    peer_from_wire(head, net.local, mine);
     const WirePad* theirs = &s_remote_ring[f & (RING - 1)];
     WirePad wrong;
     if (s_audit_poison) {
         wrong = *theirs;
-        wrong.p[0].stickX = (int8_t)-wrong.p[0].stickX;
-        wrong.p[0].button ^= 0x0100; /* A */
+        wrong.p[net.remote].stickX = (int8_t)-wrong.p[net.remote].stickX;
+        wrong.p[net.remote].button ^= 0x0100; /* A */
         theirs = &wrong;
     }
-    peer_from_wire(head, net.remote, theirs);
-    if (!s_seen_remote && theirs->p[0].button != 0) {
+    head_from_wire(head, mine, theirs);
+    if (!s_seen_remote && (theirs->p[net.remote].button & ~WIRE_PRESENT) != 0) {
         s_seen_remote = true;
-        pc_log_line("net: first remote button press (%04x) at frame %d", theirs->p[0].button, f);
+        pc_log_line("net: first remote button press (%04x) at frame %d",
+            theirs->p[net.remote].button & ~WIRE_PRESENT, f);
     }
     head_note(head, f);
 }
