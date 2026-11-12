@@ -14,7 +14,7 @@ static int8_t at_rest(int8_t v) {
     return v >= -2 && v <= 2 ? 0 : v;
 }
 
-void to_wire(WirePad* w, const PADStatus* p) {
+void to_wire(WireOne* w, const PADStatus* p) {
     w->button = p->button;
     w->stickX = at_rest(p->stickX);
     w->stickY = at_rest(p->stickY);
@@ -24,7 +24,7 @@ void to_wire(WirePad* w, const PADStatus* p) {
     w->triggerRight = p->triggerRight;
 }
 
-void from_wire(PADStatus* p, const WirePad* w) {
+void from_wire(PADStatus* p, const WireOne* w) {
     memset(p, 0, sizeof *p);
     p->button = w->button;
     p->stickX = w->stickX;
@@ -83,7 +83,8 @@ void wire_packet(Packet* pk) {
     be32(&pk->ck_frame);
     be32(&pk->ck);
     for (int i = 0; i < pk->count && i < REDUNDANCY; i++) {
-        be16(&pk->pads[i].button);
+        be16(&pk->pads[i].p[0].button);
+        be16(&pk->pads[i].p[1].button);
     }
 }
 
@@ -94,20 +95,23 @@ void wire_packet(Packet* pk) {
  * window of a player holding shield is 40 bytes, not 256. GGRS does the same
  * with XOR plus RLE, GGPO with a list of changed bits; this form keeps every
  * pad byte-aligned and its worst case (all eight bytes changing every frame)
- * one byte a pad over raw. */
+ * one byte a pad over raw. A WirePad is two such pads (the peer's two
+ * players), each with its own mask byte. */
 size_t pads_encode(const WirePad* pads, int count, uint8_t* out) {
     uint8_t prev[sizeof(WirePad)] = {0};
     size_t n = 0;
     for (int i = 0; i < count; i++) {
         uint8_t cur[sizeof(WirePad)];
         memcpy(cur, &pads[i], sizeof cur);
-        uint8_t* mask = &out[n++];
-        *mask = 0;
-        for (int j = 0; j < (int)sizeof cur; j++) {
-            uint8_t x = cur[j] ^ prev[j];
-            if (x != 0) {
-                *mask |= (uint8_t)(1u << j);
-                out[n++] = x;
+        for (int half = 0; half < (int)sizeof cur; half += 8) {
+            uint8_t* mask = &out[n++];
+            *mask = 0;
+            for (int j = 0; j < 8; j++) {
+                uint8_t x = cur[half + j] ^ prev[half + j];
+                if (x != 0) {
+                    *mask |= (uint8_t)(1u << j);
+                    out[n++] = x;
+                }
             }
         }
         memcpy(prev, cur, sizeof prev);
@@ -118,7 +122,7 @@ size_t pads_encode(const WirePad* pads, int count, uint8_t* out) {
 /* Bytes the encoded pads take in `in`, or -1 when `len` cannot hold them. */
 int pads_wire_len(const uint8_t* in, int len, int count) {
     int n = 0;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count * (int)(sizeof(WirePad) / 8); i++) {
         if (n >= len) {
             return -1;
         }
@@ -135,10 +139,12 @@ bool pads_decode(const uint8_t* in, int len, int count, WirePad* pads) {
     uint8_t prev[sizeof(WirePad)] = {0};
     int n = 0;
     for (int i = 0; i < count; i++) {
-        uint8_t mask = in[n++];
-        for (int j = 0; j < (int)sizeof prev; j++) {
-            if (mask & (1u << j)) {
-                prev[j] ^= in[n++];
+        for (int half = 0; half < (int)sizeof prev; half += 8) {
+            uint8_t mask = in[n++];
+            for (int j = 0; j < 8; j++) {
+                if (mask & (1u << j)) {
+                    prev[half + j] ^= in[n++];
+                }
             }
         }
         memcpy(&pads[i], prev, sizeof prev);

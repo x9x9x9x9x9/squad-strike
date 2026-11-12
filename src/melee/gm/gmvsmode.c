@@ -235,6 +235,19 @@ void onEnterDebugVs(GameModeState* state)
             start->players[i].slot_type = Gm_PKind_Cpu;
         }
     }
+    if (getenv("MELEE_DEBUG_VS") != NULL && strcmp(getenv("MELEE_DEBUG_VS"), "four") == 0) {
+        /* Four human players in teams (1+3 against 2+4): what two players
+         * per computer play online (tools/net_test.py --two). */
+        static const CharacterKind kinds[4] = {
+            CKind_Link, CKind_Mario, CKind_Fox, CKind_Captain,
+        };
+        start->rules.is_teams = true;
+        for (i = 0; i < 4; i++) {
+            start->players[i].ckind = kinds[i];
+            start->players[i].slot_type = Gm_PKind_Human;
+            start->players[i].team = (u8) (i & 1);
+        }
+    }
     /* MELEE_DEBUG_VS_STOCKS=<n>: a stock match instead of an untimed time
      * one, so a run can end on GAME! with stocks the replay (src/pc/slp.c)
      * must carry. */

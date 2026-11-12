@@ -156,11 +156,23 @@ static inline void sock_startup(void) {}
 #define NET_MAC_LEN 8
 
 /* 8-byte pad, same fields Slippi puts on the wire. */
-typedef struct WirePad {
+typedef struct WireOne {
     uint16_t button;
     int8_t stickX, stickY, substickX, substickY;
     uint8_t triggerLeft, triggerRight;
+} WireOne;
+
+/* One frame of one peer's input: its player, and the second player on the
+ * same computer if it has one (two players per computer: the host's drive
+ * ports 1 and 3, the guest's 2 and 4). */
+typedef struct WirePad {
+    WireOne p[2];
 } WirePad;
+
+/* Set in p[1].button on every frame the sender has a second player (no pad
+ * button uses the bit); clear, that port has no controller. In band, so it
+ * is predicted, rolled back and agreed on like the inputs themselves. */
+#define WIRE_SECOND 0x8000u
 
 /* Every datagram starts with this; one from another version, session or
  * address is dropped before its body is looked at. */
@@ -275,9 +287,9 @@ typedef struct SceneMsg {
     uint32_t frame; /* the frame its scene asked to end on */
 } __attribute__((packed)) SceneMsg;
 
-_Static_assert(sizeof(WirePad) == 8, "wire layout");
+_Static_assert(sizeof(WireOne) == 8 && sizeof(WirePad) == 16, "wire layout");
 _Static_assert(sizeof(Hdr) == 7, "wire layout");
-_Static_assert(sizeof(Packet) == 27 + REDUNDANCY * 8, "wire layout");
+_Static_assert(sizeof(Packet) == 27 + REDUNDANCY * 16, "wire layout");
 _Static_assert(sizeof(Ack) == 13, "wire layout");
 _Static_assert(sizeof(Rel) == 11 + REL_MAX, "wire layout");
 _Static_assert(sizeof(RelAck) == 8 && sizeof(Bye) == 8, "wire layout");
@@ -288,8 +300,9 @@ _Static_assert(sizeof(DelayMsg) == 8, "wire layout");
 _Static_assert(sizeof(SceneMsg) == 8, "wire layout");
 
 /* An input packet on the wire: the fields before pads as they are, then the
- * pads delta-coded (pads_encode, net_wire.c), at most 9 bytes each. */
-#define PACKET_WIRE_MAX (offsetof(Packet, pads) + REDUNDANCY * (sizeof(WirePad) + 1))
+ * pads delta-coded (pads_encode, net_wire.c), at most 9 bytes per player. */
+#define PACKET_WIRE_MAX                                                                            \
+    (offsetof(Packet, pads) + REDUNDANCY * (sizeof(WirePad) + sizeof(WirePad) / 8))
 
 /* The largest message tx() stamps and the link simulator holds: a full input
  * packet outgrew a reliable one when REDUNDANCY went to 32. */
@@ -418,8 +431,8 @@ int net_sendto(const void* buf, size_t len);
 /* ---- net_wire.c ------------------------------------------------------- */
 
 uint32_t fnv1a(uint32_t h, const void* data, size_t n);
-void to_wire(WirePad* w, const PADStatus* p);
-void from_wire(PADStatus* p, const WirePad* w);
+void to_wire(WireOne* w, const PADStatus* p);
+void from_wire(PADStatus* p, const WireOne* w);
 void wire_hdr(Hdr* h);
 void wire_packet(Packet* pk);
 size_t pads_encode(const WirePad* pads, int count, uint8_t* out);

@@ -11,7 +11,7 @@ source = r'''
 #include <assert.h>
 #include <stdbool.h>
 typedef struct { int button; } PADStatus;
-static PADStatus s_raw_last;
+static PADStatus s_raw_last[2];
 static int polls;
 static void PADRead(PADStatus* pads) {
     ++polls;
@@ -19,13 +19,13 @@ static void PADRead(PADStatus* pads) {
 }
 ''' + s[a:b] + r'''
 int main(void) {
-    s_raw_last.button=7;
+    s_raw_last[0].button=7;
     capture_local_sample(false);
-    assert(polls==0 && s_raw_last.button==7);
+    assert(polls==0 && s_raw_last[0].button==7);
     capture_local_sample(true);
-    assert(polls==1 && s_raw_last.button==100);
+    assert(polls==1 && s_raw_last[0].button==100);
     capture_local_sample(false);
-    assert(polls==1 && s_raw_last.button==100);
+    assert(polls==1 && s_raw_last[0].button==100);
 }
 '''
 with tempfile.TemporaryDirectory() as d:

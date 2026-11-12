@@ -31,8 +31,10 @@ extern "C" {
  * frame it took, since a host whose RULES went stale re-issues one, and
  * input packets carry their pads delta-coded (pads_encode, net_wire.c).
  * A fight reseeds the RNG every tick (fight_reseed) and forces UCF on and
- * free camera off, which an older peer does not. */
-#define PC_NET_PROTO_VERSION 9
+ * free camera off, which an older peer does not.
+ * Version 10 widens every frame of input to two pads: the peer's player and
+ * a second player on the same computer (ports 3 and 4). */
+#define PC_NET_PROTO_VERSION 10
 void pc_net_init(void);
 void pc_net_set_input_delay(int frames);
 bool pc_net_active(void);
@@ -47,6 +49,10 @@ bool pc_net_pure_load(const char* filename); /* served from memory, no barrier *
  * ticking, so both peers leave it on the same frame however long their loads
  * took (src/melee/gm/gmscene.c, docs/netcode-plan.md section 5.2). */
 bool pc_net_scene_hold(void);
+/* Two players per computer: whether the session's mode lets a peer bring a
+ * second player (LAN and Direct). The second player uses the computer's
+ * second controller and drives port 3 (host) or 4 (guest). */
+void pc_net_allow_second_player(bool allowed);
 /* Controller port the local player drives (0 = P1/host, 1 = P2/guest). */
 int pc_net_local_player(void);
 

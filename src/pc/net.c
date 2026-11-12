@@ -94,10 +94,15 @@ static bool s_seed_have;
 _Static_assert(offsetof(StartMeleeRules, game_speed) == 0x34,
     "game structs laid out differently from melee_game (Windows: -mno-ms-bitfields)");
 
-static bool s_lockstep;      /* snapshot failure: stop predicting, retain older corrections */
-static PADStatus s_raw_last; /* newest physical sample (port 0) */
-static int s_status;         /* pc_net_peer_status(); kept until the next connect */
-static bool s_peer_left;     /* BYE received or version mismatch: stop waiting */
+static bool s_lockstep;         /* snapshot failure: stop predicting, retain older corrections */
+static PADStatus s_raw_last[2]; /* newest physical samples (ports 0 and 1) */
+/* Two players per computer (the second on physical port 1): the mode the
+ * session is in allows it (LAN and Direct; never matchmaking). The game's
+ * online mode sets it; a MELEE_NET session allows it by itself. */
+static bool s_second_allowed;
+static bool s_seen_second[2]; /* logged once a session, per side */
+static int s_status;     /* pc_net_peer_status(); kept until the next connect */
+static bool s_peer_left; /* BYE received or version mismatch: stop waiting */
 static bool s_warn_src, s_warn_sess, s_warn_bad, s_warn_mac; /* one reject line each per session */
 /* One authenticated datagram has arrived, so the peer holds the session key
  * and nothing unauthenticated is accepted from here on (recv_inputs). Until
@@ -1128,12 +1133,12 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
 /* Drain the socket through the gate, then release what the link simulator
  * held back. Runs on the receive thread, or on the game thread when there
  * is none. False on a hard socket error (sock_err_note logged it). */
-_Static_assert(HELD_BYTES + NET_MAC_LEN <= 512, "a full input packet must fit rx_pump's buffer");
+_Static_assert(HELD_BYTES + NET_MAC_LEN <= 1024, "a full input packet must fit rx_pump's buffer");
 static bool rx_pump(void) {
     for (int budget = RX_BUDGET; budget > 0; budget--) {
         union {
             Hdr h;
-            uint8_t raw[512];
+            uint8_t raw[1024];
         } u;
         struct sockaddr_storage from;
         socklen_t from_len = sizeof from;
@@ -1261,8 +1266,11 @@ static void dump_rings_around(int32_t f) {
         }
         const WirePad* m = &s_local_ring[i & (RING - 1)];
         const WirePad* t = &s_remote_ring[i & (RING - 1)];
-        pc_log_line("net: ring f%d p%d %04x/%d,%d p%d %04x/%d,%d ck %08x x%u%s", i, net.local + 1,
-            m->button, m->stickX, m->stickY, net.remote + 1, t->button, t->stickX, t->stickY,
+        pc_log_line(
+            "net: ring f%d p%d %04x/%d,%d %04x/%d,%d p%d %04x/%d,%d %04x/%d,%d ck %08x x%u%s", i,
+            net.local + 1, m->p[0].button, m->p[0].stickX, m->p[0].stickY, m->p[1].button,
+            m->p[1].stickX, m->p[1].stickY, net.remote + 1, t->p[0].button, t->p[0].stickX,
+            t->p[0].stickY, t->p[1].button, t->p[1].stickX, t->p[1].stickY,
             s_ck_ring[i & (RING - 1)], s_sim_n[i & (RING - 1)],
             i > s_remote_have ? " predicted" : "");
     }
@@ -1786,9 +1794,74 @@ bool net_local_idle(void) {
     if (s_wrote < 0) {
         return true;
     }
-    const WirePad* p = &s_local_ring[s_wrote & (RING - 1)];
-    return p->button == 0 && p->stickX == 0 && p->stickY == 0 && p->substickX == 0 &&
-           p->substickY == 0 && p->triggerLeft == 0 && p->triggerRight == 0;
+    for (int i = 0; i < 2; i++) {
+        const WireOne* p = &s_local_ring[s_wrote & (RING - 1)].p[i];
+        if ((p->button & ~WIRE_SECOND) != 0 || p->stickX != 0 || p->stickY != 0 ||
+            p->substickX != 0 || p->substickY != 0 || p->triggerLeft != 0 || p->triggerRight != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* ---- two players per computer ----------------------------------------- */
+
+void pc_net_allow_second_player(bool allowed) {
+    s_second_allowed = allowed;
+}
+
+static bool second_allowed(void) {
+    return s_second_allowed || net.direct;
+}
+
+/* This frame's sample of both local players, as it goes on the wire. */
+static void local_to_wire(WirePad* w) {
+    static int force = -1, fake = -1;
+    if (force < 0) {
+        /* MELEE_NET_TWO=0|1 overrides the setting; MELEE_NET_TWO_FAKE=1
+         * (tests) gives the second player a pad that mashes by itself. */
+        const char* e = getenv("MELEE_NET_TWO");
+        force = e != NULL ? (e[0] != '0') + 1 : 0;
+        fake = getenv("MELEE_NET_TWO_FAKE") != NULL;
+    }
+    to_wire(&w->p[0], &s_raw_last[0]);
+    memset(&w->p[1], 0, sizeof w->p[1]);
+    bool on = force ? force == 2 : pc_is_net_two_players_enabled();
+    if (!on || !second_allowed()) {
+        return;
+    }
+    if (fake) {
+        uint32_t x = (uint32_t)(s_wrote + 1) / 6u * 2654435761u + (uint32_t)net.local * 97u;
+        x ^= x >> 15;
+        w->p[1].button = (uint16_t)(x & 0x0F00u); /* A B X Y */
+        w->p[1].stickX = (int8_t)((x >> 4 & 1) ? 90 : -90);
+        w->p[1].stickY = (int8_t)((x >> 5 & 3) == 0 ? 90 : 0);
+    } else if (s_raw_last[1].err != PAD_ERR_NONE) {
+        return; /* no second controller right now */
+    } else {
+        to_wire(&w->p[1], &s_raw_last[1]);
+        w->p[1].button &= (uint16_t)~WIRE_SECOND;
+    }
+    w->p[1].button |= WIRE_SECOND;
+}
+
+/* A peer's two wire pads into its two ports of the queue head. */
+static void peer_from_wire(PADStatus* head, int port, const WirePad* w) {
+    from_wire(&head[port], &w->p[0]);
+    if ((w->p[1].button & WIRE_SECOND) && second_allowed()) {
+        WireOne second = w->p[1];
+        second.button &= (uint16_t)~WIRE_SECOND;
+        from_wire(&head[port + 2], &second);
+        if (!s_seen_second[port]) {
+            s_seen_second[port] = true;
+            pc_log_line("net: second player on this %s computer: port %d",
+                port == net.local ? "(local)" : "peer's", port + 3);
+        }
+    } else {
+        memset(&head[port + 2], 0, sizeof head[port + 2]);
+        head[port + 2].err = PAD_ERR_NO_CONTROLLER;
+    }
 }
 
 static void audio_journal_reset(void);
@@ -1804,6 +1877,7 @@ static void session_reset(void) {
     s_seen_remote = false;
     memset(s_local_ring, 0, sizeof s_local_ring);
     memset(s_remote_ring, 0, sizeof s_remote_ring);
+    memset(s_seen_second, 0, sizeof s_seen_second);
     memset(s_ck_ring, 0, sizeof s_ck_ring);
     memset(s_sim_n, 0, sizeof s_sim_n);
     memset(s_rb_recent, 0, sizeof s_rb_recent);
@@ -2675,23 +2749,19 @@ static void fight_reseed(int32_t f) {
 static void write_head(PADStatus* head, int32_t f) {
     static const WirePad neutral;
     const WirePad* mine = f >= net.delay ? &s_local_ring[f & (RING - 1)] : &neutral;
-    from_wire(&head[net.local], mine);
+    peer_from_wire(head, net.local, mine);
     const WirePad* theirs = &s_remote_ring[f & (RING - 1)];
     WirePad wrong;
     if (s_audit_poison) {
         wrong = *theirs;
-        wrong.stickX = (int8_t)-wrong.stickX;
-        wrong.button ^= 0x0100; /* A */
+        wrong.p[0].stickX = (int8_t)-wrong.p[0].stickX;
+        wrong.p[0].button ^= 0x0100; /* A */
         theirs = &wrong;
     }
-    from_wire(&head[net.remote], theirs);
-    if (!s_seen_remote && theirs->button != 0) {
+    peer_from_wire(head, net.remote, theirs);
+    if (!s_seen_remote && theirs->p[0].button != 0) {
         s_seen_remote = true;
-        pc_log_line("net: first remote button press (%04x) at frame %d", theirs->button, f);
-    }
-    for (int i = 2; i < 4; i++) {
-        memset(&head[i], 0, sizeof head[i]);
-        head[i].err = PAD_ERR_NO_CONTROLLER;
+        pc_log_line("net: first remote button press (%04x) at frame %d", theirs->p[0].button, f);
     }
     head_note(head, f);
 }
@@ -2978,7 +3048,8 @@ static void capture_local_sample(bool fresh) {
     if (fresh) {
         PADStatus pads[4];
         PADRead(pads);
-        s_raw_last = pads[0];
+        s_raw_last[0] = pads[0];
+        s_raw_last[1] = pads[1];
     }
 }
 
@@ -3008,7 +3079,7 @@ static void fresh_tick(PADStatus* head, bool raw) {
          * with the same sample, or already-sent frames that must not move. */
         int64_t target_w = (int64_t)net.frame + net.delay;
         for (int32_t w = s_wrote + 1; (int64_t)w <= target_w; w++) {
-            to_wire(&s_local_ring[w & (RING - 1)], &s_raw_last);
+            local_to_wire(&s_local_ring[w & (RING - 1)]);
             s_wrote = w;
         }
         send_inputs();

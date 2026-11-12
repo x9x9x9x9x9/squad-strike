@@ -55,11 +55,12 @@ struct Preferences {
     bool frozen_stadium = false;
     bool free_camera = false;
     bool ucf = false;
-    bool rumble = false;          // controller vibration (SDL pads and the GC adapter)
-    bool show_ping = true;        // online: "Ping: 34ms" in the top left of a match
-    bool squad_strike = true;     // Squad Strike on VS character select
-    bool stage_expansion = true;  // UnclePunch's Stage Expansion layouts
-    bool sd_remix = false;        // SD Remix characters (needs its files; at boot)
+    bool rumble = false;           // controller vibration (SDL pads and the GC adapter)
+    bool show_ping = true;         // online: "Ping: 34ms" in the top left of a match
+    bool net_two_players = false;  // online (LAN/Direct): a second player on this computer
+    bool squad_strike = true;      // Squad Strike on VS character select
+    bool stage_expansion = true;   // UnclePunch's Stage Expansion layouts
+    bool sd_remix = false;         // SD Remix characters (needs its files; at boot)
     float music_volume = 1.0f;
     float sfx_volume = 1.0f;
     int stage_list = 0;       // Random Stage defaults applied (pc_take_stage_list_reset)

@@ -149,6 +149,10 @@ static VsModeData online_vs;
 void gmOnline_SetKind(OnlineKind kind)
 {
     online_kind = kind;
+    /* Two players per computer where squads are offered: with a friend,
+     * never in matchmaking. */
+    pc_net_allow_second_player(kind == ONLINE_KIND_LAN ||
+                               kind == ONLINE_KIND_DIRECT);
 }
 
 OnlineKind gmOnline_GetKind(void)

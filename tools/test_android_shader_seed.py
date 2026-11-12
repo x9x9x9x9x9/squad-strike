@@ -73,6 +73,8 @@ class Starter(unittest.TestCase):
 #define CKind_Mario 8
 #define CKind_Fox 2
 #define CKind_Donkey 1
+#define CKind_Captain 0
+typedef unsigned char u8;
 #define CKind_Playable_Count 26
 #define St_Kind_Test 1
 #define St_Kind_Last 32
@@ -83,8 +85,8 @@ int grAce_Pick;
 typedef int CharacterKind;
 typedef int StKind;
 typedef int GameModeState;
-struct Rules {int stkind,item_freq,sd_penalty,match_kind,is_stock,timer_enabled,time_limit;};
-struct Player {int stocks,cpu_kind,ckind,slot_type;bool rumble_enabled;};
+struct Rules {int stkind,item_freq,sd_penalty,match_kind,is_stock,timer_enabled,time_limit,is_teams;};
+struct Player {int stocks,cpu_kind,ckind,slot_type,team;bool rumble_enabled;};
 typedef struct {struct Rules rules;struct Player players[6];} StartMeleeData;
 StartMeleeData data;
 StartMeleeData* gm_GetGameModeStateEnterData(GameModeState* s) {return &data;}

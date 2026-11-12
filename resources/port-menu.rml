@@ -214,6 +214,11 @@
               </span>
               <button id="show-ping" class="value">On</button>
             </div>
+            <div class="row" data-desc="Two players on this computer in LAN and Direct matches. The second player uses your second controller and plays as P3 (host) or P4 (guest). Each computer sets its own.">
+              <span class="name">Players on this computer<span class="detail">Two players on this computer in LAN and Direct matches. The second player uses your second controller and plays as P3 (host) or P4 (guest). Each computer sets its own.</span>
+              </span>
+              <button id="net-two-players" class="value">1</button>
+            </div>
             <div class="row">
               <div class="note">
                 <p>Internet discovery can take a few minutes. Some home networks cannot connect without a relay.</p>

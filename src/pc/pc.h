@@ -100,6 +100,7 @@ bool pc_is_frozen_stadium_enabled(void);
 bool pc_is_squad_strike_enabled(void);
 /* Online "Ping: 34ms" in the top left of a match (launcher Online page). */
 bool pc_is_ping_display_enabled(void);
+bool pc_is_net_two_players_enabled(void);
 /* Whether the off-screen magnifying glass is drawn (display only). */
 bool pc_is_magnifier_enabled(void);
 /* Whether the results screen follows a match (online: the host's RULES). */

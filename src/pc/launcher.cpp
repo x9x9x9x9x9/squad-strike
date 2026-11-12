@@ -83,6 +83,8 @@ void refresh_online(Rml::ElementDocument* doc) {
         e->SetInnerRML(prefs.net_delay < 0 ? "Auto" : std::to_string(prefs.net_delay) + " frames");
     if (auto* e = doc->GetElementById("show-ping"))
         e->SetInnerRML(prefs.show_ping ? "On" : "Off");
+    if (auto* e = doc->GetElementById("net-two-players"))
+        e->SetInnerRML(prefs.net_two_players ? "2" : "1");
     /* The code in force: the one chosen, or the default this profile was
      * given until one is. Not while it is being typed in. */
     if (auto* e = dynamic_cast<Rml::ElementFormControl*>(doc->GetElementById("net-code"));
@@ -333,7 +335,7 @@ class Launcher final : public Rml::EventListener {
         case 2:
             return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
         case 4:
-            return {"net-code", "net-target", "net-delay", "show-ping"};
+            return {"net-code", "net-target", "net-delay", "show-ping", "net-two-players"};
         case 5:
             return {"scale", "settings-discord", "export-logs"};
         default:
@@ -546,6 +548,8 @@ class Launcher final : public Rml::EventListener {
             prefs.net_delay = wrap(prefs.net_delay + 1 + direction, 6) - 1;  // Auto, 0-4
         else if (id == "show-ping")
             prefs.show_ping = !prefs.show_ping;
+        else if (id == "net-two-players")
+            prefs.net_two_players = !prefs.net_two_players;
         else
             return false;
         save();
@@ -688,8 +692,8 @@ class Launcher final : public Rml::EventListener {
             pc_android_export_logs();
             return;
         }
-        if (id == "net-delay" || id == "show-ping" || id == "aspect" || id == "filter" ||
-            id == "filter-mode")
+        if (id == "net-delay" || id == "show-ping" || id == "net-two-players" || id == "aspect" ||
+            id == "filter" || id == "filter-mode")
         {
             cycle(id, 1);
             return;
@@ -1441,7 +1445,7 @@ public:
         case 2:
             return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
         case 4:
-            return {"net-code", "net-target", "net-delay", "show-ping"};
+            return {"net-code", "net-target", "net-delay", "show-ping", "net-two-players"};
         default: {
             std::vector<std::string> ids{"pad-port"};
             for (int i = 0; i < PAD_BUTTON_COUNT; ++i)
@@ -1821,6 +1825,12 @@ public:
         }
         if (id == "show-ping") {
             prefs.show_ping = !prefs.show_ping;
+            saved();
+            refresh();
+            return;
+        }
+        if (id == "net-two-players") {
+            prefs.net_two_players = !prefs.net_two_players;
             saved();
             refresh();
             return;
@@ -2395,6 +2405,12 @@ extern "C" bool pc_is_rumble_enabled(void) {
 }
 extern "C" bool pc_is_ping_display_enabled(void) {
     return prefs.show_ping;
+}
+/* Input only: whether this computer brings a second player to a LAN or
+ * Direct session (net.c puts that player's pad on the wire or not; what
+ * the simulation sees is the wire, the same on both peers). */
+extern "C" bool pc_is_net_two_players_enabled(void) {
+    return prefs.net_two_players;
 }
 extern "C" const char* pc_get_net_code(void) {
     return prefs.net_code.c_str();

@@ -66,6 +66,11 @@ data is included.
   to a friend, and they call you from Online → Direct Connect.
 - Direct Connect works on the same home network and over **phone hotspots**,
   and asks your router to open a port (UPnP) when it can.
+- **Two players per computer** in LAN and Direct matches: set **Players on
+  this computer** to 2 in the Online settings and plug in a second
+  controller. The host's two players are P1 and P3, the guest's are P2 and
+  P4, so two computers can play doubles. Each computer sets its own, so 2v1
+  works too.
 - **Ping display** in the top left corner during online matches (can be
   turned off).
 - Rollback netcode from melee-pc.
@@ -162,7 +167,8 @@ settings:
   match results screen (online, the host's choice is used).
 - **Video:** Magnifying glass: turn off the bubble that shows a fighter off
   the edge of the screen (handy in widescreen).
-- **Online:** your connect code, a friend's code, input delay, ping display.
+- **Online:** your connect code, a friend's code, input delay, ping display,
+  players on this computer.
 - **Graphics / Audio / Controls:** resolution up to 10x, MSAA, filtering,
   post-processing, volume, button remapping.
 

@@ -1155,6 +1155,9 @@ def parse_args(argv=None):
     ap.add_argument("--dup", action="store_true")
     ap.add_argument("--minutes", type=float, default=2)
     ap.add_argument("--lan", action="store_true")
+    ap.add_argument("--two", action="store_true",
+                    help="two players per computer: a four-player team match, each peer's "
+                         "second player a self-mashing pad (MELEE_NET_TWO_FAKE)")
     ap.add_argument("--scenes", action="store_true",
                     help="LAN menus through a whole set: CSS, SSS, match, results, rematch")
     ap.add_argument("--oom", type=int, default=0, metavar="FRAME",
@@ -1215,6 +1218,9 @@ def run(args):
         if getattr(args, flag):
             sim[var] = val
 
+    if args.two:
+        sim["MELEE_DEBUG_VS"] = "four"
+        sim["MELEE_NET_TWO"] = sim["MELEE_NET_TWO_FAKE"] = "1"
     sim_a = dict(sim)
     if args.oom:
         sim_a["MELEE_NET_SIM_OOM_FRAME"] = str(args.oom)
@@ -1326,6 +1332,14 @@ def run(args):
     extra += check_scenes(a, b) if args.scenes else check_oom(a, args.oom) if args.oom else []
     if args.load_stall:
         extra += check_load_stall(a, b)
+    if args.two:
+        # Each peer must have fed four ports: its own second player and the
+        # other computer's (a pad that never arrives leaves a fighter idle
+        # and every checksum agreeing anyway).
+        for inst in (a, b):
+            for who in (r"\(local\)", "peer's"):
+                if count(inst, rf"net: second player on this {who} computer") == 0:
+                    extra.append(f"{inst.name} never saw the {who} second player")
     if args.hitch:
         n = count(b, r"net: hitch test:")
         print(f"net_test: b injected {n} hitches of {args.hitch}", flush=True)
