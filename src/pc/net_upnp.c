@@ -260,6 +260,8 @@ static bool find_control(const char* xml, const char* location, UpnpControl* c) 
 static bool soap(
     const UpnpControl* c, const char* action, const char* args, char* out, size_t cap) {
     char body[1536], request[2304];
+    if (cap != 0)
+        out[0] = 0; /* callers read the reply even when nothing connected */
     int b = snprintf(body, sizeof body,
         "<?xml version=\"1.0\"?>\r\n"
         "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\" "

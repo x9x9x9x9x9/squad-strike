@@ -53,12 +53,11 @@ static bool gmVsMelee_PlayerWon(MatchEnd* end, int i)
         return false;
     }
     if (end->is_teams) {
-        for (k = 0; k < end->n_team_winners && k < GM_MAX_TEAMS; k++) {
-            if (end->team_winners[k] == end->player_standings[i].team) {
-                return true;
-            }
+        if (end->n_team_winners != 1) {
+            return false; /* tied teams: nobody's win, as in a free-for-all */
         }
-        return false;
+        k = 0;
+        return end->team_winners[k] == end->player_standings[i].team;
     }
     if (end->n_winners != 1) {
         return false;

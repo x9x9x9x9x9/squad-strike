@@ -385,9 +385,19 @@ void onExitResults(GameModeState* state)
         /* The loser picks the next stage. A tie or a cancelled game leaves
          * the last chooser picking again. */
         MatchEnd* end = &gmVsMelee_ResultsEnterData.match_end;
-        if (!rankedMode() && !gm_WasMatchCanceled(end->outcome) && end->n_winners == 1 &&
-            end->winners[0] < 2)
-        {
+        if (rankedMode() || gm_WasMatchCanceled(end->outcome)) {
+            /* keep the last chooser */
+        } else if (end->is_teams) {
+            /* Team battle (CPU partners): the player whose team lost picks.
+             * Both on one team, or no single winning team: no change. */
+            int t0 = end->player_standings[0].team;
+            int t1 = end->player_standings[1].team;
+            if (end->n_team_winners == 1 && t0 != t1 &&
+                (end->team_winners[0] == t0 || end->team_winners[0] == t1))
+            {
+                stage_chooser = end->team_winners[0] == t0 ? 1 : 0;
+            }
+        } else if (end->n_winners == 1 && end->winners[0] < 2) {
             stage_chooser = 1 - end->winners[0];
         }
         pc_log_line("online: P%d picks the next stage", stage_chooser + 1);

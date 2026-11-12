@@ -476,8 +476,10 @@ static GmSquadMember* due_member(s32 slot)
         return NULL;
     }
     m = &s_lineup[slot][index];
-    if (m->ckind >= ChKind_Max || m->ckind == ps->ckind) {
-        return NULL;
+    if (m->ckind >= ChKind_Max ||
+        (m->ckind == ps->ckind && m->color == ps->costume_id))
+    {
+        return NULL; /* the same fighter in the same costume: respawn as is */
     }
     return m;
 }
