@@ -387,6 +387,7 @@ struct NetSession {
      * host has a link per guest (nlinks); a guest has one, to the host, and
      * its seat is its port. */
     bool party;
+    int party_size;   /* computers in it, the host included */
     uint32_t session; /* 0 on the guest until the host's first packet */
     /* How long to wait for the peer's first datagram, ms. CONNECT_TIMEOUT_MS
      * for a session the user dialled by hand (the other end may simply be

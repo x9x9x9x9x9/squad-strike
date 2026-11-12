@@ -2031,10 +2031,12 @@ static void own_ports(void) {
         }
     } else if (net.party) {
         /* Party guest: our seat is ours; the host's stream speaks for every
-         * other port, and WIRE_PRESENT says which of them are taken. */
+         * other seat. Every seat has a player from the first frame, on
+         * every computer alike. */
+        uint8_t seats = (uint8_t)((1u << net.party_size) - 1u);
         net.own_local = (uint8_t)(1u << net.local);
-        net.own_link[0] = (uint8_t)(0xFu & ~net.own_local);
-        net.primary = (uint8_t)(net.own_local | 1u);
+        net.own_link[0] = (uint8_t)(seats & ~net.own_local);
+        net.primary = seats;
     } else {
         net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
         net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
@@ -2043,30 +2045,42 @@ static void own_ports(void) {
 }
 
 /* This frame's sample of the local players, as it goes on the wire. */
+/* A pad that mashes by itself, a pure function of the frame and the port
+ * (tests: MELEE_NET_FAKE, MELEE_NET_TWO_FAKE). */
+static void fake_pad(WireOne* w, int port) {
+    uint32_t x = (uint32_t)(s_wrote + 1) / 6u * 2654435761u + (uint32_t)port * 97u;
+    x ^= x >> 15;
+    w->button = (uint16_t)(x & 0x0F00u); /* A B X Y */
+    w->stickX = (int8_t)((x >> 4 & 1) ? 90 : -90);
+    w->stickY = (int8_t)((x >> 5 & 3) == 0 ? 90 : 0);
+}
+
 static void local_to_wire(WirePad* w) {
-    static int force = -1, fake = -1;
+    static int force = -1, fake = -1, fake_own;
     if (force < 0) {
         /* MELEE_NET_TWO=0|1 overrides the setting; MELEE_NET_TWO_FAKE=1
-         * (tests) gives the second player a pad that mashes by itself. */
+         * (tests) gives the second player a pad that mashes by itself, and
+         * MELEE_NET_FAKE=1 this computer's own player. */
         const char* e = getenv("MELEE_NET_TWO");
         force = e != NULL ? (e[0] != '0') + 1 : 0;
         fake = getenv("MELEE_NET_TWO_FAKE") != NULL;
+        fake_own = getenv("MELEE_NET_FAKE") != NULL;
     }
     memset(w, 0, sizeof *w);
-    to_wire(&w->p[net.local], &s_raw_last[0]);
+    if (fake_own) {
+        fake_pad(&w->p[net.local], net.local);
+    } else {
+        to_wire(&w->p[net.local], &s_raw_last[0]);
+    }
     w->p[net.local].button &= (uint16_t)~WIRE_PRESENT;
     w->p[net.local].button |= WIRE_PRESENT;
     bool on = force ? force == 2 : pc_is_net_two_players_enabled();
-    if (!on || !second_allowed()) {
-        return;
+    if (!on || !second_allowed() || net.party) {
+        return; /* a party seats one player a computer */
     }
     WireOne* second = &w->p[net.local + 2];
     if (fake) {
-        uint32_t x = (uint32_t)(s_wrote + 1) / 6u * 2654435761u + (uint32_t)net.local * 97u;
-        x ^= x >> 15;
-        second->button = (uint16_t)(x & 0x0F00u); /* A B X Y */
-        second->stickX = (int8_t)((x >> 4 & 1) ? 90 : -90);
-        second->stickY = (int8_t)((x >> 5 & 3) == 0 ? 90 : 0);
+        fake_pad(second, net.local + 2);
     } else if (s_raw_last[1].err != PAD_ERR_NONE) {
         return; /* no second controller right now */
     } else {
@@ -2356,15 +2370,21 @@ static bool addr_is_host(const struct sockaddr* sa) {
  * the same fields):
  *   host:  MELEE_NET_PARTY=ip:port,ip:port[,ip:port]  its guests, by seat
  *   guest: MELEE_NET_SEAT=1..3                        with MELEE_NET=<host>
+ *          MELEE_NET_PARTY_SIZE=3|4                   computers in the party (4)
  * Called from connect_impl after session_reset, before own_ports. */
 #define PARTY_DELAY 3
 static void party_env(int family) {
     const char* seat = getenv("MELEE_NET_SEAT");
     const char* list = getenv("MELEE_NET_PARTY");
     if (seat != NULL && seat[0] >= '1' && seat[0] <= '0' + NET_LINKS && seat[1] == '\0') {
+        const char* size = getenv("MELEE_NET_PARTY_SIZE");
         net.party = true;
         net.local = seat[0] - '0';
         net.remote = 0;
+        net.party_size = size != NULL && size[0] == '3' ? 3 : NET_LINKS + 1;
+        if (net.local >= net.party_size) {
+            net.party_size = net.local + 1;
+        }
         return;
     }
     if (list == NULL || list[0] == '\0' || net.local != 0) {
@@ -2398,6 +2418,7 @@ static void party_env(int family) {
     }
     net.party = true;
     net.nlinks = n;
+    net.party_size = n + 1;
     pc_log_line("net: party host with %d guests", n);
 }
 
