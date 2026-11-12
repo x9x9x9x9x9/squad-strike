@@ -108,8 +108,41 @@ The host takes the largest correction any link asks for.
 | step | what | state |
 |------|------|-------|
 | 1 | port-indexed wire pads, ownership masks; two computers and two per computer unchanged | done |
-| 2 | `struct Link`, host with three links, relay | not started |
-| 3 | `MELEE_NET` party start, `net_test.py --four` | not started |
-| 4 | time sync in a star, tuning with simulated latency | not started |
+| 2a | per-link state as arrays over `NET_LINKS` behind macros of the old names, indexed by the thread-local `t_li` (this replaced the `struct Link` idea above: no types had to move) | done |
+| 2b | host with a link per guest: per-link send/receive/timers/gate, aggregate confirmed frame and waits, relay (`tx_newest`, `tx_pad`), handshake to all guests, a key per link | done |
+| 3 | `MELEE_NET_PARTY` / `MELEE_NET_SEAT` / `MELEE_NET_PARTY_SIZE`, `tools/net_party_test.py` | done |
+| 4 | time sync in a star, tuning with simulated latency | started: see below |
 | 5 | Direct/LAN party connect flow and menus | not started |
-| 6 | four doors on character select online, stage chooser, results | not started |
+| 6 | reliable messages on a host (scene hand-off, pause, chat), four doors on character select online, stage chooser, results | not started |
+
+Measured on loopback (four instances, null backend, `MELEE_DEBUG_VS=four`,
+every player a self-mashing pad):
+
+- no simulated latency: 10,799 frames, all four records identical, no
+  rollbacks needed;
+- 30 ms one way per link (about 65 ms ping to the host), 20 ms jitter, 2%
+  loss: 10,436 frames, all four records identical, no desync; the host
+  rolled back 660 times (depth up to 3), each guest about 1,650 times
+  (depth up to 7, which is `WINDOW`: a guest sees the other guests two
+  hops late), 80 to 150 short stalls each.
+
+What a party does not have yet (each is a two-computer exchange today):
+
+- **Time sync (step 4).** The host feeds every link's advantage samples
+  into the one estimator and guests measure against `pk->newest`
+  (`sync_have`). It held in the runs above but is not designed: the host
+  should not be steered by its slowest guest. `WINDOW` (7) is also tight
+  for guest-to-guest input at ordinary pings.
+- **Auto delay.** Fixed at `PARTY_DELAY` (3) or the configured delay.
+- **Resume.** `s_rc_window_ms` is 0 in a party: a silent link ends the
+  session for everyone.
+- **Reliable messages from the host other than the handshake.**
+  `pc_net_send_reliable` sends on the current link (link 0 on the game
+  thread). Scene hand-off (`net_scene_rel`, `pc_net_scene_hold`), the pause
+  and delay announcements and chat have to go to every guest, and the
+  host has to wait for every guest's answer. Until then a party only works
+  where none of those are used: a `MELEE_NET` session that boots straight
+  into a match.
+- **Starting one from the menus (step 5)** and everything the online mode
+  assumes about two players (step 6): `pc_net_local_player()` is 0 or 1 in
+  gmonlinemode.c, the stage chooser, the ping display, rumble's port map.

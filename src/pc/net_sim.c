@@ -152,7 +152,9 @@ void sim_env(uint16_t bind_port) {
     v = getenv("MELEE_NET_SIM_DELAY_RX_MS");
     net.sim_rx_delay_ns = v ? (uint64_t)atoi(v) * 1000000ull : 0;
     net.sim_hold = net.sim_delay_ns || net.sim_jitter_ms || net.sim_reorder || net.sim_dup;
-    s_sim_rng = (uint32_t)bind_port * 2654435761u | 1u;
+    for (int i = 0; i < NET_LINKS; i++) { /* a zero state never leaves zero */
+        s_sim_rng_l[i] = (uint32_t)(bind_port + i * 7919) * 2654435761u | 1u;
+    }
 }
 
 /* Session start: empty held queue, no burst or swap pending (timer parked). */

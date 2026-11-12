@@ -33,8 +33,10 @@ extern "C" {
  * A fight reseeds the RNG every tick (fight_reseed) and forces UCF on and
  * free camera off, which an older peer does not.
  * Version 10 widens every frame of input to two pads: the peer's player and
- * a second player on the same computer (ports 3 and 4). */
-#define PC_NET_PROTO_VERSION 10
+ * a second player on the same computer (ports 3 and 4).
+ * Version 11 makes that a pad per controller port, the stream a party
+ * host relays (docs/party-plan.md). */
+#define PC_NET_PROTO_VERSION 11
 void pc_net_init(void);
 void pc_net_set_input_delay(int frames);
 bool pc_net_active(void);
