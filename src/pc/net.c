@@ -399,7 +399,7 @@ static bool any_left(void) {
 
 /* The port the peer on this link puts in its headers. */
 static int link_remote(void) {
-    return net.nlinks > 1 ? t_li + 1 : net.remote;
+    return net.party ? net.link_seat[t_li] : net.remote;
 }
 
 static int32_t confirmed_frame(void) {
@@ -560,7 +560,7 @@ static void tx_timer_link(uint64_t now) {
 static int32_t tx_newest(void) {
     int32_t newest = s_wrote;
     for (int j = 0; j < links(); j++) {
-        if (j != t_li && s_remote_have_l[j] < newest) {
+        if (j != t_li && (net.own_link[j] & net.relay[t_li]) != 0 && s_remote_have_l[j] < newest) {
             newest = s_remote_have_l[j];
         }
     }
@@ -574,7 +574,7 @@ static WirePad tx_pad(int32_t f) {
             continue;
         }
         for (int port = 0; port < 4; port++) {
-            if (net.own_link[j] & (1u << port)) {
+            if (net.own_link[j] & net.relay[t_li] & (1u << port)) {
                 w.p[port] = s_remote_ring_l[j][f & (RING - 1)].p[port];
             }
         }
@@ -582,11 +582,13 @@ static WirePad tx_pad(int32_t f) {
     return w;
 }
 
-/* The remote frame the time-sync advantage is measured against. A party
- * guest's stream from the host is held back by the slowest other guest, so
- * it measures against the host's own newest frame instead. */
+/* The remote frame the time-sync advantage is measured against. A stream
+ * that also carries a relayed player is held back by that player's trip to
+ * the relay, so such a link measures against the relay's own newest frame
+ * instead. */
 static int32_t sync_have(void) {
-    return net.party && net.nlinks <= 1 ? s_remote_newest : s_remote_have;
+    return net.party && (net.own_link[t_li] & (net.own_link[t_li] - 1)) != 0 ? s_remote_newest :
+                                                                               s_remote_have;
 }
 
 static void send_link(void) {
@@ -1125,15 +1127,21 @@ bool pc_net_send_datagram(const void* data, size_t size, uint32_t address, uint1
  * player. */
 static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, socklen_t from_len) {
     Hdr* h = buf;
-    if (net.nlinks > 1) {
-        /* A party host: the sender's seat names its link. Everything below
-         * (the MAC under that link's key, the address pin) then holds the
-         * datagram to that guest. */
-        if (n < (int)sizeof(Hdr) || h->player < 1 || h->player > net.nlinks) {
+    if (net.party) {
+        /* The sender's seat names its link. Everything below (the MAC under
+         * that link's key, the address pin) then holds the datagram to that
+         * computer. */
+        int li = -1;
+        for (int i = 0; n >= (int)sizeof(Hdr) && i < net.nlinks; i++) {
+            if (net.link_seat[i] == h->player) {
+                li = i;
+            }
+        }
+        if (li < 0) {
             s_rx_bad_player_l[0]++;
             return;
         }
-        t_li = h->player - 1;
+        t_li = li;
     }
     if (s_datagram_handler && from->ss_family == AF_INET) {
         const struct sockaddr_in* a = (const struct sockaddr_in*)from;
@@ -1255,7 +1263,8 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
         const Rel* rel = buf;
         is_rules = h->magic == 'R' && rel->type == REL_RULES && ntohs(rel->len) == sizeof(Rules);
     }
-    bool learn_session = net.session == 0 && net.local != 0 && h->session != 0 && is_rules;
+    bool learn_session =
+        net.session == 0 && net.local != 0 && h->session != 0 && is_rules && link_remote() == 0;
     bool guest_preamble = !s_heard && net.local == 0 && h->session == 0;
     if (h->session != net.session && !learn_session && !guest_preamble) {
         s_rx_bad_sess++;
@@ -1998,7 +2007,7 @@ bool pc_net_scene_hold(void) {
          * recorded pair agreed, not where this run's own code asks to. */
         return record_replay_scene_hold(net.frame);
     }
-    if (net.nlinks > 1) {
+    if (party_host()) {
         return scene_hold_host();
     }
     int32_t* remote = &s_scene_exit_remote[s_scene_seq % SCENE_SLOTS];
@@ -2100,24 +2109,11 @@ static bool second_allowed(void) {
 /* The ports each stream speaks for (docs/party-plan.md). Two computers:
  * each side's player, and that port + 2 for a second player there. */
 static void own_ports(void) {
+    if (net.party) {
+        return; /* party_shape laid the ports out */
+    }
     memset(net.own_link, 0, sizeof net.own_link);
-    if (net.nlinks > 1) {
-        /* Party host: port 0 is ours, each guest's seat its link's. */
-        net.own_local = 1u;
-        net.primary = 1u;
-        for (int i = 0; i < net.nlinks; i++) {
-            net.own_link[i] = (uint8_t)(1u << (i + 1));
-            net.primary |= net.own_link[i];
-        }
-    } else if (net.party) {
-        /* Party guest: our seat is ours; the host's stream speaks for every
-         * other seat. Every seat has a player from the first frame, on
-         * every computer alike. */
-        uint8_t seats = (uint8_t)((1u << net.party_size) - 1u);
-        net.own_local = (uint8_t)(1u << net.local);
-        net.own_link[0] = (uint8_t)(seats & ~net.own_local);
-        net.primary = seats;
-    } else {
+    {
         net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
         net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
         net.own_link[0] = (uint8_t)(1u << net.remote | 1u << (net.remote + 2));
@@ -2446,34 +2442,110 @@ static bool addr_is_host(const struct sockaddr* sa) {
     return false;
 }
 
-/* A party from the environment (tests and the command line; the menus set
- * the same fields):
- *   host:  MELEE_NET_PARTY=ip:port,ip:port[,ip:port]  its guests, by seat
- *   guest: MELEE_NET_SEAT=1..3                        with MELEE_NET=<host>
- *          MELEE_NET_PARTY_SIZE=3|4                   computers in the party (4)
+/* A party's shape: who this computer is, who it talks to directly, and
+ * which pairs that cannot reach each other go through a third computer.
+ * Fills the link table (the peer's seat on each link, the ports each link's
+ * stream speaks for, the ports we forward on it) from a description every
+ * computer in the party holds alike:
+ *   seat   this computer's seat, 0 the host (also its controller port)
+ *   size   computers in the party, 3 or 4
+ *   via    via[a][b] = the seat that relays between a and b, or -1 when
+ *          they are connected directly (symmetric; the relay must itself
+ *          be connected directly to both)
+ * Returns false for a description that does not hold together. */
+bool party_shape(int seat, int size, const int8_t via[4][4]) {
+    if (size < 3 || size > NET_LINKS + 1 || seat < 0 || seat >= size) {
+        return false;
+    }
+    for (int p = 1; p < size; p++) {
+        if (via[0][p] >= 0 || via[p][0] >= 0) {
+            return false; /* the host is the one everybody dialled */
+        }
+    }
+    int n = 0;
+    uint8_t seats[NET_LINKS], own[NET_LINKS], relay[NET_LINKS];
+    for (int p = 0; p < size; p++) {
+        if (p != seat && via[seat][p] < 0) {
+            seats[n] = (uint8_t)p;
+            own[n] = (uint8_t)(1u << p);
+            relay[n] = 0;
+            n++;
+        }
+    }
+    for (int p = 0; p < size; p++) {
+        int r = p != seat ? via[seat][p] : -1;
+        if (r < 0) {
+            continue;
+        }
+        /* p reaches us through r: r's link speaks for p too. */
+        int li = -1;
+        for (int i = 0; i < n; i++) {
+            if (seats[i] == r) {
+                li = i;
+            }
+        }
+        if (li < 0 || r == p || via[r][p] >= 0 || via[p][r] >= 0) {
+            return false;
+        }
+        own[li] |= (uint8_t)(1u << p);
+    }
+    for (int a = 0; a < size; a++) {
+        for (int b = 0; b < size; b++) {
+            if (a == b || a == seat || b == seat || via[a][b] != seat) {
+                continue;
+            }
+            /* We relay between a and b: a's link carries b's port. */
+            int la = -1;
+            for (int i = 0; i < n; i++) {
+                if (seats[i] == a) {
+                    la = i;
+                }
+            }
+            if (la < 0 || via[b][a] != seat) {
+                return false;
+            }
+            relay[la] |= (uint8_t)(1u << b);
+        }
+    }
+    if (n < 1) {
+        return false;
+    }
+    net.party = true;
+    net.party_size = size;
+    net.local = seat;
+    net.remote = seats[0];
+    net.nlinks = n;
+    net.own_local = (uint8_t)(1u << seat);
+    net.primary = (uint8_t)((1u << size) - 1u);
+    for (int i = 0; i < NET_LINKS; i++) {
+        net.link_seat[i] = i < n ? seats[i] : 0xFF;
+        net.own_link[i] = i < n ? own[i] : 0;
+        net.relay[i] = i < n ? relay[i] : 0;
+    }
+    return true;
+}
+
+/* A party from the environment (tests and the command line; the menus go
+ * through pc_net_connect_party):
+ *   MELEE_NET_SEAT=0..3            this computer's seat, 0 the host
+ *   MELEE_NET_PARTY=a,b,c[,d]      every seat's ip:port, in seat order
+ *   MELEE_NET_PARTY_RELAY=12:0,..  pairs with no direct connection and
+ *                                  the seat that relays between them
  * Called from connect_impl after session_reset, before own_ports. */
 #define PARTY_DELAY 3
 static void party_env(int family) {
-    const char* seat = getenv("MELEE_NET_SEAT");
+    const char* seat_env = getenv("MELEE_NET_SEAT");
     const char* list = getenv("MELEE_NET_PARTY");
-    if (seat != NULL && seat[0] >= '1' && seat[0] <= '0' + NET_LINKS && seat[1] == '\0') {
-        const char* size = getenv("MELEE_NET_PARTY_SIZE");
-        net.party = true;
-        net.local = seat[0] - '0';
-        net.remote = 0;
-        net.party_size = size != NULL && size[0] == '3' ? 3 : NET_LINKS + 1;
-        if (net.local >= net.party_size) {
-            net.party_size = net.local + 1;
-        }
+    if (seat_env == NULL || list == NULL || list[0] == '\0') {
         return;
     }
-    if (list == NULL || list[0] == '\0' || net.local != 0) {
-        return;
-    }
-    int n = 0;
-    char buf[256];
+    int seat = seat_env[0] - '0';
+    struct sockaddr_storage addr[4];
+    socklen_t addr_len[4];
+    int size = 0;
+    char buf[320];
     snprintf(buf, sizeof buf, "%s", list);
-    for (char* tok = strtok(buf, ","); tok != NULL && n < NET_LINKS; tok = strtok(NULL, ",")) {
+    for (char* tok = strtok(buf, ","); tok != NULL && size < 4; tok = strtok(NULL, ",")) {
         char* colon = strrchr(tok, ':');
         if (colon == NULL) {
             break;
@@ -2485,21 +2557,39 @@ static void party_env(int family) {
         hints.ai_socktype = SOCK_DGRAM;
         if (getaddrinfo(tok, colon + 1, &hints, &res) != 0 || res == NULL) {
             pc_log_line("net: party: cannot resolve %s:%s", tok, colon + 1);
+            return;
+        }
+        memcpy(&addr[size], res->ai_addr, res->ai_addrlen);
+        addr_len[size] = (socklen_t)res->ai_addrlen;
+        freeaddrinfo(res);
+        size++;
+    }
+    int8_t via[4][4];
+    memset(via, -1, sizeof via);
+    const char* r = getenv("MELEE_NET_PARTY_RELAY");
+    for (; r != NULL && r[0] != '\0' && r[1] != '\0' && r[2] == ':' && r[3] != '\0';) {
+        int a = r[0] - '0', b = r[1] - '0', by = r[3] - '0';
+        if (a < 0 || a > 3 || b < 0 || b > 3 || by < 0 || by > 3) {
             break;
         }
-        memcpy(&net.link[n].peer, res->ai_addr, res->ai_addrlen);
-        net.link[n].peer_len = (socklen_t)res->ai_addrlen;
-        freeaddrinfo(res);
-        n++;
+        via[a][b] = via[b][a] = (int8_t)by;
+        r += 4;
+        if (*r == ',') {
+            r++;
+        }
     }
-    if (n < 2) {
-        pc_log_line("net: MELEE_NET_PARTY needs two or three guest addresses; ignored");
+    if (!party_shape(seat, size, via)) {
+        pc_log_line("net: MELEE_NET_PARTY / MELEE_NET_SEAT / MELEE_NET_PARTY_RELAY do not "
+                    "describe a party; ignored");
         return;
     }
-    net.party = true;
-    net.nlinks = n;
-    net.party_size = n + 1;
-    pc_log_line("net: party host with %d guests", n);
+    for (int i = 0; i < net.nlinks; i++) {
+        memcpy(&net.link[i].peer, &addr[net.link_seat[i]], addr_len[net.link_seat[i]]);
+        net.link[i].peer_len = addr_len[net.link_seat[i]];
+    }
+    pc_log_line("net: party of %d, seat %d, %d direct links (own %x/%x/%x, relay %x/%x/%x)", size,
+        seat, net.nlinks, net.own_link[0], net.own_link[1], net.own_link[2], net.relay[0],
+        net.relay[1], net.relay[2]);
 }
 
 static bool connect_impl(

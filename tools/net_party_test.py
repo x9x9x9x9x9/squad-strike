@@ -34,10 +34,19 @@ def main():
     ap.add_argument("--delay", type=int, default=0, help="one-way ms on every link")
     ap.add_argument("--jitter", action="store_true")
     ap.add_argument("--loss", type=int, default=0)
+    ap.add_argument("--relay", default="",
+                    help="pairs with no direct connection and the seat relaying them, "
+                         "e.g. 13:0 or 12:0,13:0 (default: every pair direct)")
+    ap.add_argument("--star", action="store_true",
+                    help="every guest pair relayed through the host")
     args = ap.parse_args()
     shutil.rmtree(args.work, ignore_errors=True)
     os.makedirs(args.work)
     frames = int(args.minutes * 3600) + 9000
+    relay = args.relay
+    if args.star:
+        relay = ",".join(f"{a}{b}:0" for a in range(1, args.guests + 1)
+                         for b in range(a + 1, args.guests + 1))
     names = ["host"] + [f"guest{i}" for i in range(1, args.guests + 1)]
     procs, logs = [], []
     for seat, name in enumerate(names):
@@ -57,16 +66,13 @@ def main():
             e["MELEE_NET_SIM_JITTER_MS"] = "20"
         if args.loss:
             e["MELEE_NET_SIM_LOSS"] = str(args.loss)
-        if seat == 0:
-            e["MELEE_NET"] = f"127.0.0.1:{args.port + 1}"
-            e["MELEE_NET_PLAYER"] = "0"
-            e["MELEE_NET_PARTY"] = ",".join(
-                f"127.0.0.1:{args.port + s}" for s in range(1, args.guests + 1))
-        else:
-            e["MELEE_NET"] = f"127.0.0.1:{args.port}"
-            e["MELEE_NET_PLAYER"] = "1"
-            e["MELEE_NET_SEAT"] = str(seat)
-            e["MELEE_NET_PARTY_SIZE"] = str(args.guests + 1)
+        e["MELEE_NET"] = f"127.0.0.1:{args.port + (1 if seat == 0 else 0)}"
+        e["MELEE_NET_PLAYER"] = "0" if seat == 0 else "1"
+        e["MELEE_NET_SEAT"] = str(seat)
+        e["MELEE_NET_PARTY"] = ",".join(
+            f"127.0.0.1:{args.port + s}" for s in range(args.guests + 1))
+        if relay:
+            e["MELEE_NET_PARTY_RELAY"] = relay
         e.pop("MELEE_LOG_FILE", None)
         log = open(os.path.join(args.work, f"{name}.log"), "wb")
         logs.append(log)

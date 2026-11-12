@@ -356,7 +356,7 @@ enum { HS_IDLE, HS_PENDING, HS_DONE, HS_FAILED };
  * test for the desync it caused. */
 enum { SYNC_ON, SYNC_OFF, SYNC_LEGACY };
 
-/* A party host's links to its guests. Per-link state lives in the file that
+/* A party computer's links to the others. Per-link state lives in the file that
  * uses it, as arrays over links behind a macro of the old name (`#define
  * s_remote_have (s_remote_have_l[t_li])`), so the link code reads as it did
  * for one peer: t_li is the link the running thread is working on. */
@@ -368,9 +368,10 @@ struct NetSession {
     /* session (net.c); active and sock flip under tx_lock */
     bool active;
     sock_t sock;
-    /* What describes one peer. A host of a party (docs/party-plan.md) has
-     * a link per guest; everyone else has link 0 only. NL is the link the
-     * running thread is working on (t_li). */
+    /* What describes one peer. A computer in a party (docs/party-plan.md)
+     * has a link per computer it is connected to directly; a session of two
+     * has link 0 only. NL is the link the running thread is working on
+     * (t_li). */
     int nlinks;
     struct NetLinkPub {
         struct sockaddr_storage peer;
@@ -383,11 +384,16 @@ struct NetSession {
      * the ones each link's remote stream does, and the ones that have a
      * controller whatever WIRE_PRESENT says (each side's player). */
     uint8_t own_local, own_link[NET_LINKS], primary;
-    /* A party (docs/party-plan.md): more than two computers in a star. The
-     * host has a link per guest (nlinks); a guest has one, to the host, and
-     * its seat is its port. */
+    /* A party (docs/party-plan.md): three or four computers, one player
+     * each, a computer's seat its controller port, seat 0 the host. Every
+     * pair is connected directly where it can be: link_seat is the seat at
+     * the far end of each link, in seat order, so a guest's link 0 is the
+     * host. A pair that cannot connect goes through a third computer:
+     * relay is the ports we forward on a link from the links that own
+     * them, and the far end counts those in its own_link for us. */
     bool party;
-    int party_size;   /* computers in it, the host included */
+    int party_size; /* computers in it, the host included */
+    uint8_t link_seat[NET_LINKS], relay[NET_LINKS];
     uint32_t session; /* 0 on the guest until the host's first packet */
     /* How long to wait for the peer's first datagram, ms. CONNECT_TIMEOUT_MS
      * for a session the user dialled by hand (the other end may simply be
@@ -436,7 +442,13 @@ struct NetSession {
 };
 extern struct NetSession net;
 
-/* Links in use: one, or a party host's one per guest. */
+/* The computer that settles what a party needs one voice for: the rules,
+ * the start frame and the frame a scene ends on. */
+static inline bool party_host(void) {
+    return net.party && net.local == 0;
+}
+
+/* Links in use: one, or a party computer's one per direct peer. */
 static inline int links(void) {
     return net.nlinks > 1 ? net.nlinks : 1;
 }

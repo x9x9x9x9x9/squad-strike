@@ -550,7 +550,7 @@ static void on_ready(const uint8_t* payload, int len) {
         hs_drop(LOG_READY_GUEST, "READY", "we are the guest");
         return;
     }
-    if (net.hs == HS_DONE || (net.nlinks > 1 && s_hs_ready)) {
+    if (net.hs == HS_DONE || (party_host() && s_hs_ready)) {
         hs_drop(LOG_READY_DONE, "READY", "already done");
         return;
     }
@@ -592,7 +592,7 @@ static void on_ready(const uint8_t* payload, int len) {
          * Both were ours and the guest can apply only one, so its answer is
          * the agreed frame. If that frame has already gone by here, the
          * match layer's ready barrier refuses the start. */
-        if (rd.start_frame != s_hs_prev_start || net.nlinks > 1) {
+        if (rd.start_frame != s_hs_prev_start || party_host()) {
             hs_drop(LOG_READY_START, "READY", "start_frame we never sent");
             return;
         }
@@ -671,7 +671,7 @@ static bool hs_poll(int32_t* start_frame) {
             hs_flush(); /* after recv_inputs: a 'K' just read may be what freed the slot */
         }
         if (net.hs == HS_PENDING && net.hs_host && net.tick_frame >= net.start_frame) {
-            if (net.nlinks > 1 && hs_any_ready()) {
+            if (party_host() && hs_any_ready()) {
                 /* Some guests hold the start frame that just passed and
                  * cannot be given another. */
                 net.hs = HS_FAILED;
