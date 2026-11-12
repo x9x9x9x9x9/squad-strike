@@ -320,6 +320,22 @@ void grGreens_802139C4(Ground_GObj* gobj)
 {
     Ground* gp = gobj->user_data;
     ftCo_800C06E8(gobj, 9, grGreens_80213B1C);
+#ifdef TARGET_PC
+    /* This gobj (Whispy) keeps its state in u.greens2, which is what
+     * grGreens_80213B1C and grGreens_80213C10 read. u.greens is the block
+     * grid's and has two pointers up front, so past gp+C4 its members sit
+     * at other offsets on a 64-bit host: writing through it left Whispy's
+     * wind timer and state in the wrong slots. */
+    gp->u.greens2.x0 = 0;
+    gp->u.greens2.x4 = 0;
+    gp->u.greens2.x8 = 0;
+    gp->u.greens2.xC = randrange(yakumono_param->x38_windTimerMax,
+                                 yakumono_param->x34_windTimerMin);
+    gp->u.greens2.x10 = 1;
+    gp->u.greens2.x1C = 0;
+    gp->u.greens2.x14 = HSD_Randi(2);
+    gp->u.greens2.x18 = 0;
+#else
     gp->u.greens.x0_flags.whole_thing = 0;
     gp->u.greens.x4 = NULL;
     gp->u.greens.x8_blocks = NULL;
@@ -329,6 +345,7 @@ void grGreens_802139C4(Ground_GObj* gobj)
     gp->u.greens.x1C = 0;
     gp->u.greens.x14 = HSD_Randi(2);
     gp->u.greens.x18 = 0;
+#endif
     grAnime_801C8138(gobj, gp->map_id, 0);
 }
 
