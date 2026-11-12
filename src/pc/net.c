@@ -101,8 +101,8 @@ static PADStatus s_raw_last[2]; /* newest physical samples (ports 0 and 1) */
  * online mode sets it; a MELEE_NET session allows it by itself. */
 static bool s_second_allowed;
 static bool s_seen_second[2]; /* logged once a session, per side */
-static int s_status;     /* pc_net_peer_status(); kept until the next connect */
-static bool s_peer_left; /* BYE received or version mismatch: stop waiting */
+static int s_status;          /* pc_net_peer_status(); kept until the next connect */
+static bool s_peer_left;      /* BYE received or version mismatch: stop waiting */
 static bool s_warn_src, s_warn_sess, s_warn_bad, s_warn_mac; /* one reject line each per session */
 /* One authenticated datagram has arrived, so the peer holds the session key
  * and nothing unauthenticated is accepted from here on (recv_inputs). Until
@@ -920,6 +920,17 @@ void pc_net_rumble_command(unsigned port, unsigned command) {
      * a hard stop through so a motor already running is brought to rest. */
     if (command == 1 && !pc_is_rumble_enabled())
         command = 0;
+    if (net.active) {
+        /* The game's ports are the session's; the controllers are this
+         * computer's: its player on the first, its second player on the
+         * second. The other computer's players shake nothing here. */
+        if (port == (unsigned)net.local)
+            port = 0;
+        else if (port == (unsigned)net.local + 2)
+            port = 1;
+        else
+            return;
+    }
     if (port >= 4 || net.resim || motor[port] == (int)command)
         return;
     PADControlMotor(port, command);
