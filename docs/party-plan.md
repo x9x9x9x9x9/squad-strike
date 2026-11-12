@@ -136,13 +136,14 @@ What a party does not have yet (each is a two-computer exchange today):
 - **Auto delay.** Fixed at `PARTY_DELAY` (3) or the configured delay.
 - **Resume.** `s_rc_window_ms` is 0 in a party: a silent link ends the
   session for everyone.
-- **Reliable messages from the host other than the handshake.**
-  `pc_net_send_reliable` sends on the current link (link 0 on the game
-  thread). Scene hand-off (`net_scene_rel`, `pc_net_scene_hold`), the pause
-  and delay announcements and chat have to go to every guest, and the
-  host has to wait for every guest's answer. Until then a party only works
-  where none of those are used: a `MELEE_NET` session that boots straight
-  into a match.
+- **Reliable messages from the host other than the handshake and the
+  scene hand-off.** `pc_net_send_reliable` sends on the current link (link 0
+  on the game thread). The scene hand-off is done (`scene_hold_host`: the
+  host announces the latest frame of all once every guest's is in; measured
+  with `MELEE_DEBUG_VS_STOCKS=1`, the match ended and all four computers
+  entered the results scene on frame 483). The lobby's ready barrier
+  (`REL_READY_BARRIER`, net_lan.c and net_match.c), the delay announcement
+  and chat still go to one guest only.
 - **Starting one from the menus (step 5)** and everything the online mode
   assumes about two players (step 6): `pc_net_local_player()` is 0 or 1 in
   gmonlinemode.c, the stage chooser, the ping display, rumble's port map.

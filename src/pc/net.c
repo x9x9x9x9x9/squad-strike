@@ -1845,7 +1845,8 @@ int pc_net_local_player(void) {
  * plus a lead that covers the reliable round trip. This is the pattern the
  * lobby already uses to hand over to the CSS (pc_lan_start_frame). */
 #define SCENE_HANDOFF 20 /* frames of lead: ~330 ms, menus are lockstep */
-#define SCENE_SLOTS 8    /* announcements kept: the peer may be a scene ahead */
+#define SCENE_HANDOFF_PARTY 45
+#define SCENE_SLOTS 8 /* announcements kept: the peer may be a scene ahead */
 /* How long a scene may wait for the other half of a hand-off before the
  * session is declared dead. Five seconds is far longer than any real
  * hand-off (the announcement is one reliable round trip on top of
@@ -1863,11 +1864,12 @@ void pc_net_disconnect(void);
  * releases immediately while the other is still waiting, and the sims part
  * on the frame that peer enters the next scene (measured tablet<->PC, "peer
  * 121" against an exit asked at 5775). */
-static uint32_t s_scene_seq;                     /* exits we have completed */
-static int32_t s_scene_exit_local = -1;          /* frame our scene asked to end on */
-static int32_t s_scene_exit_at = -1;             /* agreed frame, once both are in */
-static int32_t s_scene_wait_since = -1;          /* frame the incomplete wait began */
-static int32_t s_scene_exit_remote[SCENE_SLOTS]; /* the peer's, by its own seq */
+static uint32_t s_scene_seq;                                  /* exits we have completed */
+static int32_t s_scene_exit_local = -1;                       /* frame our scene asked to end on */
+static int32_t s_scene_exit_at = -1;                          /* agreed frame, once both are in */
+static int32_t s_scene_wait_since = -1;                       /* frame the incomplete wait began */
+static int32_t s_scene_exit_remote_l[NET_LINKS][SCENE_SLOTS]; /* the peer's, by its own seq */
+#define s_scene_exit_remote (s_scene_exit_remote_l[t_li])
 
 void net_scene_rel(const void* payload, int len) {
     SceneMsg m;
@@ -1915,11 +1917,89 @@ static void scene_handoff_reset(void) {
 
 /* True while the caller must keep ticking the scene it has asked to leave.
  * Offline, and once the peer is gone, it never holds. */
+/* Frames of lead between the latest announcement and the exit. A party
+ * guest hears the host's only after every guest's has reached the host, a
+ * hop more than two computers need. */
+static int scene_handoff(void) {
+    return net.party ? SCENE_HANDOFF_PARTY : SCENE_HANDOFF;
+}
+
+/* pc_net_scene_hold for a party host. A guest pairs its own frame with the
+ * one the host announces, so the host announces only once every guest's
+ * frame is in, and announces the latest of them all (its own included):
+ * every computer then leaves on that frame plus the lead. */
+static bool s_scene_told_l[NET_LINKS];
+static bool scene_hold_host(void) {
+    int slot = (int)(s_scene_seq % SCENE_SLOTS);
+    if (s_scene_exit_local < 0) {
+        s_scene_exit_local = net.frame;
+        memset(s_scene_told_l, 0, sizeof s_scene_told_l);
+    }
+    int32_t later = s_scene_exit_local;
+    bool all_in = true, all_told = true;
+    for (int i = 0; i < net.nlinks; i++) {
+        int32_t r = s_scene_exit_remote_l[i][slot];
+        if (r < 0) {
+            all_in = false;
+        } else if (r > later) {
+            later = r;
+        }
+    }
+    if (all_in) {
+        SceneMsg m = {htonl(s_scene_seq), htonl((uint32_t)later)};
+        FOR_LINKS() {
+            if (!s_scene_told_l[t_li]) {
+                s_scene_told_l[t_li] = pc_net_send_reliable(REL_SCENE, &m, sizeof m);
+            }
+            all_told = all_told && s_scene_told_l[t_li];
+        }
+    }
+    if (!all_in || !all_told) {
+        static int32_t said;
+        if (s_scene_wait_since < 0) {
+            s_scene_wait_since = net.frame;
+        }
+        if (net.frame - s_scene_wait_since >= SCENE_HOLD_MAX) {
+            pc_log_line("net: scene %u hand-off never completed in %d frames (a guest never "
+                        "announced); leaving netplay",
+                s_scene_seq, SCENE_HOLD_MAX);
+            s_status = PC_NET_PEER_TIMEOUT;
+            pc_net_disconnect();
+            return false;
+        }
+        if (net.frame - said >= 60) {
+            said = net.frame;
+            pc_log_line("net: scene %u hand-off waiting at frame %d (ours %d)", s_scene_seq,
+                net.frame, s_scene_exit_local);
+        }
+        return true;
+    }
+    s_scene_wait_since = -1;
+    if (s_scene_exit_at < 0) {
+        s_scene_exit_at = later + scene_handoff();
+        barrier_raise(s_scene_exit_at);
+        pc_log_line("net: scene %u ends at frame %d (asked %d, latest %d)", s_scene_seq,
+            s_scene_exit_at, s_scene_exit_local, later);
+    }
+    if (net.frame < s_scene_exit_at) {
+        return true;
+    }
+    for (int i = 0; i < net.nlinks; i++) {
+        s_scene_exit_remote_l[i][slot] = -1;
+    }
+    s_scene_exit_local = s_scene_exit_at = -1;
+    s_scene_seq++;
+    return false;
+}
+
 bool pc_net_scene_hold(void) {
     if (!net.active) {
         /* Replaying a netplay recording: the scene has to end where the
          * recorded pair agreed, not where this run's own code asks to. */
         return record_replay_scene_hold(net.frame);
+    }
+    if (net.nlinks > 1) {
+        return scene_hold_host();
     }
     int32_t* remote = &s_scene_exit_remote[s_scene_seq % SCENE_SLOTS];
     if (s_scene_exit_local < 0) {
@@ -1965,7 +2045,7 @@ bool pc_net_scene_hold(void) {
     s_scene_wait_since = -1;
     if (s_scene_exit_at < 0) {
         int32_t later = *remote > s_scene_exit_local ? *remote : s_scene_exit_local;
-        s_scene_exit_at = later + SCENE_HANDOFF;
+        s_scene_exit_at = later + scene_handoff();
         /* Nothing may still be predicted when the scene goes: the next
          * scene's first tick raises the barrier past every outstanding
          * frame, and snapshot_unusable() rejects those snapshots anyway, so
