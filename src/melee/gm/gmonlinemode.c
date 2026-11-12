@@ -27,6 +27,7 @@
 #include "pc/net_lan.h"
 #include "pc/net_identity.h"
 #include "pc/net_match.h"
+#include "pc/net_party.h"
 #include "pc/net_rank_session.h"
 extern const char* pc_get_net_target(void);
 extern void pc_set_net_target(const char* code);
@@ -463,7 +464,7 @@ static bool internetLobby(void) {
  * States: HUB -> KEYS -> (call) ; HUB -> (call or wait). The call itself is
  * the internet lobby below, with a progress line and a clock. */
 enum { DIRECT_OFF, DIRECT_HUB, DIRECT_KEYS };
-enum { ROW_PASTE, ROW_CONTACT, ROW_TYPE, ROW_WAIT };
+enum { ROW_PASTE, ROW_CONTACT, ROW_TYPE, ROW_WAIT, ROW_PARTY };
 /* ONLINE_LOBBY_KEY_ROWS x ONLINE_LOBBY_KEY_COLS, row-major. */
 static const char direct_keys[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 static int direct_screen;
@@ -488,13 +489,14 @@ static void directHubBuild(void)
     } else {
         direct_clip[0] = '\0';
     }
-    direct_contact_n = pc_net_match_contacts(direct_contacts, ONLINE_LOBBY_MENU_ROWS - 3);
+    direct_contact_n = pc_net_match_contacts(direct_contacts, ONLINE_LOBBY_MENU_ROWS - 4);
     for (int i = 0; i < direct_contact_n; i++) {
         direct_row_kind[direct_rows] = ROW_CONTACT;
         direct_row_arg[direct_rows++] = i;
     }
     direct_row_kind[direct_rows++] = ROW_TYPE;
     direct_row_kind[direct_rows++] = ROW_WAIT;
+    direct_row_kind[direct_rows++] = ROW_PARTY;
     if (direct_cursor >= direct_rows) {
         direct_cursor = 0;
     }
@@ -588,6 +590,10 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
             case ROW_TYPE:
                 snprintf(view->menu[i], sizeof view->menu[i], "Enter a friend's code");
                 break;
+            case ROW_PARTY:
+                snprintf(view->menu[i], sizeof view->menu[i],
+                         "Host a party  3 or 4 players, one each");
+                break;
             default:
                 snprintf(view->menu[i], sizeof view->menu[i], "Wait for a friend to call me");
                 break;
@@ -624,6 +630,14 @@ static bool directEntryFrame(OnlineLobbyView* view, u64 input)
                 direct_typed[0] = '\0';
                 direct_key = 0;
                 direct_error[0] = '\0';
+                break;
+            case ROW_PARTY:
+                /* The others call our code as they would for a match of
+                 * two; whoever reaches a hosted party joins it. */
+                direct_calling[0] = '\0';
+                direct_screen = DIRECT_OFF;
+                pc_log_line("lobby: hosting a party as '%s'", pc_net_match_local_code());
+                pc_party_host();
                 break;
             default:
                 directCall(NULL);
@@ -747,6 +761,103 @@ static const char* const peer_word[] = { "", "Peer left",
                                          "Connection timed out", "Desync",
                                          "Incompatible version",
                                          "Could not resume" };
+
+static void lobbyCopyName(char* dst, const char* src);
+
+/* A party's lobby (pc/net_party.h): who is in, what it is waiting for, and
+ * once the computers have tried each other, which pairs could not connect
+ * directly and who carries them. */
+static void partyFrame(OnlineLobbyView* view, u64 input)
+{
+    PcPartyView party;
+    const char* why = NULL;
+    int state = pc_party_state(&why);
+    int reason = pc_net_peer_status();
+    bool host = pc_party_is_host();
+    char me[40];
+
+    pc_party_view(&party);
+    view->title = "PARTY";
+    directShow(me, sizeof me, pc_net_match_local_code());
+    snprintf(view->subtitle, sizeof view->subtitle, "YOU %s", me);
+    view->player_count = party.size;
+    for (int i = 0; i < party.size; i++) {
+        lobbyCopyName(view->players[i].name, party.code[i]);
+        view->players[i].ping_ms = party.ping_ms[i];
+        view->players[i].is_host = i == 0;
+        view->players[i].is_local = i == party.seat;
+    }
+    view->phase = state == PC_PARTY_READY ? LOBBY_PHASE_STARTING :
+                  (state == PC_PARTY_FAIL || reason != PC_NET_PEER_OK) ? LOBBY_PHASE_ERROR :
+                  state == PC_PARTY_LOBBY ? LOBBY_PHASE_FOUND : LOBBY_PHASE_CONNECTING;
+    if (reason != PC_NET_PEER_OK && reason < (int) ARRAY_SIZE(peer_word)) {
+        snprintf(view->message, sizeof view->message, "%s - START: back", peer_word[reason]);
+    } else if (state == PC_PARTY_FAIL) {
+        snprintf(view->message, sizeof view->message, "%.80s - START: back",
+                 why ? why : "The party ended");
+    } else if (state == PC_PARTY_LOBBY && host) {
+        if (party.size < 3) {
+            snprintf(view->message, sizeof view->message,
+                     "Share your code %.12s - friends call it as usual (%d/4)",
+                     me, party.size);
+        } else {
+            snprintf(view->message, sizeof view->message,
+                     party.size < 4 ? "START: play with 3, or wait for a fourth" :
+                                      "Everyone is here. START: play");
+        }
+        view->hint = "START: play   Y: copy my code   B: close the party";
+        if (input & HSD_PAD_Y) {
+            pc_net_match_copy_code();
+            sfxForward();
+        }
+        if ((input & HSD_PAD_START) && pc_party_start()) {
+            sfxForward();
+        }
+    } else if (state == PC_PARTY_LOBBY) {
+        snprintf(view->message, sizeof view->message,
+                 "In %s's party (%d/4). The host starts it.", party.code[0], party.size);
+        view->hint = "B: leave";
+    } else if (party.shaped) {
+        /* Say which pairs go through a third computer: those two feel a
+         * little more delay to each other than the rest do. */
+        int a = -1, b = -1, pairs = 0;
+        for (int i = 0; i < party.size; i++) {
+            for (int j = i + 1; j < party.size; j++) {
+                if (party.via[i][j] >= 0) {
+                    if (pairs++ == 0) {
+                        a = i;
+                        b = j;
+                    }
+                }
+            }
+        }
+        if (pairs == 0) {
+            snprintf(view->message, sizeof view->message,
+                     "Everyone is connected directly. Starting...");
+        } else if (pairs == 1) {
+            snprintf(view->message, sizeof view->message,
+                     "P%d and P%d are connected through P%d. Starting...", a + 1, b + 1,
+                     party.via[a][b] + 1);
+        } else {
+            snprintf(view->message, sizeof view->message,
+                     "P%d and P%d (and %d more) are connected through another player. Starting...",
+                     a + 1, b + 1, pairs - 1);
+        }
+    } else {
+        snprintf(view->message, sizeof view->message, "Connecting everyone to everyone...");
+    }
+    if (state == PC_PARTY_READY && pc_net_frame() >= pc_party_start_frame()) {
+        *HSD_RandSeedPtr = pc_party_seed();
+        pc_log_line("lobby: party entering CSS at frame %d, seed %u", pc_net_frame(),
+                    pc_party_seed());
+        gm_801A4B60();
+    }
+    if ((input & HSD_PAD_START) && (state == PC_PARTY_FAIL || reason != PC_NET_PEER_OK)) {
+        pc_net_peer_status_clear();
+        pc_net_match_stop();
+        directEntryBegin();
+    }
+}
 
 static void lobbyCopyName(char* dst, const char* src)
 {
@@ -918,8 +1029,9 @@ void gm_Scene_OnlineLobby_OnFrame(void)
                     pc_net_match_start(PC_MATCH_RANKED, NULL);
                 }
             }
+        } else if (pc_net_match_poll(), pc_party_active()) {
+            partyFrame(&view, input);
         } else {
-            pc_net_match_poll();
             state = pc_net_match_state(&why);
 #ifdef ANDROID
             /* Build cached device shaders while Direct Connect is still waiting. */

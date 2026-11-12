@@ -5,6 +5,7 @@
 #include "net_dht_item.h"
 #include "net.h"
 #include "net_lan.h"
+#include "net_party.h"
 #include "net_rank_session.h"
 #include "net_upnp.h"
 #include "pc.h"
@@ -569,6 +570,10 @@ static void beacon_poll(uint64_t now) {
         }
         lan_seen = true;
         candidates_tried++;
+        if (target_code[0] && !strcmp(b.from, target_code))
+            pc_party_candidate(&ep); /* it may be hosting a party */
+        if (pc_party_active())
+            continue;
         for (int p = 0; p < 3; p++)
             send_packet(&hello, sizeof hello, &ep);
     }
@@ -651,6 +656,10 @@ static void rx_note(const struct pc_dht_endpoint* ep, size_t n, const char* what
 
 static void receive(const void* data, size_t n, const struct pc_dht_endpoint* ep, void* unused) {
     (void)unused;
+    /* A party's lobby shares the socket; a caller that finds one hosted on
+     * the code it dialled joins it, and pairs with nobody after that. */
+    if (pc_party_datagram(data, n, ep) || pc_party_active())
+        return;
     rx_note(ep, n,
         n == sizeof(MatchHello) ? "hello" :
         n == sizeof(MatchOffer) ? "offer" :
@@ -869,13 +878,27 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
     state = PC_MATCH_SEARCH;
     deadline = 0;
     next_send = 0;
+    pc_party_calling(&identity, compatibility, m == PC_MATCH_DIRECT ? target_code : NULL);
+    return true;
+}
+bool pc_net_match_party_host(const PcNetIdentity** id, const uint8_t** compat) {
+    if (!pc_net_match_start(PC_MATCH_DIRECT, NULL))
+        return false;
+    *id = &identity;
+    *compat = compatibility;
     return true;
 }
 void pc_net_match_poll(void) {
     uint64_t now = SDL_GetTicks();
+    /* A party past its lobby has the socket in a session of its own. */
+    if (pc_party_state(NULL) >= PC_PARTY_CONNECT) {
+        beacon_close();
+        pc_party_poll();
+        return;
+    }
     if (state == PC_MATCH_SEARCH) {
         pc_dht_poll();
-        if (state != PC_MATCH_SEARCH)
+        if (state != PC_MATCH_SEARCH || pc_party_state(NULL) >= PC_PARTY_CONNECT)
             return;
         if (mode == PC_MATCH_RANKED) {
             poll_proofs();
@@ -930,6 +953,10 @@ void pc_net_match_poll(void) {
              * rediscovers them if this attempt expires. */
             if (have_peer)
                 continue;
+            if (target_code[0])
+                pc_party_candidate(&ep); /* it may be hosting a party */
+            if (pc_party_active())
+                continue;
             uint32_t cip = ntohl(ep.address);
             candidates_tried++;
             pc_log_line("match: sending MatchHello to %u.%u.%u.%u:%u (target=%s)", cip >> 24,
@@ -938,6 +965,9 @@ void pc_net_match_poll(void) {
                 send_packet(&hello, sizeof hello, &ep);
             }
         }
+        pc_party_poll();
+        if (pc_party_active())
+            return;
         if (have_peer && now >= next_send) {
             send_packet(
                 host ? (void*)&offer : (void*)&hello, host ? sizeof offer : sizeof hello, &peer);
@@ -1012,6 +1042,7 @@ void pc_net_match_poll(void) {
     }
 }
 void pc_net_match_stop(void) {
+    pc_party_stop();
     beacon_close();
     pc_upnp_unmap();
     pc_dht_stop();

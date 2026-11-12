@@ -1127,6 +1127,11 @@ bool pc_net_send_datagram(const void* data, size_t size, uint32_t address, uint1
  * player. */
 static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, socklen_t from_len) {
     Hdr* h = buf;
+    if (s_datagram_handler && from->ss_family == AF_INET) {
+        const struct sockaddr_in* a = (const struct sockaddr_in*)from;
+        if (s_datagram_handler(buf, (size_t)n, a->sin_addr.s_addr, ntohs(a->sin_port)))
+            return;
+    }
     if (net.party) {
         /* The sender's seat names its link. Everything below (the MAC under
          * that link's key, the address pin) then holds the datagram to that
@@ -1142,11 +1147,6 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
             return;
         }
         t_li = li;
-    }
-    if (s_datagram_handler && from->ss_family == AF_INET) {
-        const struct sockaddr_in* a = (const struct sockaddr_in*)from;
-        if (s_datagram_handler(buf, (size_t)n, a->sin_addr.s_addr, ntohs(a->sin_port)))
-            return;
     }
     s_rx_pkts++;
     if (n < (int)(sizeof(Hdr) + NET_MAC_LEN)) {
@@ -2525,6 +2525,43 @@ bool party_shape(int seat, int size, const int8_t via[4][4]) {
     return true;
 }
 
+/* A party from the lobby: pc_net_connect_party leaves it here for
+ * connect_impl, which has the socket and the reset session to put it in. */
+static struct {
+    bool on;
+    int seat, size;
+    PcNetPartySeat seats[4];
+    int8_t via[4][4];
+} s_party_cfg;
+static int8_t s_party_via[4][4];
+
+static void party_cfg(void) {
+    memset(s_party_via, -1, sizeof s_party_via);
+    if (!s_party_cfg.on) {
+        return;
+    }
+    s_party_cfg.on = false;
+    if (!party_shape(s_party_cfg.seat, s_party_cfg.size, s_party_cfg.via)) {
+        pc_log_line("net: the lobby's party does not hold together; ignored");
+        return;
+    }
+    memcpy(s_party_via, s_party_cfg.via, sizeof s_party_via);
+    for (int i = 0; i < net.nlinks; i++) {
+        const PcNetPartySeat* p = &s_party_cfg.seats[net.link_seat[i]];
+        struct sockaddr_in a;
+        memset(&a, 0, sizeof a);
+        a.sin_family = AF_INET;
+        a.sin_addr.s_addr = p->address;
+        a.sin_port = htons(p->port);
+        memset(&net.link[i].peer, 0, sizeof net.link[i].peer);
+        memcpy(&net.link[i].peer, &a, sizeof a);
+        net.link[i].peer_len = sizeof a;
+    }
+    pc_log_line("net: party of %d, seat %d, %d direct links (own %x/%x/%x, relay %x/%x/%x)",
+        net.party_size, net.local, net.nlinks, net.own_link[0], net.own_link[1], net.own_link[2],
+        net.relay[0], net.relay[1], net.relay[2]);
+}
+
 /* A party from the environment (tests and the command line; the menus go
  * through pc_net_connect_party):
  *   MELEE_NET_SEAT=0..3            this computer's seat, 0 the host
@@ -2578,7 +2615,9 @@ static void party_env(int family) {
             r++;
         }
     }
-    if (!party_shape(seat, size, via)) {
+    if (party_shape(seat, size, via)) {
+        memcpy(s_party_via, via, sizeof s_party_via);
+    } else {
         pc_log_line("net: MELEE_NET_PARTY / MELEE_NET_SEAT / MELEE_NET_PARTY_RELAY do not "
                     "describe a party; ignored");
         return;
@@ -2696,6 +2735,7 @@ static bool connect_impl(
     HSD_PadLibData.qtype = 2;
     net.local = player ? 1 : 0;
     net.remote = 1 - net.local;
+    party_cfg();
     party_env(family);
     own_ports();
     /* A hand-typed address may be a peer the user has not started yet, so it
@@ -2773,6 +2813,15 @@ static bool connect_impl(
         pc_log_line("net: datagrams authenticated from MELEE_NET_KEY (the handshake will not "
                     "rekey this session)");
     }
+    for (int i = 0; net.party && i < net.nlinks; i++) {
+        const char* secret = s_party_cfg.seats[net.link_seat[i]].secret;
+        if (secret[0] != '\0' && (key == NULL || key[0] == '\0')) {
+            t_li = i;
+            net_key_direct(secret);
+            t_li = 0;
+        }
+    }
+    memset(s_party_cfg.seats, 0, sizeof s_party_cfg.seats);
     SDL_LockMutex(net.tx_lock);
     net.sock = sock;
     net.active = true;
@@ -2821,6 +2870,53 @@ bool pc_net_connect_socket(
     if (socket == -1)
         return false;
     return connect_impl((sock_t)socket, ip, port, player, seed);
+}
+
+bool pc_net_connect_party(intptr_t socket, int seat, int size, const PcNetPartySeat seats[4],
+    const int8_t via[4][4], uint32_t seed) {
+    if (socket == -1 || size < 3 || size > 4 || seat < 0 || seat >= size) {
+        return false;
+    }
+    s_party_cfg.on = true;
+    s_party_cfg.seat = seat;
+    s_party_cfg.size = size;
+    memcpy(s_party_cfg.seats, seats, sizeof s_party_cfg.seats);
+    memcpy(s_party_cfg.via, via, sizeof s_party_cfg.via);
+    /* The address connect_impl is given is the host's, or for the host its
+     * first guest's; party_cfg then lays every link out. */
+    const PcNetPartySeat* first = &seats[seat == 0 ? 1 : 0];
+    char ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &first->address, ip, sizeof ip);
+    bool ok = connect_impl((sock_t)socket, ip, first->port, seat != 0, seed) && net.party;
+    s_party_cfg.on = false;
+    return ok;
+}
+
+int pc_net_party_links(void) {
+    return net.active && net.party ? net.nlinks : 0;
+}
+
+int pc_net_party_link_seat(int link) {
+    return net.active && net.party && link >= 0 && link < net.nlinks ? net.link_seat[link] : -1;
+}
+
+void pc_net_party_use_link(int link) {
+    t_li = net.active && net.party && link >= 0 && link < net.nlinks ? link : 0;
+}
+
+int pc_net_party_size(void) {
+    return net.active && net.party ? net.party_size : 0;
+}
+
+int pc_net_party_via(int a, int b) {
+    if (!net.active || !net.party || a < 0 || b < 0 || a >= net.party_size || b >= net.party_size) {
+        return -1;
+    }
+    return s_party_via[a][b];
+}
+
+void pc_net_direct_handshake(void) {
+    net.direct = net.active;
 }
 
 void pc_net_init(void) {

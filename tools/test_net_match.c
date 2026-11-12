@@ -83,6 +83,26 @@ bool pc_dht_item_send(const void* data, size_t length, const struct pc_dht_endpo
     item_endpoint = *ep;
     return true;
 }
+/* No party in this harness: the pairing runs as it does without one. */
+void pc_party_calling(const PcNetIdentity* i, const uint8_t c[20], const char* t) {
+    (void)i, (void)c, (void)t;
+}
+void pc_party_candidate(const struct pc_dht_endpoint* e) {
+    (void)e;
+}
+bool pc_party_datagram(const void* d, size_t n, const struct pc_dht_endpoint* e) {
+    (void)d, (void)n, (void)e;
+    return false;
+}
+bool pc_party_active(void) {
+    return false;
+}
+int pc_party_state(const char** why) {
+    (void)why;
+    return PC_PARTY_OFF;
+}
+void pc_party_poll(void) {}
+void pc_party_stop(void) {}
 bool pc_net_resim(void) {
     return false;
 }

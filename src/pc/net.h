@@ -69,6 +69,33 @@ void pc_net_poll(void);
  * transfers on success only; no new NAT mapping is created. */
 bool pc_net_connect_socket(
     intptr_t socket, const char* ip, uint16_t port, int player, uint32_t seed);
+/* A party (docs/party-plan.md) handed over by its lobby (net_party.c) on the
+ * socket every member already reached the others through. seats[] is in
+ * seat order, seat 0 the host; via[a][b] is the seat relaying between a and
+ * b, or -1 for a pair connected directly. secret keys the datagrams of a
+ * link the handshake does not cover (guest to guest); "" leaves the link to
+ * the handshake. */
+typedef struct PcNetPartySeat {
+    uint32_t address; /* network order */
+    uint16_t port;    /* host order */
+    char secret[56];
+} PcNetPartySeat;
+bool pc_net_connect_party(intptr_t socket, int seat, int size, const PcNetPartySeat seats[4],
+    const int8_t via[4][4], uint32_t seed);
+/* Have the session agree its match by itself from the frame loop, as one
+ * started from MELEE_NET does (a lobby with no menu to do it from). */
+void pc_net_direct_handshake(void);
+/* Party: the number of computers this one is connected to directly, the seat
+ * at the far end of each, and the link pc_net_send_reliable /
+ * pc_net_recv_reliable work on until it is set back to 0 (game thread). */
+int pc_net_party_links(void);
+int pc_net_party_link_seat(int link);
+void pc_net_party_use_link(int link);
+/* Party: seats in it (0 outside one) and, for a pair of seats, the seat
+ * relaying between them or -1. */
+int pc_net_party_size(void);
+int pc_net_party_via(int a, int b);
+
 /* Offered every IPv4 datagram on the session socket before the session sees
  * it; true consumes it. Runs on net.c's receive thread, and
  * pc_net_set_datagram_handler() returns only once no call into the previous

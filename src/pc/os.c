@@ -398,6 +398,7 @@ void pc_disc_ptr_overflow(const void* p, const char* file, int line) {
 #include "pc/input_poll.h"
 #include "pc/net.h"
 #include "pc/net_lan.h"
+#include "pc/net_party.h"
 
 void pc_platform_init(void) {
     s_is_game_thread = 1;
@@ -407,6 +408,9 @@ void pc_platform_init(void) {
     pc_input_poll_init(); /* gamepad + GC adapter at 1 kHz; no keyboard publish */
 #endif
     pc_net_init();
+    if (getenv("MELEE_PARTY_TEST") != NULL) {
+        pc_party_test(getenv("MELEE_PARTY_TEST"));
+    }
     if (getenv("MELEE_LAN_TEST") || getenv("MELEE_LAN_DIRECT")) {
         pc_lan_start(); /* LAN lobby fixture without the menu, see vi.c */
     }

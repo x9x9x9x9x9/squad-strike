@@ -23,6 +23,19 @@ def records(path):
     return [data[REC_HDR + i * REC_STRIDE: REC_HDR + i * REC_STRIDE + 68] for i in range(n)]
 
 
+def host_code(log):
+    """The connect code the host's lobby announced."""
+    for _ in range(300):
+        try:
+            for line in open(log, errors="replace"):
+                if "party: hosting as " in line:
+                    return line.split("party: hosting as ")[1].strip()
+        except OSError:
+            pass
+        time.sleep(0.2)
+    sys.exit("net_party_test: the host never opened its party")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
@@ -37,6 +50,11 @@ def main():
     ap.add_argument("--relay", default="",
                     help="pairs with no direct connection and the seat relaying them, "
                          "e.g. 13:0 or 12:0,13:0 (default: every pair direct)")
+    ap.add_argument("--lobby", action="store_true",
+                    help="form the party through its real lobby (net_party.c) instead of "
+                         "handing every instance the addresses")
+    ap.add_argument("--block", default="",
+                    help="with --lobby: guest pairs that cannot reach each other, e.g. 13,23")
     ap.add_argument("--star", action="store_true",
                     help="every guest pair relayed through the host")
     args = ap.parse_args()
@@ -66,13 +84,27 @@ def main():
             e["MELEE_NET_SIM_JITTER_MS"] = "20"
         if args.loss:
             e["MELEE_NET_SIM_LOSS"] = str(args.loss)
-        e["MELEE_NET"] = f"127.0.0.1:{args.port + (1 if seat == 0 else 0)}"
-        e["MELEE_NET_PLAYER"] = "0" if seat == 0 else "1"
-        e["MELEE_NET_SEAT"] = str(seat)
-        e["MELEE_NET_PARTY"] = ",".join(
-            f"127.0.0.1:{args.port + s}" for s in range(args.guests + 1))
-        if relay:
-            e["MELEE_NET_PARTY_RELAY"] = relay
+        if args.lobby:
+            # Each instance its own profile (its own key and connect code);
+            # the guests learn the host's code from its log.
+            del e["MELEE_NET_KEY"]
+            e["XDG_DATA_HOME"] = os.path.join(args.work, f"data{seat}")
+            e["MELEE_DIRECT_BEACON"] = "0"
+            if args.block:
+                e["MELEE_PARTY_BLOCK"] = args.block
+            if seat == 0:
+                e["MELEE_PARTY_TEST"] = f"host:{args.guests + 1}"
+            else:
+                e["MELEE_PARTY_TEST"] = "call:" + host_code(os.path.join(args.work, "host.log"))
+                e["MELEE_PARTY_AT"] = f"127.0.0.1:{args.port}"
+        else:
+            e["MELEE_NET"] = f"127.0.0.1:{args.port + (1 if seat == 0 else 0)}"
+            e["MELEE_NET_PLAYER"] = "0" if seat == 0 else "1"
+            e["MELEE_NET_SEAT"] = str(seat)
+            e["MELEE_NET_PARTY"] = ",".join(
+                f"127.0.0.1:{args.port + s}" for s in range(args.guests + 1))
+            if relay:
+                e["MELEE_NET_PARTY_RELAY"] = relay
         e.pop("MELEE_LOG_FILE", None)
         log = open(os.path.join(args.work, f"{name}.log"), "wb")
         logs.append(log)

@@ -32,6 +32,9 @@ void pc_net_match_poll_publication(void);
 /* 0 idle, 1 pending, 2 acknowledged, -1 failed (durable save preserved). */
 int pc_net_match_publication(const char** reason);
 bool pc_net_match_start(enum PcNetMatchMode mode, const char* target_code);
+/* For net_party.c: wait on our own code the way Direct Connect does, without
+ * pairing with a caller (the party takes them), and say who we are. */
+bool pc_net_match_party_host(const PcNetIdentity** identity, const uint8_t** compatibility);
 void pc_net_match_stop(void);
 void pc_net_match_poll(void);
 int pc_net_match_state(const char** why);
