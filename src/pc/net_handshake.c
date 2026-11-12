@@ -600,7 +600,7 @@ void handshake_msg(uint8_t type, const uint8_t* payload, int len) {
  * timeout. Three round trips cover RULES out, READY back and a retransmit of
  * either; 30 more cover the ready barrier behind them. */
 static int32_t hs_lead(void) {
-    int32_t rtt_frames = (int32_t)((net.ping_us + 16666) / 16667);
+    int32_t rtt_frames = (int32_t)((NL.ping_us + 16666) / 16667);
     int32_t lead = 3 * rtt_frames + 30;
     return lead < HS_LEAD_FRAMES ? HS_LEAD_FRAMES : lead > HS_LEAD_MAX ? HS_LEAD_MAX : lead;
 }

@@ -19,6 +19,7 @@
     } while (0)
 
 struct NetSession net;
+_Thread_local int t_li;
 static uint64_t s_now = 1;
 static uint8_t s_out[sizeof(Rel)]; /* last datagram, [0] is its magic */
 static size_t s_out_len;

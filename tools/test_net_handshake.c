@@ -39,6 +39,7 @@
     } while (0)
 
 struct NetSession net;
+_Thread_local int t_li;
 
 /* ---- stubbed dependencies --------------------------------------------- */
 
@@ -675,13 +676,13 @@ int main(void) {
         const uint32_t sess_e = 0x5eed1e55;
         uint8_t stale[sizeof(Rules)], fresh[sizeof(Rules)], k[sizeof(Ready)];
         /* the lead grows with the round trip, between the floor and the cap */
-        net.ping_us = 0;
+        NL.ping_us = 0;
         assert(hs_lead() == HS_LEAD_FRAMES);
-        net.ping_us = 1000000; /* 60 frames: 3 * 60 + 30 */
+        NL.ping_us = 1000000; /* 60 frames: 3 * 60 + 30 */
         assert(hs_lead() == HS_LEAD_MAX);
-        net.ping_us = 50000; /* 3 frames */
+        NL.ping_us = 50000; /* 3 frames */
         assert(hs_lead() == HS_LEAD_FRAMES);
-        net.ping_us = 0;
+        NL.ping_us = 0;
 
         net.tick_frame = 300;
         load_fresh(sess_e, 0);

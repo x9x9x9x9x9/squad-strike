@@ -58,12 +58,21 @@
 struct NetSession net = {
     .sock = SOCK_INVALID, .tick_frame = -1, .rb_barrier = -1, .start_frame = -1};
 
-static WirePad s_local_ring[RING];   /* indexed by frame & (RING-1) */
-static WirePad s_remote_ring[RING];  /* real input, or the prediction in use */
-static int32_t s_remote_have = -1;   /* newest contiguous real remote frame */
-static int32_t s_remote_newest = -1; /* newest frame the peer reported holding */
-static int32_t s_last_acked = -1;    /* newest local frame the peer holds */
-static int32_t s_rb_frame = -1;      /* oldest mispredicted frame not rolled back yet */
+_Thread_local int t_li; /* the link this thread is working on */
+
+static WirePad s_local_ring[RING];               /* indexed by frame & (RING-1) */
+static WirePad s_remote_ring_l[NET_LINKS][RING]; /* real input, or the prediction in use */
+#define s_remote_ring (s_remote_ring_l[t_li])
+static int32_t s_remote_have_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* newest contiguous real remote frame */
+#define s_remote_have (s_remote_have_l[t_li])
+static int32_t s_remote_newest_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* newest frame the peer reported holding */
+#define s_remote_newest (s_remote_newest_l[t_li])
+static int32_t s_last_acked_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* newest local frame the peer holds */
+#define s_last_acked (s_last_acked_l[t_li])
+static int32_t s_rb_frame = -1; /* oldest mispredicted frame not rolled back yet */
 /* The peer's checksums by frame. Each input packet reports one frame, the
  * newest it has confirmed, and that is often ahead of ours; a single slot
  * overwritten by every packet meant those frames were never compared from
@@ -72,17 +81,24 @@ static int32_t s_rb_frame = -1;      /* oldest mispredicted frame not rolled bac
 static struct {
     int32_t frame; /* -1: empty */
     uint32_t ck;
-} s_rck[RING];
-static int32_t s_ck_checked = -1; /* newest frame compared against the peer's */
+} s_rck_l[NET_LINKS][RING];
+#define s_rck (s_rck_l[t_li])
+static int32_t s_ck_checked_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* newest frame compared against the peer's */
+#define s_ck_checked (s_ck_checked_l[t_li])
 static uint32_t s_ck_ring[RING];  /* our checksum entering each frame */
-static bool s_heard;              /* any packet from the peer yet */
-static uint64_t s_last_rx_ns;     /* when the last accepted datagram arrived */
+static bool s_heard_l[NET_LINKS]; /* any packet from the peer yet */
+#define s_heard (s_heard_l[t_li])
+static uint64_t s_last_rx_ns_l[NET_LINKS]; /* when the last accepted datagram arrived */
+#define s_last_rx_ns (s_last_rx_ns_l[t_li])
 /* When the contiguous remote mark last moved, 0 before the first time. The
  * no-progress bound is measured from here, not from the start of a wait:
  * wait_remote's own clock restarts on every call, so a peer that advanced one
  * frame just under the bound each time kept the game frozen for ever. */
-static uint64_t s_progress_ns;
-static bool s_no_progress; /* the wait ended on a talking peer that never advanced */
+static uint64_t s_progress_ns_l[NET_LINKS];
+#define s_progress_ns (s_progress_ns_l[t_li])
+static bool s_no_progress_l[NET_LINKS]; /* the wait ended on a talking peer that never advanced */
+#define s_no_progress (s_no_progress_l[t_li])
 /* Session-local seed history must not survive a reconnect. */
 static uint32_t s_seed_after_tick;
 static bool s_seed_have;
@@ -100,30 +116,48 @@ static PADStatus s_raw_last[2]; /* newest physical samples (ports 0 and 1) */
  * session is in allows it (LAN and Direct; never matchmaking). The game's
  * online mode sets it; a MELEE_NET session allows it by itself. */
 static bool s_second_allowed;
-static bool s_seen_second[2]; /* logged once a session, per side */
-static int s_status;          /* pc_net_peer_status(); kept until the next connect */
-static bool s_peer_left;      /* BYE received or version mismatch: stop waiting */
-static bool s_warn_src, s_warn_sess, s_warn_bad, s_warn_mac; /* one reject line each per session */
+static bool s_seen_second[2];         /* logged once a session, per side */
+static int s_status;                  /* pc_net_peer_status(); kept until the next connect */
+static bool s_peer_left_l[NET_LINKS]; /* BYE received or version mismatch: stop waiting */
+#define s_peer_left (s_peer_left_l[t_li])
+static bool s_warn_src_l[NET_LINKS], s_warn_sess_l[NET_LINKS], s_warn_bad_l[NET_LINKS],
+    s_warn_mac_l[NET_LINKS]; /* one reject line each per session */
+#define s_warn_src (s_warn_src_l[t_li])
+#define s_warn_sess (s_warn_sess_l[t_li])
+#define s_warn_bad (s_warn_bad_l[t_li])
+#define s_warn_mac (s_warn_mac_l[t_li])
 /* One authenticated datagram has arrived, so the peer holds the session key
  * and nothing unauthenticated is accepted from here on (recv_inputs). Until
  * then s_mac_quiet counts what was let through for want of one, so a pair
  * that never agrees on a key says so instead of looking protected. */
-static bool s_mac_seen;
-static int s_mac_quiet;
+static bool s_mac_seen_l[NET_LINKS];
+#define s_mac_seen (s_mac_seen_l[t_li])
+static int s_mac_quiet_l[NET_LINKS];
+#define s_mac_quiet (s_mac_quiet_l[t_li])
 #define MAC_QUIET_MAX 120 /* ~2 s of a peer's traffic at 60 Hz */
 
 static unsigned s_stalls, s_advances, s_rollbacks, s_rb_lost;
 static int s_rb_depth_max;
 static uint64_t s_stall_ns_max;
-static uint64_t s_ping_sum;
-static unsigned s_ping_n;
-static uint32_t s_rtt_min, s_rtt_max; /* this stats window */
-static unsigned s_rx_pkts;            /* datagrams this stats window */
-static unsigned s_rx_acks;            /* every input packet earns one ack: the gap is loss */
-static int s_loss_pct;                /* round-trip loss, one-second window */
-static unsigned s_loss_tx_mark, s_loss_ack_mark; /* counters at that window's start */
-static int s_rb_depth_cur, s_rb_depth_recent;    /* deepest rollback this second / the last */
-static int32_t s_stall_frame = -1000;            /* frame that ended a stall > 500 ms */
+static uint64_t s_ping_sum_l[NET_LINKS];
+#define s_ping_sum (s_ping_sum_l[t_li])
+static unsigned s_ping_n_l[NET_LINKS];
+#define s_ping_n (s_ping_n_l[t_li])
+static uint32_t s_rtt_min_l[NET_LINKS], s_rtt_max_l[NET_LINKS]; /* this stats window */
+#define s_rtt_min (s_rtt_min_l[t_li])
+#define s_rtt_max (s_rtt_max_l[t_li])
+static unsigned s_rx_pkts_l[NET_LINKS]; /* datagrams this stats window */
+#define s_rx_pkts (s_rx_pkts_l[t_li])
+static unsigned s_rx_acks_l[NET_LINKS]; /* every input packet earns one ack: the gap is loss */
+#define s_rx_acks (s_rx_acks_l[t_li])
+static int s_loss_pct_l[NET_LINKS]; /* round-trip loss, one-second window */
+#define s_loss_pct (s_loss_pct_l[t_li])
+static unsigned s_loss_tx_mark_l[NET_LINKS],
+    s_loss_ack_mark_l[NET_LINKS]; /* counters at that window's start */
+#define s_loss_tx_mark (s_loss_tx_mark_l[t_li])
+#define s_loss_ack_mark (s_loss_ack_mark_l[t_li])
+static int s_rb_depth_cur, s_rb_depth_recent; /* deepest rollback this second / the last */
+static int32_t s_stall_frame = -1000;         /* frame that ended a stall > 500 ms */
 
 /* Reconnect phase; the machine and the numbers are down in "resume after an
  * interruption", these live here because send_inputs and fresh_tick read
@@ -132,14 +166,19 @@ static int32_t s_stall_frame = -1000;            /* frame that ended a stall > 5
 /* RSM_, not RC_: mingw-w64's wingdi.h defines RC_NONE as an empty macro
  * (raster capabilities), so RC_NONE broke the whole enum on Windows. */
 enum { RSM_NONE, RSM_ACTIVE, RSM_FAILED };
-static int s_rc;         /* reconnect phase */
-static uint64_t s_rc_ns; /* when the phase opened */
-static bool s_rc_sent;   /* our RESUME is out for this phase */
+static int s_rc_l[NET_LINKS]; /* reconnect phase */
+#define s_rc (s_rc_l[t_li])
+static uint64_t s_rc_ns_l[NET_LINKS]; /* when the phase opened */
+#define s_rc_ns (s_rc_ns_l[t_li])
+static bool s_rc_sent_l[NET_LINKS]; /* our RESUME is out for this phase */
+#define s_rc_sent (s_rc_sent_l[t_li])
 static int32_t s_rc_window_ms = RECONNECT_MS;
 
-static int32_t s_wrote = -1; /* newest local frame written to s_local_ring */
-static uint64_t s_send_ns;   /* when the newest local frame first went out */
-static int32_t s_send_frame = -1;
+static int32_t s_wrote = -1;            /* newest local frame written to s_local_ring */
+static uint64_t s_send_ns_l[NET_LINKS]; /* when the newest local frame first went out */
+#define s_send_ns (s_send_ns_l[t_li])
+static int32_t s_send_frame_l[NET_LINKS] = {[0 ... NET_LINKS - 1] = -1};
+#define s_send_frame (s_send_frame_l[t_li])
 
 static SDL_ThreadID s_game_thread;
 
@@ -148,9 +187,12 @@ static SDL_ThreadID s_game_thread;
  * net.tx_lock. net.active flips under it too, so the timer never sends on
  * a closed socket. */
 static SDL_TimerID s_timer;
-static Packet s_last_pkt;
-static bool s_last_valid;
-static uint64_t s_last_send_ns;
+static Packet s_last_pkt_l[NET_LINKS];
+#define s_last_pkt (s_last_pkt_l[t_li])
+static bool s_last_valid_l[NET_LINKS];
+#define s_last_valid (s_last_valid_l[t_li])
+static uint64_t s_last_send_ns_l[NET_LINKS];
+#define s_last_send_ns (s_last_send_ns_l[t_li])
 
 /* Receive side: rx_main, a thread of its own, drains the socket, runs the
  * authentication gate, acks every input packet and times the round trip of
@@ -167,39 +209,62 @@ static atomic_int s_frame_pub; /* net.frame as the receive thread may read it */
 /* send_inputs' verdict on whether the link wants tx_timer's mid-frame
  * resend. Loss, jitter and rollback depth are game-thread state; the timer
  * used to read them bare from its own thread. */
-static atomic_bool s_want_resend;
+static atomic_bool s_want_resend_l[NET_LINKS];
+#define s_want_resend (s_want_resend_l[t_li])
 /* send_inputs' adv, recomputed every tick (tx_timer stamps it on resends) */
-static atomic_int s_adv_pub;
-static int32_t s_rx_have = -1;   /* newest contiguous remote frame queued (acked) */
-static bool s_rx_left;           /* BYE or protocol mismatch seen: s_peer_left to be */
-static int s_rx_why;             /* the s_status that goes with it */
-static unsigned s_rx_full;       /* datagrams dropped on a full queue, this window */
-static Held s_rx_held[HELD_MAX]; /* incoming, receive thread */
+static atomic_int s_adv_pub_l[NET_LINKS];
+#define s_adv_pub (s_adv_pub_l[t_li])
+static int32_t s_rx_have_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* newest contiguous remote frame queued (acked) */
+#define s_rx_have (s_rx_have_l[t_li])
+static bool s_rx_left_l[NET_LINKS]; /* BYE or protocol mismatch seen: s_peer_left to be */
+#define s_rx_left (s_rx_left_l[t_li])
+static int s_rx_why_l[NET_LINKS]; /* the s_status that goes with it */
+#define s_rx_why (s_rx_why_l[t_li])
+static unsigned s_rx_full_l[NET_LINKS]; /* datagrams dropped on a full queue, this window */
+#define s_rx_full (s_rx_full_l[t_li])
+static Held s_rx_held_l[NET_LINKS][HELD_MAX]; /* incoming, receive thread */
+#define s_rx_held (s_rx_held_l[t_li])
 
 /* Sequence numbers (proto 3): every outgoing datagram carries s_tx_seq++,
  * assigned in send_packet under tx_lock. The receiver dedups exact copies
  * (RTP-style anti-replay: a 64-bit window behind the highest seq) and counts
  * reorders but still processes them (their pads may fill a gap). */
-static uint16_t s_tx_seq; /* next tx seq (tx_lock) */
+static uint16_t s_tx_seq_l[NET_LINKS]; /* next tx seq (tx_lock) */
+#define s_tx_seq (s_tx_seq_l[t_li])
 static struct {
     uint16_t seq;
     uint64_t send_ns;
-} s_rtt_ring[64]; /* last 64 sends (tx_lock) */
-static bool s_rx_seq_init;
-static uint16_t s_rx_seq_top;             /* highest seq seen */
-static uint64_t s_rx_seq_bits;            /* bit k: (top-k) received; bit 0 = top */
-static unsigned s_rx_dups, s_rx_reorders; /* this stats window */
+} s_rtt_ring_l[NET_LINKS][64]; /* last 64 sends (tx_lock) */
+#define s_rtt_ring (s_rtt_ring_l[t_li])
+static bool s_rx_seq_init_l[NET_LINKS];
+#define s_rx_seq_init (s_rx_seq_init_l[t_li])
+static uint16_t s_rx_seq_top_l[NET_LINKS]; /* highest seq seen */
+#define s_rx_seq_top (s_rx_seq_top_l[t_li])
+static uint64_t s_rx_seq_bits_l[NET_LINKS]; /* bit k: (top-k) received; bit 0 = top */
+#define s_rx_seq_bits (s_rx_seq_bits_l[t_li])
+static unsigned s_rx_dups_l[NET_LINKS], s_rx_reorders_l[NET_LINKS]; /* this stats window */
+#define s_rx_dups (s_rx_dups_l[t_li])
+#define s_rx_reorders (s_rx_reorders_l[t_li])
 
 /* Socket errors: transient ones (EAGAIN/EINTR/ICMP unreachable) are ignored,
  * a hard one is logged once per session and counted. */
 static unsigned s_sock_err;
 static bool s_warn_sock;
-static unsigned s_rx_malformed, s_rx_bad_src, s_rx_bad_sess, s_rx_bad_player, s_tx_would_block;
-static unsigned s_rx_bad_mac; /* datagrams refused by the authentication gate */
+static unsigned s_rx_malformed_l[NET_LINKS], s_rx_bad_src_l[NET_LINKS], s_rx_bad_sess_l[NET_LINKS],
+    s_rx_bad_player_l[NET_LINKS], s_tx_would_block_l[NET_LINKS];
+#define s_rx_malformed (s_rx_malformed_l[t_li])
+#define s_rx_bad_src (s_rx_bad_src_l[t_li])
+#define s_rx_bad_sess (s_rx_bad_sess_l[t_li])
+#define s_rx_bad_player (s_rx_bad_player_l[t_li])
+#define s_tx_would_block (s_tx_would_block_l[t_li])
+static unsigned s_rx_bad_mac_l[NET_LINKS]; /* datagrams refused by the authentication gate */
+#define s_rx_bad_mac (s_rx_bad_mac_l[t_li])
 
 /* Unacked frames the newest input packet carried, reported as `red`: every
  * one the peer has not acked, up to REDUNDANCY (send_inputs says why). */
-static int s_red_target = REDUNDANCY;
+static int s_red_target_l[NET_LINKS] = {[0 ... NET_LINKS - 1] = REDUNDANCY};
+#define s_red_target (s_red_target_l[t_li])
 
 /* Rollback re-run cost: every re-run tick of a rollback happens inside the
  * one present that started it, so a deep correction lands as a long frame.
@@ -383,7 +448,7 @@ static void sock_err_note(const char* what, int e) {
 /* One sendto with error translation (caller holds tx_lock). */
 int net_sendto(const void* buf, size_t len) {
     int r =
-        (int)sendto(net.sock, (const char*)buf, len, 0, (struct sockaddr*)&net.peer, net.peer_len);
+        (int)sendto(net.sock, (const char*)buf, len, 0, (struct sockaddr*)&NL.peer, NL.peer_len);
     if (r < 0) {
         int e = sock_last_err();
         if (sock_would_block(e)) {
@@ -606,8 +671,11 @@ typedef struct RxMsg {
  * messages are resent, and a later ack supersedes a lost one. */
 #define RXQ 256
 #define RX_REORDERED (-2)
-static RxMsg s_rxq[RXQ]; /* under s_rx_lock */
-static int s_rxq_head, s_rxq_n;
+static RxMsg s_rxq_l[NET_LINKS][RXQ]; /* under s_rx_lock */
+#define s_rxq (s_rxq_l[t_li])
+static int s_rxq_head_l[NET_LINKS], s_rxq_n_l[NET_LINKS];
+#define s_rxq_head (s_rxq_head_l[t_li])
+#define s_rxq_n (s_rxq_n_l[t_li])
 
 /* Queue a message for the game thread (receive thread, s_rx_lock held). */
 static bool rx_push(const void* body, int len, int rtt_us) {
@@ -782,7 +850,7 @@ static void on_ack(const Ack* a, int rtt) {
         s_last_acked = a->frame;
     }
     if (rtt >= 0) {
-        net.ping_us = net.ping_us == 0 ? (uint32_t)rtt : (uint32_t)((net.ping_us * 3 + rtt) / 4);
+        NL.ping_us = NL.ping_us == 0 ? (uint32_t)rtt : (uint32_t)((NL.ping_us * 3 + rtt) / 4);
         s_ping_sum += (uint64_t)rtt;
         s_ping_n++;
         if (s_rtt_min == 0 || (uint32_t)rtt < s_rtt_min) {
@@ -1049,7 +1117,7 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
             MAC_QUIET_MAX);
     }
     wire_hdr(h);
-    bool same_addr = addr_eq(from, &net.peer);
+    bool same_addr = addr_eq(from, &NL.peer);
     /* Once pinned, unrelated traffic cannot change any session state.
      *
      * Before pinning, the address is NOT a usable filter: the two sides
@@ -1066,7 +1134,7 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
         if (!s_warn_src) {
             char got[80] = "?", want[80] = "?";
             net_addr_text((const struct sockaddr*)from, got, sizeof got);
-            net_addr_text((const struct sockaddr*)&net.peer, want, sizeof want);
+            net_addr_text((const struct sockaddr*)&NL.peer, want, sizeof want);
             s_warn_src = true;
             pc_log_line("net: dropped a datagram from %s (the peer is %s)", got, want);
         }
@@ -1126,11 +1194,11 @@ static void rx_datagram(void* buf, int n, const struct sockaddr_storage* from, s
     if (!s_heard && !same_addr) {
         char got[80] = "?", want[80] = "?";
         net_addr_text((const struct sockaddr*)from, got, sizeof got);
-        net_addr_text((const struct sockaddr*)&net.peer, want, sizeof want);
+        net_addr_text((const struct sockaddr*)&NL.peer, want, sizeof want);
         pc_log_line("net: peer answers from %s, not %s; following it", got, want);
         SDL_LockMutex(net.tx_lock);
-        memcpy(&net.peer, from, sizeof net.peer);
-        net.peer_len = from_len;
+        memcpy(&NL.peer, from, sizeof NL.peer);
+        NL.peer_len = from_len;
         SDL_UnlockMutex(net.tx_lock);
     }
     if (net.sim_rx_delay_ns == 0) {
@@ -1898,7 +1966,8 @@ static void audio_journal_reset(void);
 static void pad_stats_reset(void);
 static void seed_stats_reset(void);
 static void audit_reset(void);
-static bool s_seen_remote;
+static bool s_seen_remote_l[NET_LINKS];
+#define s_seen_remote (s_seen_remote_l[t_li])
 
 static void session_reset(void) {
     scene_handoff_reset();
@@ -1937,11 +2006,11 @@ static void session_reset(void) {
     s_rb_depth_max = s_rb_depth_cur = s_rb_depth_recent = 0;
     s_stall_ns_max = 0;
     s_stall_frame = -1000;
-    net.ping_us = 0;
+    NL.ping_us = 0;
     s_ping_sum = 0;
     s_ping_n = 0;
     s_rtt_min = s_rtt_max = 0;
-    net.tx_pkts = s_rx_pkts = net.tx_inputs = s_rx_acks = 0;
+    NL.tx_pkts = s_rx_pkts = NL.tx_inputs = s_rx_acks = 0;
     s_tx_seq = 0;
     memset(s_rtt_ring, 0, sizeof s_rtt_ring);
     s_rx_seq_init = false;
@@ -2142,8 +2211,8 @@ static bool connect_impl(
         freeaddrinfo(res);
         return false;
     }
-    memcpy(&net.peer, res->ai_addr, res->ai_addrlen);
-    net.peer_len = (socklen_t)res->ai_addrlen;
+    memcpy(&NL.peer, res->ai_addr, res->ai_addrlen);
+    NL.peer_len = (socklen_t)res->ai_addrlen;
     int family = res->ai_family;
     freeaddrinfo(res);
 
@@ -2392,7 +2461,7 @@ bool pc_net_stats(int* ping_ms, int* delay_frames, unsigned* rollbacks) {
     if (!net.active) {
         return false;
     }
-    *ping_ms = (int)(net.ping_us / 1000);
+    *ping_ms = (int)(NL.ping_us / 1000);
     *delay_frames = net.delay;
     *rollbacks = s_rollbacks;
     return true;
@@ -3236,8 +3305,8 @@ static void fresh_tick(PADStatus* head, bool raw) {
          * spread instead of its mean, which measured 6% on a link losing 1%
          * and is enough on its own to make pc_net_quality() call a good
          * connection bad. */
-        int sent = (int)(net.tx_inputs - s_loss_tx_mark);
-        s_loss_tx_mark = net.tx_inputs;
+        int sent = (int)(NL.tx_inputs - s_loss_tx_mark);
+        s_loss_tx_mark = NL.tx_inputs;
         SDL_LockMutex(s_rx_lock); /* the receive thread counts the acks */
         int acked = (int)(s_rx_acks - s_loss_ack_mark);
         s_loss_ack_mark = s_rx_acks;
@@ -3261,9 +3330,9 @@ static void fresh_tick(PADStatus* head, bool raw) {
                     "in %u frames, pad slips %u (queue worst %u, full at write %u), idle ticks %u, "
                     "audio liveness asked %u (engine would say yes %u)",
             net.frame, s_rollbacks, s_rb_depth_max, s_rb_lost, s_stalls, s_stall_ns_max / 1e6,
-            net.skips, s_advances, net.ping_us / 1000,
+            net.skips, s_advances, NL.ping_us / 1000,
             s_ping_n ? s_ping_sum / 1000.0 / s_ping_n : 0.0, s_rtt_min / 1000, s_rtt_max / 1000,
-            jitter_us() / 1000.0, s_loss_pct, net.tx_pkts, s_rx_pkts, net.offset_last / 1000.0,
+            jitter_us() / 1000.0, s_loss_pct, NL.tx_pkts, s_rx_pkts, net.offset_last / 1000.0,
             net.frame - 1 - s_remote_have, net.rb_barrier, pc_net_quality(), s_rx_dups,
             s_rx_reorders, s_sock_err, s_resim_eat, s_red_target, s_rx_bad_src, s_rx_bad_sess,
             s_rx_bad_player, s_rx_bad_mac, s_rx_malformed, s_tx_would_block, s_rx_full,
@@ -3274,7 +3343,7 @@ static void fresh_tick(PADStatus* head, bool raw) {
         s_ping_sum = 0;
         s_ping_n = 0;
         s_rtt_min = s_rtt_max = 0;
-        net.tx_pkts = s_rx_pkts = net.tx_inputs = s_rx_acks = 0;
+        NL.tx_pkts = s_rx_pkts = NL.tx_inputs = s_rx_acks = 0;
         s_loss_tx_mark = s_loss_ack_mark = 0; /* the marks index those counters */
         s_rx_dups = s_rx_reorders = s_sock_err = s_resim_eat = 0;
         s_rx_bad_src = s_rx_bad_sess = s_rx_bad_player = s_rx_malformed = s_tx_would_block = 0;

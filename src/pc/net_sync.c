@@ -204,7 +204,7 @@ static void delay_auto(void) {
     }
     bool fight = in_fight();
     uint64_t now_ms = SDL_GetTicks();
-    if (net.ping_us == 0) {
+    if (NL.ping_us == 0) {
         return;
     }
     /* Crossing between menu and fight re-picks at once from the base the
@@ -218,7 +218,7 @@ static void delay_auto(void) {
             return;
         }
         s_delay_window_ms = now_ms;
-        uint32_t trip = net.ping_us / 2 + jitter_us();
+        uint32_t trip = NL.ping_us / 2 + jitter_us();
         int need = (int)((trip + FRAME_US - 1) / FRAME_US);
         /* Hysteresis: a trip sitting on a frame boundary would otherwise flip
          * between two delays for the rest of the match, one announcement per
@@ -240,7 +240,7 @@ static void delay_auto(void) {
         return;
     }
     int d = fight ? s_delay_base - ROLLBACK_COVER : s_delay_base + LOCKSTEP_PROCESSING;
-    bool lan = net.ping_us < LAN_PING_US && jitter_us() < LAN_JITTER_US;
+    bool lan = NL.ping_us < LAN_PING_US && jitter_us() < LAN_JITTER_US;
     int lo = !fight ? 1 : lan ? FIGHT_DELAY_LAN : FIGHT_DELAY_MIN;
     /* Lockstep must cover the trip; a 200 ms link needs about seven frames.
      * Fights still cap delay at four and use rollback for the rest. */
@@ -283,7 +283,7 @@ static void delay_auto(void) {
     s_delay_acted_ms = now_ms;
     s_delay_fight = fight;
     pc_log_line("net: auto delay %d -> %d at frame %d (%s, ping %u ms, jitter %u ms)", net.delay, d,
-        net.delay_at, fight ? "fight" : "lockstep", net.ping_us / 1000, jitter_us() / 1000);
+        net.delay_at, fight ? "fight" : "lockstep", NL.ping_us / 1000, jitter_us() / 1000);
 }
 
 /* The host's announcement (REL_DELAY, reliable lane 1). The guest never

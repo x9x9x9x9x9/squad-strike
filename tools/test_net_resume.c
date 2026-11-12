@@ -175,7 +175,7 @@ void net_addr_text(const struct sockaddr* sa, char* out, size_t cap) {
 /* net_sim.c */
 void tx(const void* buf, size_t len) {
     const uint8_t* p = buf;
-    net.tx_pkts++;
+    NL.tx_pkts++;
     if (p[0] == 'M' && len >= offsetof(Packet, pads)) {
         /* pads are delta-coded on the wire: decode them the way rx_dispatch
          * does, which also proves every packet sent decodes exactly */
@@ -185,7 +185,7 @@ void tx(const void* buf, size_t len) {
             s_tx_pkt.count, s_tx_pkt.pads));
         wire_packet(&s_tx_pkt);
         s_tx_pkt_valid = true;
-        net.tx_inputs++;
+        NL.tx_inputs++;
     }
 }
 void tx_flush(void) {}
@@ -441,12 +441,12 @@ static void setup(void) {
     net.tick_frame = FRAME - 1;
     /* The peer's address: loopback discard, so sendto() succeeds and nothing
      * ever answers. */
-    struct sockaddr_in* p = (struct sockaddr_in*)&net.peer;
+    struct sockaddr_in* p = (struct sockaddr_in*)&NL.peer;
     memset(p, 0, sizeof *p);
     p->sin_family = AF_INET;
     p->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     p->sin_port = htons(9);
-    net.peer_len = sizeof *p;
+    NL.peer_len = sizeof *p;
     s_wrote = WROTE;
     s_remote_have = HAVE;
     s_last_acked = ACKED;
@@ -919,7 +919,7 @@ static void case_receive_identity(void) {
     recv_inputs();
     assert(!s_peer_left && net.session == SESSION);
 
-    memcpy(&net.peer, &src, sizeof src);
+    memcpy(&NL.peer, &src, sizeof src);
     a.h.magic = '?';
     send_dg(sender, &dst, &a, sizeof a);
     recv_inputs();
@@ -956,7 +956,7 @@ static void case_session_learned_only_from_rules(void) {
     net.hs = HS_PENDING;
     struct sockaddr_in dst, src;
     sock_t sender = probe_open(&dst, &src);
-    memcpy(&net.peer, &src, sizeof src);
+    memcpy(&NL.peer, &src, sizeof src);
 
     Ack a = {{'A', WIRE_VERSION, SESSION, 0}, 0, -1};
     wire_hdr(&a.h);
@@ -1011,7 +1011,7 @@ static void case_old_protocol(void) {
     setup();
     struct sockaddr_in dst, src;
     sock_t sender = probe_open(&dst, &src);
-    memcpy(&net.peer, &src, sizeof src);
+    memcpy(&NL.peer, &src, sizeof src);
     Ack a = {{'A', 5, SESSION, 1}, 0, -1};
     wire_hdr(&a.h);
     wire_ack(&a);
@@ -1031,7 +1031,7 @@ static void case_bad_mac_rejected(void) {
     setup();
     struct sockaddr_in dst, src;
     sock_t sender = probe_open(&dst, &src);
-    memcpy(&net.peer, &src, sizeof src);
+    memcpy(&NL.peer, &src, sizeof src);
     net_key_direct("shared secret");
     assert(net_key_ready() && !s_mac_seen);
     /* A pinned key refuses from the very first datagram: it is not waiting

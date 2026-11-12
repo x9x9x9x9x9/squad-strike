@@ -356,12 +356,28 @@ enum { HS_IDLE, HS_PENDING, HS_DONE, HS_FAILED };
  * test for the desync it caused. */
 enum { SYNC_ON, SYNC_OFF, SYNC_LEGACY };
 
+/* A party host's links to its guests. Per-link state lives in the file that
+ * uses it, as arrays over links behind a macro of the old name (`#define
+ * s_remote_have (s_remote_have_l[t_li])`), so the link code reads as it did
+ * for one peer: t_li is the link the running thread is working on. */
+#define NET_LINKS 3
+extern _Thread_local int t_li;
+#define NL (net.link[t_li])
+
 struct NetSession {
     /* session (net.c); active and sock flip under tx_lock */
     bool active;
     sock_t sock;
-    struct sockaddr_storage peer;
-    socklen_t peer_len;
+    /* What describes one peer. A host of a party (docs/party-plan.md) has
+     * a link per guest; everyone else has link 0 only. NL is the link the
+     * running thread is working on (t_li). */
+    int nlinks;
+    struct NetLinkPub {
+        struct sockaddr_storage peer;
+        socklen_t peer_len;
+        uint32_t ping_us;            /* smoothed RTT (net_sync.c) */
+        unsigned tx_pkts, tx_inputs; /* datagrams / input packets this stats window */
+    } link[NET_LINKS];
     int local, remote, delay;
     /* Controller ports as bit masks: the ones the local stream speaks for,
      * the ones the remote stream does, and the ones that have a controller
@@ -382,7 +398,6 @@ struct NetSession {
 
     /* transmit: timer thread + game thread under tx_lock */
     SDL_Mutex* tx_lock;
-    unsigned tx_pkts, tx_inputs; /* datagrams / input packets this stats window */
 
     /* link simulator knobs (net_sim.c), set at connect */
     int sim_loss; /* percent of outgoing packets dropped */
@@ -399,7 +414,6 @@ struct NetSession {
     int32_t ck_from; /* checksums before this frame are not compared */
 
     /* time sync (net_sync.c) */
-    uint32_t ping_us; /* smoothed RTT */
     bool delay_auto;
     int delay_next;   /* the host's pick, applied at delay_at */
     int32_t delay_at; /* frame both peers switch delay on (0: none) */

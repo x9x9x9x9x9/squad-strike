@@ -10,11 +10,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-static int s_sim_burst_left;
-static uint64_t s_sim_burst_ns; /* when the next burst starts */
-static int s_sim_swap = -1;     /* held slot waiting to go out behind the next packet */
-static uint32_t s_sim_rng;      /* xorshift32, seeded from the port */
-static Held s_held[HELD_MAX];   /* outgoing, under tx_lock */
+static int s_sim_burst_left_l[NET_LINKS];
+#define s_sim_burst_left (s_sim_burst_left_l[t_li])
+static uint64_t s_sim_burst_ns_l[NET_LINKS]; /* when the next burst starts */
+#define s_sim_burst_ns (s_sim_burst_ns_l[t_li])
+static int s_sim_swap_l[NET_LINKS] = {
+    [0 ... NET_LINKS - 1] = -1}; /* held slot waiting to go out behind the next packet */
+#define s_sim_swap (s_sim_swap_l[t_li])
+static uint32_t s_sim_rng_l[NET_LINKS]; /* xorshift32, seeded from the port */
+#define s_sim_rng (s_sim_rng_l[t_li])
+static Held s_held_l[NET_LINKS][HELD_MAX]; /* outgoing, under tx_lock */
+#define s_held (s_held_l[t_li])
 
 static unsigned sim_rand(unsigned n) {
     s_sim_rng ^= s_sim_rng << 13;
@@ -63,9 +69,9 @@ void tx(const void* body, size_t body_len) {
     const void* buf = stamped;
     size_t len = body_len + NET_MAC_LEN;
     uint64_t now = SDL_GetTicksNS();
-    net.tx_pkts++;
+    NL.tx_pkts++;
     if (*(const uint8_t*)buf == 'M') {
-        net.tx_inputs++;
+        NL.tx_inputs++;
     }
     if (net.sim_burst > 0 && now >= s_sim_burst_ns) {
         s_sim_burst_ns = now + 5000000000ull;

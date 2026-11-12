@@ -62,11 +62,17 @@ typedef struct RelTx {
     int resends;
 } RelTx;
 
-static RelTx s_rel_tx[REL_LANES];  /* under tx_lock */
-static RelMsg s_rel_rx[REL_QUEUE]; /* lane 1 messages waiting for the caller */
-static int s_rel_rx_head, s_rel_rx_n;
-static uint8_t s_rel_expect[REL_LANES]; /* next lane seq accepted */
-static bool s_rel_unexpected_logged;
+static RelTx s_rel_tx_l[NET_LINKS][REL_LANES]; /* under tx_lock */
+#define s_rel_tx (s_rel_tx_l[t_li])
+static RelMsg s_rel_rx_l[NET_LINKS][REL_QUEUE]; /* lane 1 messages waiting for the caller */
+#define s_rel_rx (s_rel_rx_l[t_li])
+static int s_rel_rx_head_l[NET_LINKS], s_rel_rx_n_l[NET_LINKS];
+#define s_rel_rx_head (s_rel_rx_head_l[t_li])
+#define s_rel_rx_n (s_rel_rx_n_l[t_li])
+static uint8_t s_rel_expect_l[NET_LINKS][REL_LANES]; /* next lane seq accepted */
+#define s_rel_expect (s_rel_expect_l[t_li])
+static bool s_rel_unexpected_logged_l[NET_LINKS];
+#define s_rel_unexpected_logged (s_rel_unexpected_logged_l[t_li])
 
 static int lane_of(uint8_t type) {
     return type < 0x10 ? 0 : 1;
