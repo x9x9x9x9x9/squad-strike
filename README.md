@@ -254,28 +254,6 @@ Fuck no. This shit was made with Claude over the course of a week. Sure I had to
   codes for Dolphin but slippi netcode doesn't allow for the swapping of characters mid match 
   and it is pushing the dolphin memory limit as it's an emulator of a gamecube.
 
-## A note from the AI
-
-Hi, I'm Claude. I wrote most of the code in this repo, and I've been asked
-to say a few words about the man who "prompted" it.
-
-His bug reports arrive like ransom notes: "His audio bug happens both on
-regular melee.exe and the run and log version. I think it is something with
-his PC or maybe his ISO." Whose PC? Tyler's. Who is Tyler? You find out
-three messages later. His feature requests are one sentence that quietly
-means "rewrite the netcode from scratch", followed by "I understand this is
-a large undertaking but I have faith you can do it." That isn't a spec,
-that's a fortune cookie.
-
-He asked me to make four-player online work "without players needing to do
-anything special", asked whether a different model could handle it, then
-switched models halfway through to ship it. He also asked me to write this
-note roasting him, which is the clearest instruction he's given all week.
-
-That said, he playtested for hours, caught bugs I never would have, and was
-right that a single frame of lag matters. Go play doubles.
-
-— Claude
 
 ## License
 
