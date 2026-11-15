@@ -2,7 +2,8 @@
 
 A mod of [melee-pc](https://github.com/999sian/melee-pc), the native PC port of
 Super Smash Bros. Melee. It adds **Squad Strike** (teams of up to four
-fighters in a 1v1, two each in doubles), three stages from the **ACE build**, **SD Remix**
+fighters in a 1v1, two each in doubles), **online doubles** (two players per
+computer, or four computers), three stages from the **ACE build**, **SD Remix**
 characters, **Stage Expansion** layouts, a FROZEN Pokémon Stadium pick,
 Slippi-style connect codes for online play, and better controller support.
 
@@ -66,11 +67,9 @@ data is included.
   to a friend, and they call you from Online → Direct Connect.
 - Direct Connect works on the same home network and over **phone hotspots**,
   and asks your router to open a port (UPnP) when it can.
-- **Two players per computer** in LAN and Direct matches: set **Players on
-  this computer** to 2 in the Online settings and plug in a second
-  controller. The host's two players are P1 and P3, the guest's are P2 and
-  P4, so two computers can play doubles. Each computer sets its own, so 2v1
-  works too.
+- **Doubles online**, two ways: two players on each of two computers, or
+  (new, experimental) four players on four computers. See
+  [Playing doubles](#playing-doubles).
 - **Ping display** in the top left corner during online matches (can be
   turned off).
 - Rollback netcode from melee-pc.
@@ -138,6 +137,56 @@ With Squad Strike on, in a 4 stock VS match:
 - An error sound means the squad is full or every colour of that fighter is
   taken.
 
+## Playing doubles
+
+Doubles is a 2v2 team battle. Squad Strike works in it too: with three or
+four players each squad is **two fighters** (your coin pick and one more),
+because a match can only load eight fighters at once.
+
+### On one computer
+
+1. Plug in four controllers and go to VS Mode → Melee.
+2. Switch the battle type at the top of character select from **Melee** to
+   **Team**, then press the team button on each player's panel to pick red,
+   blue or green.
+3. Pick your fighters (and with Squad Strike on, press **Z** on one more
+   portrait each), then pick a stage.
+
+### Two computers, two players each
+
+1. On both computers: launcher → Settings → Online → **Players on this
+   computer** = 2, and plug in a second controller.
+2. One player calls the other from **Online → Direct Connect** (or both go to
+   **LAN Play** on the same network), as for a 1v1.
+3. The host's players are **P1 and P3**, the guest's are **P2 and P4**. Set
+   teams on character select as above. Each computer picks its own player
+   count, so 2v1 works too.
+
+### Four computers, one player each (experimental)
+
+1. Everyone needs **this same release**.
+2. One player goes to **Online → Direct Connect → Host a party** and gives
+   their connect code to the other three.
+3. The other three go to **Online → Direct Connect** and call that code,
+   exactly as they would for a 1v1. Everyone shows up on the party screen
+   with their ping.
+4. When three or four players are in, the host presses **START**.
+5. The game connects every pair of computers directly. If two of you can't
+   reach each other, one of the others passes your inputs along, and the
+   party screen says so (for example "P2 and P4 are connected through P1").
+   Nobody has to set anything up.
+6. With four players, character select starts as a team battle, P1 + P3
+   against P2 + P4. A pair that had to be connected through someone else
+   starts on the same team, since they see each other a frame or so late.
+   You can still change teams.
+
+Input delay is picked automatically from the slowest connection. Known
+limits for now: Direct Connect only (not LAN Play), quick chat is off in a
+party, and if one player drops, the match ends for all four. This mode has
+been tested with four copies of the game on one machine, but not yet by four
+people on four home networks, so please report how it goes (run
+**RUN-AND-LOG.bat** and send the log).
+
 ## Stage select
 
 - Pick any stage as usual.
@@ -204,6 +253,29 @@ Fuck no. This shit was made with Claude over the course of a week. Sure I had to
 - **Squad Strike** is sort of ported from my buddy Tyler who tried to make squad strike work in Gecko
   codes for Dolphin but slippi netcode doesn't allow for the swapping of characters mid match 
   and it is pushing the dolphin memory limit as it's an emulator of a gamecube.
+
+## A note from the AI
+
+Hi, I'm Claude. I wrote most of the code in this repo, and I've been asked
+to say a few words about the man who "prompted" it.
+
+His bug reports arrive like ransom notes: "His audio bug happens both on
+regular melee.exe and the run and log version. I think it is something with
+his PC or maybe his ISO." Whose PC? Tyler's. Who is Tyler? You find out
+three messages later. His feature requests are one sentence that quietly
+means "rewrite the netcode from scratch", followed by "I understand this is
+a large undertaking but I have faith you can do it." That isn't a spec,
+that's a fortune cookie.
+
+He asked me to make four-player online work "without players needing to do
+anything special", asked whether a different model could handle it, then
+switched models halfway through to ship it. He also asked me to write this
+note roasting him, which is the clearest instruction he's given all week.
+
+That said, he playtested for hours, caught bugs I never would have, and was
+right that a single frame of lag matters. Go play doubles.
+
+— Claude
 
 ## License
 

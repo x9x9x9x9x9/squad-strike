@@ -6,23 +6,27 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.1
+## What's new in v1.0.5
 
-- **Default rules:** 4 stocks with an 8:00 time limit, and a new default
-  Random Stage list. The ACE stages get Random Stage switches, and Random
-  can land on them.
-- **Random characters** are now evenly spread, come in a random costume
-  (not always the default), and P1 and P2 never get the same fighter in the
-  same squad position.
-- **Match timer** shows (counting up) in untimed stock matches.
-- **Warlock Punch / Falcon Punch** (and Kirby's copies): fixed the flat
-  purple / orange body; it's a faint glow again, as on console.
-- **Same fighter, same costume** (outside teams): the second player is
-  tinted lighter, as in Slippi.
-- **New settings:** Post match results screen (Gameplay; online the host
-  decides) and Magnifying glass (Video).
-- **Ping display** is always the short "Ping: 34ms", even with RUN-AND-LOG.bat.
-- The log now records each sound bank loaded, to track down missing sounds.
+- **Squad Strike in doubles and free-for-all:** with three or four players
+  each squad is two fighters. In a team battle, squad members wear their
+  team's colour.
+- **Two players per computer online** (LAN and Direct): launcher → Settings
+  → Online → Players on this computer = 2. The host plays P1 and P3, the
+  guest P2 and P4.
+- **Four computers, one player each (experimental):** Online → Direct
+  Connect → Host a party, give out your code, and the others call it as
+  usual. Every pair connects directly; a pair that can't is passed through
+  another player automatically. Direct Connect only for now, quick chat is
+  off in a party, and one player dropping ends the match for all four.
+- **Fixes:** a crash drawing Link's bow; fighters cut off past the 4:3 edge
+  in widescreen; music volume no longer silencing some sound effects (Kirby's
+  inhale); move flags read wrong on PC; Green Greens' Whispy; team-battle
+  edge cases (draws, stage chooser); a UPnP crash; a verified disc is
+  remembered.
+
+How to play doubles, step by step:
+[Playing doubles](https://github.com/x9x9x9x9x9/squad-strike#playing-doubles).
 
 ## Download
 
