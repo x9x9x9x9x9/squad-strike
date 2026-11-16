@@ -25,7 +25,7 @@
  *   - With three or four players a squad is two fighters (the coin pick
  *     and one more): the match loads eight fighters at most. In a team
  *     battle every member wears its team's colour, so X/Y don't apply.
- *   - The error buzz: every other colour is taken, or the squad is full.
+ *   - The error buzz: the squad is full.
  *
  * Everything here runs on the synced pads in netplay, so both peers build
  * the same squads. */
@@ -306,24 +306,20 @@ static bool squad_fix_color(int port, int index, int step)
     return false;
 }
 
-/* Move a member to the next (dir 1) or previous (dir -1) colour nobody else
- * has. Returns false if no other colour is free. */
+/* Move a member to the next (dir 1) or previous (dir -1) colour. A colour
+ * another player wears on the same fighter is allowed, as for the coin
+ * pick: the match draws the later port lighter (gm_PcRetintDuplicates).
+ * Returns false if the fighter has only one colour. */
 static bool squad_cycle_color(int port, int index, int dir)
 {
     GmSquadMember* m = &gmSquad_rows[port][index];
     int n = squad_num_colors(m->ckind);
-    int t;
-    if (m->ckind >= ChKind_Max) {
+    (void) port;
+    if (m->ckind >= ChKind_Max || n < 2) {
         return false;
     }
-    for (t = 1; t < n; t++) {
-        u8 c = (u8) (((int) m->color + dir * t + n * t) % n);
-        if (!squad_clash(port, m->ckind, c)) {
-            m->color = c;
-            return true;
-        }
-    }
-    return false;
+    m->color = (u8) (((int) m->color + dir + n) % n);
+    return true;
 }
 
 static bool squad_remove_last(int port)
@@ -436,7 +432,12 @@ static void squad_add_color(int target, u8 ck, int color)
             : same >= 0      ? gmSquad_rows[target][same].color
             : squad_coin_pick(target) == ck ? squad_coin_color(target)
                                             : 0;
-        if (squad_clash(target, ck, gmSquad_rows[target][room].color)) {
+        if (color < 0 && !preview &&
+            squad_clash(target, ck, gmSquad_rows[target][room].color))
+        {
+            /* Not a colour the player chose: start on a free one, as
+             * picking a character does. X/Y can still move it onto a
+             * colour someone else wears (squad_cycle_color). */
             squad_fix_color(target, room, 0);
         }
         sfxForward();
@@ -445,9 +446,7 @@ static void squad_add_color(int target, u8 ck, int color)
     /* Full: Z on a member already in the squad changes its colour. */
     for (i = GMSQUAD_EXTRA - 1; i >= 0; i--) {
         if (gmSquad_rows[target][i].ckind == ck) {
-            if (preview && gmSquad_rows[target][i].color != shown_color &&
-                !squad_clash(target, ck, shown_color))
-            {
+            if (preview && gmSquad_rows[target][i].color != shown_color) {
                 /* Already in the squad: Z takes the previewed colour. */
                 gmSquad_rows[target][i].color = shown_color;
                 sfxMove();
@@ -1039,16 +1038,9 @@ static void mnCharSel_SquadFrame(void)
                 }
             }
         }
-    } else {
-        /* No two fighters may share a character and colour: when a coin
-         * pick or another member moves onto a member's, that member's
-         * colour moves on. */
-        for (p = 0; p < 4; p++) {
-            for (i = 0; i < GMSQUAD_EXTRA; i++) {
-                squad_fix_color(p, i, 0);
-            }
-        }
     }
+    /* Outside a team battle two fighters may share a character and colour
+     * (a mirror): the match draws the later port lighter. */
 
     lbDvd_GetPreloadCacheScene()->game_cache.pc_squad_key = gmSquad_Key();
 
