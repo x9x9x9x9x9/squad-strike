@@ -66,6 +66,28 @@ void gm_SetupSubColors(StartMeleeData* start) {
 }
 
 #ifdef TARGET_PC
+/* A fighter's tint is two fields: the index, and the colour its colour
+ * overlays (hit flashes, Nana's, a star's) are blended with, which the
+ * fighter works out once when it is created (fighter.c). Changing the index
+ * alone left that colour blank, and every overlay on a fighter tinted
+ * mid-match flashed a wrong colour (seen as a green Nana). */
+static void retint_fighter(Fighter* fp, s8 tint) {
+    fp->sub_color = (u8)tint;
+    if (tint > 0 && tint <= 4) {
+        GXColor* color = &p_ftCommonData->sub_colors[tint - 1];
+        fp->x610_color_rgba[0].r = (color->r * color->a) / 255;
+        fp->x610_color_rgba[0].g = (color->g * color->a) / 255;
+        fp->x610_color_rgba[0].b = (color->b * color->a) / 255;
+        fp->x610_color_rgba[0].a = color->a;
+    } else {
+        fp->sub_color = 0;
+        fp->x610_color_rgba[0].r = 0;
+        fp->x610_color_rgba[0].g = 0;
+        fp->x610_color_rgba[0].b = 0;
+        fp->x610_color_rgba[0].a = 0;
+    }
+}
+
 void gm_PcRetintDuplicates(void) {
     /* The same rule mid-match (a squad member swapped in): from the
      * players' current character and costume, retinting the fighters out. */
@@ -95,7 +117,7 @@ void gm_PcRetintDuplicates(void) {
         for (k = 0; k < 2; k++) {
             HSD_GObj* gobj = Player_GetEntityAtIndex(i, k);
             if (gobj != NULL) {
-                GET_FIGHTER(gobj)->sub_color = (u8)tint[i];
+                retint_fighter(GET_FIGHTER(gobj), tint[i]);
             }
         }
     }
