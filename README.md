@@ -165,7 +165,8 @@ because a match can only load eight fighters at once.
    computer** = 2, and plug in a second controller.
 2. One player calls the other from **Online → Direct Connect** (or both go to
    **LAN Play** on the same network), as for a 1v1.
-3. The host's players are **P1 and P3**, the guest's are **P2 and P4**. Set
+3. One computer's players are **P1 and P3**, the other's **P2 and P4** (a
+   coin flip on connecting decides which computer gets P1). Set
    teams on character select as above. Each computer picks its own player
    count, so 2v1 works too.
 
