@@ -59,6 +59,11 @@ data is included.
   Settings → Gameplay → SD Remix characters. The fighter files come with the
   Windows download.
 - Kirby's throws work correctly.
+- **Zelda starts as Sheik.** Down-B turns her into Zelda as usual. To start
+  a match as Zelda, hold **A** while the match loads.
+- **Same character, same costume:** two players can pick the same fighter in
+  the same colour (X/Y lands on it). In the match, the higher port is drawn a
+  little lighter so you can tell them apart.
 
 <img width="1827" height="1437" alt="squad mods" src="https://github.com/user-attachments/assets/36e32faf-57b7-41c2-9b3f-4a095bf44a2d" />
 
@@ -72,6 +77,8 @@ data is included.
   [Playing doubles](#playing-doubles).
 - **Ping display** in the top left corner during online matches (can be
   turned off).
+- **Random P1 and P2:** when two computers connect, a coin flip decides who
+  is P1. It stays that way until you disconnect.
 - Rollback netcode from melee-pc.
 
 <img width="1821" height="1437" alt="squad connect codes" src="https://github.com/user-attachments/assets/b822a044-1931-44db-bd35-b5878b05c466" />
@@ -121,11 +128,11 @@ With Squad Strike on, in a 4 stock VS match:
 | Button | What it does |
 |---|---|
 | **A** (drop coin) | Picks your fighter as usual. Where you drop your coin is where that fighter goes in your squad order. |
-| **Z** on a portrait | Adds that fighter to your squad (up to four in total, coin pick included). |
+| **Z** on a portrait | Adds that fighter to your squad (up to four in total, coin pick included). The same fighter can go in more than once, e.g. Fox, Fox, Falco, Fox: Z on a fighter already in your squad adds another one. |
 | **Z** on the random area | Adds a random fighter not already in your squad, without dropping your coin. Press it four times for a fully random squad. |
 | **R** | Removes the last fighter you added. |
 | Hold **L** (1.5 seconds) | Clears your whole squad. |
-| **X / Y** on a squad member's portrait | Changes that member's colour. |
+| **X / Y** on a squad member's portrait | Changes that member's colour (the last one you added, if that fighter is in twice). With the squad full, **Z** on a member changes its colour too. |
 
 - Your squad is listed on screen in fighting order. A coin still in your
   hand isn't a pick yet; it joins the order where you drop it.

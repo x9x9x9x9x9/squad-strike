@@ -1075,9 +1075,9 @@ void pc_net_rumble_command(unsigned port, unsigned command) {
         /* The game's ports are the session's; the controllers are this
          * computer's: its player on the first, its second player on the
          * second. The other computer's players shake nothing here. */
-        if (port == (unsigned)net.local)
+        if (port == (unsigned)net.lport)
             port = 0;
-        else if (port == (unsigned)net.local + 2)
+        else if (port == (unsigned)net.lport + 2)
             port = 1;
         else
             return;
@@ -1840,7 +1840,7 @@ bool pc_net_deterministic(void) {
 }
 
 int pc_net_local_player(void) {
-    return net.local;
+    return net.lport;
 }
 
 /* ---- scene hand-off -------------------------------------------------
@@ -2117,10 +2117,29 @@ static void own_ports(void) {
     }
     memset(net.own_link, 0, sizeof net.own_link);
     {
-        net.primary = (uint8_t)(1u << net.local | 1u << net.remote);
-        net.own_local = (uint8_t)(1u << net.local | 1u << (net.local + 2));
-        net.own_link[0] = (uint8_t)(1u << net.remote | 1u << (net.remote + 2));
+        net.primary = (uint8_t)(1u << net.lport | 1u << net.rport);
+        net.own_local = (uint8_t)(1u << net.lport | 1u << (net.lport + 2));
+        net.own_link[0] = (uint8_t)(1u << net.rport | 1u << (net.rport + 2));
     }
+}
+
+/* Who is P1 should not be whoever happened to host: once the seed is
+ * agreed, a coin drawn from it puts either computer on port 1, the same
+ * way on both, until the session ends. Before this, frames are the lobby's
+ * lead-in, which the checksum does not cover (ck_from = start_frame).
+ * MELEE_NET_PORT_SWAP=0|1 fixes it (tests). */
+void net_ports_settle(void) {
+    if (net.party) {
+        return;
+    }
+    const char* e = getenv("MELEE_NET_PORT_SWAP");
+    uint32_t x = net.seed * 2654435761u;
+    bool swap = e != NULL && e[0] != '\0' ? e[0] == '1' : ((x ^ (x >> 16)) & 1u) != 0;
+    net.lport = swap ? net.remote : net.local;
+    net.rport = swap ? net.local : net.remote;
+    own_ports();
+    pc_log_line("net: this computer plays P%d%s", net.lport + 1,
+        swap ? " (ports drawn: the host is P2)" : "");
 }
 
 /* This frame's sample of the local players, as it goes on the wire. */
@@ -2147,19 +2166,19 @@ static void local_to_wire(WirePad* w) {
     }
     memset(w, 0, sizeof *w);
     if (fake_own) {
-        fake_pad(&w->p[net.local], net.local);
+        fake_pad(&w->p[net.lport], net.lport);
     } else {
-        to_wire(&w->p[net.local], &s_raw_last[0]);
+        to_wire(&w->p[net.lport], &s_raw_last[0]);
     }
-    w->p[net.local].button &= (uint16_t)~WIRE_PRESENT;
-    w->p[net.local].button |= WIRE_PRESENT;
+    w->p[net.lport].button &= (uint16_t)~WIRE_PRESENT;
+    w->p[net.lport].button |= WIRE_PRESENT;
     bool on = force ? force == 2 : pc_is_net_two_players_enabled();
     if (!on || !second_allowed() || net.party) {
         return; /* a party seats one player a computer */
     }
-    WireOne* second = &w->p[net.local + 2];
+    WireOne* second = &w->p[net.lport + 2];
     if (fake) {
-        fake_pad(second, net.local + 2);
+        fake_pad(second, net.lport + 2);
     } else if (s_raw_last[1].err != PAD_ERR_NONE) {
         return; /* no second controller right now */
     } else {
@@ -2517,6 +2536,7 @@ bool party_shape(int seat, int size, const int8_t via[4][4]) {
     net.party = true;
     net.party_size = size;
     net.local = seat;
+    net.lport = seat;
     net.remote = seats[0];
     net.nlinks = n;
     net.own_local = (uint8_t)(1u << seat);
@@ -2742,6 +2762,8 @@ static bool connect_impl(
     HSD_PadLibData.qtype = 2;
     net.local = player ? 1 : 0;
     net.remote = 1 - net.local;
+    net.lport = net.local;
+    net.rport = net.remote;
     party_cfg();
     party_env(family);
     own_ports();
@@ -3340,7 +3362,7 @@ static void head_check(void) {
     }
     const PadLibData* p = &HSD_PadLibData;
     for (int i = 0; i < 2; i++) {
-        int port = i == 0 ? net.local : net.remote;
+        int port = i == 0 ? net.lport : net.rport;
         /* HSD_PadADConvert ORs synthetic direction bits above 0xffff into
          * button (controller.c), so only the real pad bits can be compared. */
         uint32_t saw = HSD_PadMasterStatus[port].button & 0xffffu;
@@ -3408,15 +3430,15 @@ static void write_head(PADStatus* head, int32_t f) {
     WirePad wrong;
     if (s_audit_poison) {
         wrong = *theirs;
-        wrong.p[net.remote].stickX = (int8_t)-wrong.p[net.remote].stickX;
-        wrong.p[net.remote].button ^= 0x0100; /* A */
+        wrong.p[net.rport].stickX = (int8_t)-wrong.p[net.rport].stickX;
+        wrong.p[net.rport].button ^= 0x0100; /* A */
         theirs = &wrong;
     }
     head_from_wire(head, mine, theirs, f);
-    if (!s_seen_remote && (theirs->p[net.remote].button & ~WIRE_PRESENT) != 0) {
+    if (!s_seen_remote && (theirs->p[net.rport].button & ~WIRE_PRESENT) != 0) {
         s_seen_remote = true;
         pc_log_line("net: first remote button press (%04x) at frame %d",
-            theirs->p[net.remote].button & ~WIRE_PRESENT, f);
+            theirs->p[net.rport].button & ~WIRE_PRESENT, f);
     }
     head_note(head, f);
 }

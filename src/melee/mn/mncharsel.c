@@ -1215,6 +1215,15 @@ static inline bool isDuplicateCostume(int door)
     int j;
     CSSDoor* base_door = &mnCharSel_803F0DFC.doors[door];
 
+#ifdef TARGET_PC
+    /* X/Y (and Random) may land on a costume someone else on the same
+     * character wears: the match tells them apart with a lighter tint
+     * (gm_SetupSubColors). Picking the character still starts on a free
+     * costume (isDuplicateCostumeExact). */
+    (void) base_door;
+    return false;
+#endif
+
     if (mnCharSel_804D6CB0->match_type == TRAINING_MODE) {
         num_doors = 2;
     } else {
@@ -1238,6 +1247,13 @@ bool mnCharSel_8025DAA0(int door)
 {
     int num_doors;
     int j;
+
+#ifdef TARGET_PC
+    /* Opening a door or coming back to the screen keeps the costume the
+     * player chose, even one another player on the same character wears
+     * (see isDuplicateCostume). */
+    return false;
+#endif
 
     if (mnCharSel_804D6CB0->match_type == TRAINING_MODE) {
         num_doors = 2;
