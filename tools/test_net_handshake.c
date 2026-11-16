@@ -83,6 +83,7 @@ void SDL_UnlockMutex(SDL_Mutex* m) {
     (void)m;
 }
 void recv_inputs(void) {}
+void net_ports_settle(void) {}
 GameRules* gmMainLib_GetGameRules(void) {
     return &s_game;
 }
