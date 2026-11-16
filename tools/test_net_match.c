@@ -5,6 +5,45 @@
 #include <unistd.h>
 #include <time.h>
 
+#include <arpa/inet.h>
+#include <stdbool.h>
+#include <netinet/in.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+
+/* MATCH_NAT: each player behind a home router that lets a packet in only
+ * from an address and port this side has already sent one to (a
+ * port-restricted cone NAT, the common kind). */
+static struct {
+    uint32_t address;
+    uint16_t port;
+} nat_open[64];
+static int nat_count;
+static ssize_t test_sendto(
+    int fd, const void* data, size_t n, int flags, const struct sockaddr* to, socklen_t len) {
+    if (to && to->sa_family == AF_INET && nat_count < 64) {
+        const struct sockaddr_in* in = (const struct sockaddr_in*)to;
+        int i;
+        for (i = 0; i < nat_count; i++)
+            if (nat_open[i].address == in->sin_addr.s_addr && nat_open[i].port == in->sin_port)
+                break;
+        if (i == nat_count) {
+            nat_open[nat_count].address = in->sin_addr.s_addr;
+            nat_open[nat_count++].port = in->sin_port;
+        }
+    }
+    return sendto(fd, data, n, flags, to, len);
+}
+static bool nat_lets_in(const struct sockaddr_in* from) {
+    if (!getenv("MATCH_NAT"))
+        return true;
+    for (int i = 0; i < nat_count; i++)
+        if (nat_open[i].address == from->sin_addr.s_addr && nat_open[i].port == from->sin_port)
+            return true;
+    return false;
+}
+#define sendto test_sendto
+
 #include "../src/pc/net_match.c"
 #include "../extern/dht/sha1.h"
 
@@ -112,8 +151,11 @@ const char* pc_get_net_code(void) {
 const char* pc_get_net_name(void) {
     return getenv("MATCH_NAME");
 }
+/* "port": the setting on automatic (0), and what each search asked for. */
+static int port_setting = -1;
+static int requested_port = -1, busy_port;
 int pc_get_net_port(void) {
-    return local_port;
+    return port_setting >= 0 ? port_setting : local_port;
 }
 const char* pc_app_rev(void) {
     return "test-rev";
@@ -136,14 +178,24 @@ bool pc_dht_start(enum pc_dht_mode m, const char* c, int b, uint16_t p) {
     (void)m;
     (void)c;
     (void)b;
-    (void)p;
+    if (port_setting >= 0) {
+        requested_port = p;
+        if (p && p == busy_port)
+            return false; /* another copy of the game has it */
+        local_port = p;
+    }
     dht_fd = socket(AF_INET, SOCK_DGRAM, 0);
     /* MATCH_LAN: reachable on every local address, as a real one is, since
      * the beacon's Hello goes to whichever address the beacon came from. */
     struct sockaddr_in a = {.sin_family = AF_INET,
         .sin_addr.s_addr = htonl(getenv("MATCH_LAN") ? INADDR_ANY : INADDR_LOOPBACK),
         .sin_port = htons(local_port)};
-    return bind(dht_fd, (void*)&a, sizeof a) == 0;
+    if (bind(dht_fd, (void*)&a, sizeof a) != 0)
+        return false;
+    socklen_t z = sizeof a;
+    getsockname(dht_fd, (void*)&a, &z);
+    local_port = ntohs(a.sin_port);
+    return true;
 }
 bool pc_dht_add_topic(const unsigned char hash[20]) {
     (void)hash;
@@ -188,8 +240,8 @@ void pc_upnp_unmap(void) {}
 bool pc_dht_next_candidate(struct pc_dht_endpoint* out) {
     /* MATCH_LAN: the internet search finds nobody (no data on the hotspot,
      * or a router that does not loop back); only the beacon can pair. */
-    if (!candidate || getenv("MATCH_LAN"))
-        return false;
+    if (!candidate || getenv("MATCH_LAN") || getenv("MATCH_KNOWN"))
+        return false; /* MATCH_KNOWN: only the address the last match saved */
     candidate = 0;
     out->address = htonl(INADDR_LOOPBACK);
     out->port = peer_port;
@@ -212,6 +264,8 @@ void pc_dht_poll(void) {
         if (n > 5 && b[5] == 'O' && !dropped_offer++) {
             continue;
         }
+        if (!nat_lets_in(&a))
+            continue;
         struct pc_dht_endpoint e = {a.sin_addr.s_addr, ntohs(a.sin_port)};
         if (n == (int)sizeof(MatchHello) && !injected_bad++) {
             unsigned char bad[sizeof(MatchHello)];
@@ -330,6 +384,31 @@ int main(int argc, char** argv) {
         puts("parse ok");
         return 0;
     }
+    if (argc == 2 && !strcmp(argv[1], "port")) {
+        /* The port setting on automatic: the first search takes whatever
+         * the system gives, the next ones ask for that same port, and one
+         * that finds it busy takes another and keeps that. */
+        port_setting = 0;
+        local_port = 0;
+        assert(pc_net_match_start(PC_MATCH_DIRECT, ""));
+        int first = local_port;
+        assert(requested_port == 0 && first > 0);
+        pc_net_match_stop();
+        assert(pc_net_match_start(PC_MATCH_DIRECT, ""));
+        assert(requested_port == first && local_port == first);
+        pc_net_match_stop();
+        busy_port = first;
+        assert(pc_net_match_start(PC_MATCH_DIRECT, ""));
+        int second = local_port;
+        assert(requested_port == 0 && second > 0 && second != first);
+        pc_net_match_stop();
+        busy_port = 0;
+        assert(pc_net_match_start(PC_MATCH_DIRECT, ""));
+        assert(requested_port == second);
+        pc_net_match_stop();
+        puts("port kept");
+        return 0;
+    }
     if (argc == 2 && !strcmp(argv[1], "cancel")) {
         local_port = 0;
         assert(
@@ -373,6 +452,8 @@ int main(int argc, char** argv) {
             PcNetContact c[PC_NET_CONTACTS_MAX];
             assert(pc_net_match_contacts(c, PC_NET_CONTACTS_MAX) == 1);
             assert(!strcmp(c[0].code, pc_net_match_opponent_code()));
+            /* and where it reached them, to dial there next time */
+            assert(c[0].address == htonl(INADDR_LOOPBACK) && c[0].port == peer_port);
         }
         if (getenv("MATCH_COMPLETE")) {
             for (int game = 0; game < 2; game++) {

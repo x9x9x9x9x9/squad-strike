@@ -594,6 +594,11 @@ void pc_dht_poll(void) {
     if (fd < 0)
         return;
     if (now >= next_search && pc_dht_ready()) {
+        /* The first half minute of a search is when a friend is most likely
+         * calling too: start each topic's next round the moment its last
+         * one finishes (a round announces us only when it completes), not
+         * on a 5 s timer. After that, the old pace. */
+        bool eager = now - started < 30000;
         int width = mode == PC_DHT_RANKED ? (now - started >= 90000    ? 2 :
                                                 now - started >= 30000 ? 1 :
                                                                          0) :
@@ -604,12 +609,14 @@ void pc_dht_poll(void) {
         for (int offset = -width; offset <= width; offset++)
             for (int age = 0; age < (mode == PC_DHT_DIRECT ? 1 : 2); age++) {
                 unsigned char hash[20];
-                if (pc_dht_topic(mode, direct_code, rating_band + offset, minute - age, hash))
+                if (pc_dht_topic(mode, direct_code, rating_band + offset, minute - age, hash) &&
+                    (!eager || !dht_search_active(hash, AF_INET)))
                     dht_search(hash, age == 0 ? port : 0, AF_INET, values, NULL);
             }
         for (unsigned i = 0; i < extra_count; i++)
-            dht_search(extra_topics[i], port, AF_INET, values, NULL);
-        next_search = now + 5000;
+            if (!eager || !dht_search_active(extra_topics[i], AF_INET))
+                dht_search(extra_topics[i], port, AF_INET, values, NULL);
+        next_search = now + (eager ? 250 : 5000);
     }
 }
 

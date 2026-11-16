@@ -4,6 +4,7 @@ import os
 import socket
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from net_test_support import sdl_includes
@@ -63,6 +64,12 @@ def run():
                     env["MATCH_DIAL"] = theirs if player else "p#0" + theirs[2:]
                     if os.getenv("MATCH_WAIT") and player == 0:
                         env["MATCH_DIAL"] = ""  # direct, waiting for the call
+                if os.getenv("MATCH_KNOWN"):
+                    # Played before: the DHT finds nothing, and the call
+                    # connects only through where the last match reached
+                    # the other player.
+                    (profile / "contacts.txt").write_text(
+                        f"{codes[1 - player]} {int(time.time())} 127.0.0.1 {ports[1 - player]}\n")
                 processes.append(subprocess.Popen(
                     [executable, str(ports[player]), str(ports[1-player])],
                     env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE))
@@ -85,6 +92,10 @@ def run():
                        env=os.environ | {"MATCH_NAME": "CANCEL", "MATCH_DIR": str(profile)})
         subprocess.run([executable, "parse"], check=True, timeout=20,
                        env=os.environ | {"MATCH_NAME": "CANCEL", "MATCH_DIR": str(profile)})
+        profile = Path(work) / "port"
+        profile.mkdir()
+        subprocess.run([executable, "port"], check=True, timeout=20,
+                       env=os.environ | {"MATCH_NAME": "PORT", "MATCH_DIR": str(profile)})
 
     if os.getenv("MATCH_RECOVER"):
         detail = "restart republishes durable immutable history and stale mutable state"
@@ -92,6 +103,10 @@ def run():
         detail = "dual-signed durable set, immutable publication and mutable retry"
     elif os.getenv("MATCH_PROOF_TIMEOUT") or os.getenv("MATCH_PROOF_MISMATCH"):
         detail = "unverified peer state refused before socket handoff"
+    elif os.getenv("MATCH_KNOWN"):
+        detail = ("direct call through the address the last match saved, no DHT"
+                  + (", callee waiting" if os.getenv("MATCH_WAIT") else "")
+                  + (", both behind routers" if os.getenv("MATCH_NAT") else ""))
     elif os.getenv("MATCH_LAN"):
         detail = "direct call found on the local network with no internet candidates"
     elif os.getenv("MATCH_DIRECT"):
@@ -100,7 +115,7 @@ def run():
         detail = "BEP44 genesis proofs, signed ranked session and READY barrier"
     else:
         detail = "signed pairing, socket handoff, role election and READY barrier"
-    print(f"PASS: {detail}; cancellation and same-key code change")
+    print(f"PASS: {detail}; cancellation, same-key code change, port kept")
 
 
 if __name__ == "__main__":

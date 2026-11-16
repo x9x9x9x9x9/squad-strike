@@ -1432,6 +1432,21 @@ dht_search(const unsigned char *id, int port, int af,
     }
 }
 
+/* Local patch (README.melee.md): whether a search for id is still running,
+   so a caller can start the next round as soon as one finishes instead of
+   restarting one in flight (dht_search resets its nodes). */
+int
+dht_search_active(const unsigned char *id, int af)
+{
+    struct search *sr = searches;
+    while(sr) {
+        if(sr->af == af && id_cmp(sr->id, id) == 0)
+            return !sr->done;
+        sr = sr->next;
+    }
+    return 0;
+}
+
 /* A struct storage stores all the stored peer addresses for a given info
    hash. */
 

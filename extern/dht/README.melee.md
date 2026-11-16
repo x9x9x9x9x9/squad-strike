@@ -8,7 +8,9 @@ Downloaded 2026-09-20 from:
 Local patches: outgoing `announce_peer` includes canonical `implied_port=1`
 (`implied_port=0` with an explicit port while `dht_announce_implied_port` is
 0, for a UPnP-forwarded port);
-SHA1 endian preprocessor checks require defined macros before comparing them.
+SHA1 endian preprocessor checks require defined macros before comparing them;
+`dht_search_active()` reports whether a search is still in flight, so a new
+round can start the moment the last one finishes.
 
 `src/pc/net_dht.c` owns the IPv4 nonblocking UDP socket until `take_socket`.
 It passes public DHT packets to jech/dht and non-DHT packets to the pairing

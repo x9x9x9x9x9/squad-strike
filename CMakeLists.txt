@@ -586,6 +586,15 @@ if (NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_net_match.py)
         set_tests_properties(net_match_direct PROPERTIES LABELS melee TIMEOUT 90
             ENVIRONMENT "MATCH_DIRECT=1")
+        # Played before, no DHT: both dialling, and one waiting for the call.
+        add_test(NAME net_match_known COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_net_match.py)
+        set_tests_properties(net_match_known PROPERTIES LABELS melee TIMEOUT 90
+            ENVIRONMENT "MATCH_DIRECT=1;MATCH_KNOWN=1;MATCH_NAT=1")
+        add_test(NAME net_match_known_wait COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_net_match.py)
+        set_tests_properties(net_match_known_wait PROPERTIES LABELS melee TIMEOUT 90
+            ENVIRONMENT "MATCH_DIRECT=1;MATCH_KNOWN=1;MATCH_WAIT=1;MATCH_NAT=1")
         foreach(mode IN ITEMS ranked proof_timeout proof_mismatch complete recover)
             add_test(NAME net_match_${mode} COMMAND ${Python3_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_net_match.py)

@@ -353,15 +353,22 @@ static void contacts_load(void) {
     while (contact_count < PC_NET_CONTACTS_MAX && fgets(line, sizeof line, f)) {
         PcNetContact c = {0};
         long long when = 0;
-        if (sscanf(line, "%17s %lld", c.code, &when) != 2 || !pc_identity_code_valid(c.code))
+        char ip[32] = "";
+        unsigned port = 0;
+        int got = sscanf(line, "%17s %lld %31s %u", c.code, &when, ip, &port);
+        if (got < 2 || !pc_identity_code_valid(c.code))
             continue;
         c.last_played = (int64_t)when;
+        if (got == 4 && port > 0 && port < 65536 && inet_pton(AF_INET, ip, &c.address) == 1)
+            c.port = (uint16_t)port;
+        else
+            c.address = 0;
         contacts[contact_count++] = c;
     }
     fclose(f);
 }
 
-static void contacts_note(const char* code) {
+static void contacts_note(const char* code, const struct pc_dht_endpoint* where) {
     contacts_load();
     if (contact_count < 0 || !pc_identity_code_valid(code))
         return;
@@ -376,20 +383,138 @@ static void contacts_note(const char* code) {
     memmove(&contacts[1], &contacts[0], (size_t)at * sizeof contacts[0]);
     snprintf(contacts[0].code, sizeof contacts[0].code, "%s", code);
     contacts[0].last_played = (int64_t)time(NULL);
+    contacts[0].address = where ? where->address : 0;
+    contacts[0].port = where ? where->port : 0;
     char path[4200], tmp[4210];
     contacts_path(path, sizeof path);
     snprintf(tmp, sizeof tmp, "%s.tmp", path);
     FILE* f = fopen(tmp, "w");
     if (!f)
         return;
-    for (int i = 0; i < contact_count; i++)
-        fprintf(f, "%s %lld\n", contacts[i].code, (long long)contacts[i].last_played);
+    for (int i = 0; i < contact_count; i++) {
+        char ip[INET_ADDRSTRLEN] = "-";
+        if (contacts[i].address)
+            inet_ntop(AF_INET, &contacts[i].address, ip, sizeof ip);
+        fprintf(f, "%s %lld %s %u\n", contacts[i].code, (long long)contacts[i].last_played, ip,
+            (unsigned)contacts[i].port);
+    }
     bool ok = fclose(f) == 0;
 #ifdef _WIN32
     remove(path);
 #endif
     if (!ok || rename(tmp, path) != 0)
         pc_log_line("match: could not save %s", path);
+}
+
+/* ---- one port for every call -------------------------------------------
+ * With the port setting on automatic, each call used to bind a new random
+ * port. Addresses the DHT kept from earlier calls (it holds them for half an
+ * hour) then pointed at ports nobody listened on, and a friend's game kept
+ * finding those first (logs of 2026-11-15). The first port the system picks
+ * is kept in the profile and reused; if it is busy (a second copy of the
+ * game), the call takes another and keeps that. */
+static void port_path(char* out, size_t n) {
+    snprintf(out, n, "%s/net-port.txt", profile_directory);
+}
+
+static uint16_t kept_port(void) {
+    int configured = pc_get_net_port();
+    if (configured > 0)
+        return (uint16_t)configured;
+    char path[4200];
+    port_path(path, sizeof path);
+    FILE* f = fopen(path, "r");
+    unsigned p = 0;
+    if (f) {
+        if (fscanf(f, "%u", &p) != 1 || p < 1024 || p > 65535)
+            p = 0;
+        fclose(f);
+    }
+    return (uint16_t)p;
+}
+
+static void keep_port(void) {
+    if (pc_get_net_port() > 0 || pc_dht_port() == 0 || pc_dht_port() == kept_port())
+        return;
+    char path[4200];
+    port_path(path, sizeof path);
+    FILE* f = fopen(path, "w");
+    if (!f)
+        return;
+    fprintf(f, "%u\n", (unsigned)pc_dht_port());
+    fclose(f);
+}
+
+static bool dht_start(enum pc_dht_mode m, const char* code, int band) {
+    uint16_t port = kept_port();
+    if (pc_dht_start(m, code, band, port)) {
+        keep_port();
+        return true;
+    }
+    if (port == 0 || pc_get_net_port() > 0 || !pc_dht_start(m, code, band, 0))
+        return false;
+    pc_log_line(
+        "match: port %u is in use; this copy uses %u", (unsigned)port, (unsigned)pc_dht_port());
+    keep_port();
+    return true;
+}
+
+/* ---- dialling where a friend was last time --------------------------------
+ * Two routers let each other's packets in only once both have sent one out,
+ * so a call connects when both games know the other's address. The DHT
+ * finds it, in 5 to 20 s. A friend played before is usually still where the
+ * last match reached them (one port per profile, above): a caller sends its
+ * Hello there at once, and a player waiting for a call sends recent friends
+ * a few bytes that open its own router to them, which a caller's Hello then
+ * gets through. The DHT keeps searching meanwhile. */
+#define DIAL_MS 500
+#define KNOCK_MS 2000
+#define KNOCK_MAX 8
+#define KNOCK_DAYS 30
+static uint64_t next_dial;
+static bool dial_told;
+
+static void dial_known(uint64_t now) {
+    if (mode != PC_MATCH_DIRECT || have_peer || now < next_dial)
+        return;
+    contacts_load();
+    if (contact_count <= 0)
+        return;
+    if (target_code[0]) {
+        next_dial = now + DIAL_MS;
+        for (int i = 0; i < contact_count; i++) {
+            const PcNetContact* c = &contacts[i];
+            if (strcmp(c->code, target_code) || c->address == 0 || c->port == 0)
+                continue;
+            struct pc_dht_endpoint ep = {c->address, c->port};
+            if (!dial_told) {
+                dial_told = true;
+                uint32_t ip = ntohl(c->address);
+                pc_log_line("match: dialling %s where the last match reached them, "
+                            "%u.%u.%u.%u:%u",
+                    c->code, ip >> 24, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, c->port);
+            }
+            send_packet(&hello, sizeof hello, &ep);
+            return;
+        }
+        return;
+    }
+    static const uint8_t knock[4] = {'M', 'P', 'K', '1'};
+    int64_t recent = (int64_t)time(NULL) - (int64_t)KNOCK_DAYS * 86400;
+    int sent = 0;
+    next_dial = now + KNOCK_MS;
+    for (int i = 0; i < contact_count && sent < KNOCK_MAX; i++) {
+        const PcNetContact* c = &contacts[i];
+        if (c->address == 0 || c->port == 0 || c->last_played < recent)
+            continue;
+        struct pc_dht_endpoint ep = {c->address, c->port};
+        send_packet(knock, sizeof knock, &ep);
+        sent++;
+    }
+    if (sent && !dial_told) {
+        dial_told = true;
+        pc_log_line("match: opening the way for %d recent friend(s) to call", sent);
+    }
 }
 
 int pc_net_match_contacts(PcNetContact* out, int max) {
@@ -583,7 +708,7 @@ static void ready(void) {
     beacon_close();
     state = PC_MATCH_READY;
     pc_net_set_datagram_handler(NULL);
-    contacts_note(opponent);
+    contacts_note(opponent, &peer);
 }
 
 static bool accept_ack(const MatchAck* a) {
@@ -847,7 +972,7 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
      * own when hosting. A caller also waits on the pair topic, which is where
      * two players who each dialled the other both are. */
     const char* doorbell = target_code[0] ? target_code : own;
-    if (!pc_dht_start((enum pc_dht_mode)m, doorbell, 0, (uint16_t)pc_get_net_port())) {
+    if (!dht_start((enum pc_dht_mode)m, doorbell, 0)) {
         fail("DHT unavailable");
         return false;
     }
@@ -858,6 +983,8 @@ bool pc_net_match_start(enum PcNetMatchMode m, const char* code) {
     }
     started_ms = SDL_GetTicks();
     candidates_tried = 0;
+    next_dial = 0;
+    dial_told = false;
     memset(&hello, 0, sizeof hello);
     hello.magic = htonl(MATCH_MAGIC);
     hello.version = MATCH_VERSION;
@@ -941,12 +1068,18 @@ void pc_net_match_poll(void) {
         if (pc_upnp_mapped(&forwarded_ip, &forwarded_port) && pc_dht_external_endpoint(&seen) &&
             forwarded_ip == seen.address)
             pc_dht_set_announce_port(forwarded_port);
+        dial_known(now);
         struct pc_dht_endpoint ep, self;
         bool know_self = pc_dht_external_endpoint(&self);
         while (pc_dht_next_candidate(&ep)) {
             /* Someone behind our own router, already found on the local
              * network: its public address would only loop back. */
             if (lan_seen && know_self && ep.address == self.address)
+                continue;
+            /* Our own announcement, found back (the DHT keeps it): a Hello
+             * there only reaches ourselves. */
+            if (know_self && ep.address == self.address &&
+                (ep.port == self.port || ep.port == pc_dht_port()))
                 continue;
             /* Paired already: a Hello now would lock that player onto us while
              * receive() ignores their answer, costing them TIMEOUT_MS. The DHT
@@ -1113,7 +1246,7 @@ bool pc_net_match_publish_rank(void) {
     proof_pending = false;
     publication_deadline = SDL_GetTicks() + 60000;
     publication_reason = "rank saved locally; publishing";
-    if (!pc_dht_start(PC_DHT_RANKED, identity.code, 0, (uint16_t)pc_get_net_port())) {
+    if (!dht_start(PC_DHT_RANKED, identity.code, 0)) {
         publication = -1;
         publication_reason = "rank saved locally; DHT unavailable, retry available";
         return false;
