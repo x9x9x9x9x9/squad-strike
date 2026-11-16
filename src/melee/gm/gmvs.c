@@ -1602,10 +1602,25 @@ void fn_8016D8AC(int arg0, struct PlayerInitData* arg1)
     } else {
         Player_SetPadPort(arg0, arg1->slot - 1);
     }
+#ifdef TARGET_PC
+    /* Zelda starts as Sheik (down-B turns her into Zelda); holding A while
+     * the match loads starts her as Zelda, the other way round from the
+     * original game. */
+    if (Player_GetPlayerCharacter(arg0) == CKind_Zelda &&
+        !(arg1->slot_type == Gm_PKind_Human &&
+          (HSD_PadCopyStatus[(u8) Player_GetPadPort(arg0)].button &
+           HSD_PAD_A)))
+    {
+        Player_SetPlayerCharacter(arg0, CKind_Seak);
+    } else
+#endif
     if (arg1->slot_type == Gm_PKind_Human &&
         (HSD_PadCopyStatus[(u8) Player_GetPadPort(arg0)].button & HSD_PAD_A) &&
-        (Player_GetPlayerCharacter(arg0) == CKind_Zelda ||
-         Player_GetPlayerCharacter(arg0) == CKind_Seak))
+        (
+#ifndef TARGET_PC
+            Player_GetPlayerCharacter(arg0) == CKind_Zelda ||
+#endif
+            Player_GetPlayerCharacter(arg0) == CKind_Seak))
     {
         if (Player_GetPlayerCharacter(arg0) == CKind_Zelda) {
             Player_SetPlayerCharacter(arg0, CKind_Seak);

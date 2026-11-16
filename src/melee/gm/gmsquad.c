@@ -534,7 +534,8 @@ static int next_index(s32 slot)
 static bool is_out(s32 slot, GmSquadMember* m)
 {
     StaticPlayer* ps = Player_GetPtrForSlot(slot);
-    return m->ckind == ps->ckind && m->color == ps->costume_id;
+    u8 ck = m->ckind == CKind_Zelda ? CKind_Seak : m->ckind;
+    return ck == ps->ckind && m->color == ps->costume_id;
 }
 
 bool gmSquad_HoldRespawn(s32 slot, s32 subchar)
@@ -572,7 +573,9 @@ static void swap_in(s32 slot, GmSquadMember* m)
     ps->transformed[1] = 1;
     ps->flags.b2 = false; /* "has a second fighter": the new one decides */
 
-    Player_SetPlayerCharacter(slot, m->ckind);
+    /* Zelda comes in as Sheik, as she starts a match (gmvs.c). */
+    Player_SetPlayerCharacter(slot, m->ckind == CKind_Zelda ? CKind_Seak
+                                                            : m->ckind);
     Player_SetCostumeId(slot, m->color);
     Player_80031AD0(slot); /* create the new fighter(s) */
     gm_PcRetintDuplicates(); /* same fighter and costume as someone else */

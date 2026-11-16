@@ -5,11 +5,13 @@
  *     and press Z to add them (up to three). The squad fights in the order
  *     it was picked: Z picks made before the coin went down come first.
  *     Carrying a coin, the portrait previews the fighter: pick its colour
- *     with X/Y first, and Z adds it in that colour (Z again on a member
- *     already in the squad gives it the previewed colour). With a free
- *     pointer, Z on a member already in your squad changes its colour.
+ *     with X/Y first, and Z adds it in that colour. A fighter can be in a
+ *     squad more than once (Fox, Fox, Falco, Fox): Z on one already in it
+ *     adds another copy, in the colour it already wears. With the squad
+ *     full, Z on a member changes its colour.
  *   - X / Y while pointing at a squad member's portrait changes that
- *     member's colour (elsewhere they change your coin pick's, as usual).
+ *     member's colour (the latest copy, for a fighter in it twice);
+ *     elsewhere they change your coin pick's, as usual.
  *   - R, or D-pad up (offline only: online the D-pad is quick chat),
  *     removes the last fighter you added. Holding L for 1.5 s clears the
  *     whole squad.
@@ -384,7 +386,8 @@ static int squad_member_under_cursor(int port, int* owner)
         if (who != port && mnCharSel_803F0DFC.doors[who].p_kind != 1) {
             continue; /* other humans recolour their own members */
         }
-        for (i = 0; i < GMSQUAD_EXTRA; i++) {
+        /* The latest copy of a fighter that is in the squad twice. */
+        for (i = GMSQUAD_EXTRA - 1; i >= 0; i--) {
             if (gmSquad_rows[who][i].ckind == (u8) ck) {
                 *owner = who;
                 return i;
@@ -412,11 +415,35 @@ static void squad_add_color(int target, u8 ck, int color)
     bool preview = squad_door_shows(target, &shown_ck, &shown_color) &&
                    shown_ck == ck && shown_color < squad_num_colors(ck);
 
-    if (squad_coin_pick(target) == ck) {
-        lbAudioAx_80024030(3); /* already your coin pick */
+    int same = -1, room = -1;
+    for (i = 0; i < gmSquad_MaxExtra(squad_players()); i++) {
+        if (gmSquad_rows[target][i].ckind == GMSQUAD_NONE) {
+            if (room < 0) {
+                room = i;
+            }
+        } else if (gmSquad_rows[target][i].ckind == ck) {
+            same = i;
+        }
+    }
+    if (room >= 0) {
+        /* A fighter may be in a squad more than once (Fox, Fox, Falco,
+         * Fox): another copy wears the previewed colour, else the colour
+         * the squad already has it in. */
+        gmSquad_rows[target][room].ckind = ck;
+        gmSquad_rows[target][room].color =
+            color >= 0       ? (u8) color
+            : preview        ? shown_color
+            : same >= 0      ? gmSquad_rows[target][same].color
+            : squad_coin_pick(target) == ck ? squad_coin_color(target)
+                                            : 0;
+        if (squad_clash(target, ck, gmSquad_rows[target][room].color)) {
+            squad_fix_color(target, room, 0);
+        }
+        sfxForward();
         return;
     }
-    for (i = 0; i < GMSQUAD_EXTRA; i++) {
+    /* Full: Z on a member already in the squad changes its colour. */
+    for (i = GMSQUAD_EXTRA - 1; i >= 0; i--) {
         if (gmSquad_rows[target][i].ckind == ck) {
             if (preview && gmSquad_rows[target][i].color != shown_color &&
                 !squad_clash(target, ck, shown_color))
@@ -429,16 +456,6 @@ static void squad_add_color(int target, u8 ck, int color)
             } else {
                 lbAudioAx_80024030(3); /* no other colour free */
             }
-            return;
-        }
-    }
-    for (i = 0; i < gmSquad_MaxExtra(squad_players()); i++) {
-        if (gmSquad_rows[target][i].ckind == GMSQUAD_NONE) {
-            gmSquad_rows[target][i].ckind = ck;
-            gmSquad_rows[target][i].color =
-                color >= 0 ? (u8) color : preview ? shown_color : 0;
-            squad_fix_color(target, i, 0);
-            sfxForward();
             return;
         }
     }

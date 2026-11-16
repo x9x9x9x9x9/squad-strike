@@ -379,7 +379,13 @@ struct NetSession {
         uint32_t ping_us;            /* smoothed RTT (net_sync.c) */
         unsigned tx_pkts, tx_inputs; /* datagrams / input packets this stats window */
     } link[NET_LINKS];
+    /* local/remote: the roles (0 the host, which settles the rules, the
+     * delay and scene ends). lport/rport: the controller ports those
+     * players hold. They are the same until the handshake, which in a
+     * session of two computers flips a coin both sides draw from the seed
+     * (net_ports_settle): either may be P1, for the rest of the session. */
     int local, remote, delay;
+    int lport, rport;
     /* Controller ports as bit masks: the ones the local stream speaks for,
      * the ones each link's remote stream does, and the ones that have a
      * controller whatever WIRE_PRESENT says (each side's player). */
@@ -445,6 +451,10 @@ struct NetSession {
     bool synctest;
 };
 extern struct NetSession net;
+
+/* Settle which controller port each computer plays on, once the seed is
+ * agreed (net_handshake.c hs_done). */
+void net_ports_settle(void);
 
 /* The computer that settles what a party needs one voice for: the rules,
  * the start frame and the frame a scene ends on. */
