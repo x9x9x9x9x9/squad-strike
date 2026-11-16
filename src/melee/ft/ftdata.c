@@ -5,6 +5,12 @@
 #include <sysdolphin/baselib/forward.h>
 
 #include <string.h>
+#ifdef TARGET_PC
+#include <dolphin/ar.h>
+#include <dolphin/dvd.h>
+
+#include "pc/pc.h"
+#endif
 
 #include "fighter.h"
 #include "forward.h"
@@ -1733,6 +1739,30 @@ void ftData_80085B98(Fighter* fp, int arg1, int arg2)
     }
 }
 
+#ifdef TARGET_PC
+/* A motion's animation came out of ARAM as something that is not an
+ * archive of its size (a log of 2026-11-15 crashed on the lookup right
+ * after this, on a ledge grab, following a 5 s disc stall). Say what was
+ * asked for, once per fighter kind, so the next log names it. */
+static void ftData_PcBadAnim(Fighter* fp, int msid, uintptr_t src, u32 size,
+                             const void* got)
+{
+    static u32 s_told;
+    u32 bit = 1u << ((u32) fp->kind & 31);
+    const u8* b = got;
+    if (s_told & bit) {
+        return;
+    }
+    s_told |= bit;
+    pc_log_line("ft: animation for kind %d motion %d (%u bytes from %s %08x) "
+                "is not loaded: header %02x%02x%02x%02x; disc %d, aram %d in "
+                "flight",
+                fp->kind, msid, size, PC_IS_ARAM_ADDR(src) ? "ARAM" : "RAM",
+                (u32) src, b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0,
+                b ? b[3] : 0, aurora_dvd_inflight(), aurora_arq_inflight());
+}
+#endif
+
 void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
 {
     HSD_Archive sp14;
@@ -1773,6 +1803,17 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
                     if (temp_ret_2 == -1) {
                         HSD_ASSERTREPORT(0xA0F, 0,
                                          "HSD_ArchiveParse error! %x\n", msid);
+#ifdef TARGET_PC
+                        /* The archive in the buffer is not this motion's:
+                         * looking a symbol up in it reads through its empty
+                         * tables. Play the motion without an animation and
+                         * load it again on the next change. */
+                        ftData_PcBadAnim(fp, msid, temp_r3->x14, temp_r3->x8,
+                                         fp->x59C->x0);
+                        fp->x590 = NULL;
+                        fp->x5A4 = 0;
+                        return;
+#endif
                     }
                 }
                 fp->x590 = HSD_ArchiveGetPublicAddress(&sp14, DP(char, temp_r3->x0));
@@ -1824,6 +1865,13 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
                     if (temp_ret_2 == -1) {
                         HSD_ASSERTREPORT(0xA45, 0,
                                          "HSD_ArchiveParse error! %x\n", msid);
+#ifdef TARGET_PC
+                        ftData_PcBadAnim(arg0, msid, temp_r3->x14, temp_r3->x8,
+                                         arg0->x5A0->x0);
+                        arg0->x598 = NULL;
+                        arg0->x5A8 = 0;
+                        return NULL;
+#endif
                     }
                 }
                 arg0->x598 = HSD_ArchiveGetPublicAddress(&sp10, DP(char, temp_r3->x0));

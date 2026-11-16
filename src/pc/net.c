@@ -3617,21 +3617,33 @@ static void dvd_settle(void) {
     }
     const uint64_t t0 = SDL_GetTicksNS();
     static bool warned;
+    bool told_slow = false;
     while (aurora_dvd_inflight() > 0 || aurora_arq_inflight() > 0) {
-        if (SDL_GetTicksNS() - t0 > 5000000000ull) {
-            /* The transfer is not going to settle in time. Letting the tick
-             * run here was the dangerous half of this: past this point the
-             * two peers can be simulating the same frame with different I/O
-             * completed, and nothing downstream would notice until the
-             * checksum happened to cover whatever the load changed. Run on,
-             * because parking the game thread indefinitely is worse, but
-             * take rollback off the table for a while: a lockstep frame is
-             * still the same frame on both sides, and it cannot be re-run
-             * from a snapshot that may predate the completion. */
+        const uint64_t spent = SDL_GetTicksNS() - t0;
+        if (!told_slow && spent > 5000000000ull) {
+            /* A read this slow is the computer's disk (a drive spinning up,
+             * a file in cloud storage, a virus scan), not the game. The
+             * peer sees a stall and keeps the connection; the game must
+             * not move on without the data: a log of 2026-11-15 ran on
+             * after 5 s and crashed on the next animation it loaded. */
+            told_slow = true;
+            pc_log_line("net: disc/ARAM transfer still in flight after 5 s at frame %d (disc %d, "
+                        "aram %d); waiting up to 30 s",
+                net.frame, aurora_dvd_inflight(), aurora_arq_inflight());
+        }
+        if (spent > 30000000000ull) {
+            /* Not going to settle. Past this point the two peers can be
+             * simulating the same frame with different I/O completed, and
+             * nothing downstream would notice until the checksum happened
+             * to cover whatever the load changed. Run on, because parking
+             * the game thread indefinitely is worse, but take rollback off
+             * the table for a while: a lockstep frame is still the same
+             * frame on both sides, and it cannot be re-run from a snapshot
+             * that may predate the completion. */
             barrier_raise(net.frame + IO_QUIET);
             if (!warned) {
                 warned = true;
-                pc_log_line("net: disc/ARAM transfer still in flight after 5 s at frame %d; "
+                pc_log_line("net: disc/ARAM transfer still in flight after 30 s at frame %d; "
                             "running on in lockstep to frame %d",
                     net.frame, net.rb_barrier);
             }
@@ -3643,6 +3655,10 @@ static void dvd_settle(void) {
          * whatever it happens to hold). */
         net_watchdog_heartbeat();
         SDL_DelayNS(200000);
+    }
+    if (told_slow) {
+        pc_log_line("net: disc/ARAM transfer settled after %.1f s at frame %d",
+            (double)(SDL_GetTicksNS() - t0) / 1e9, net.frame);
     }
 }
 
