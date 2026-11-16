@@ -6,7 +6,20 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.7
+## What's new in v1.0.8
+
+- **Faster Direct Connect.** Calling a friend you've played before now goes
+  straight to where the game reached them last time, so it usually connects
+  in a few seconds instead of 15 or more. The first call after updating
+  still searches as before; from then on it's quick.
+- The game keeps the same network port between calls, so a friend's game
+  no longer chases addresses from your earlier calls.
+- While waiting for a call, the game opens the way for friends you've
+  played in the last 30 days, so their call gets through sooner.
+- The search for a new friend repeats faster for the first half minute.
+
+## Also in v1.0.7
+
 
 - **Same costume in Squad Strike:** squad members can now wear the same
   colour as another player's fighter too (before, only the main pick could).
