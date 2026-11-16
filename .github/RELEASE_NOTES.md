@@ -6,7 +6,15 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.6
+## What's new in v1.0.7
+
+- **Same costume in Squad Strike:** squad members can now wear the same
+  colour as another player's fighter too (before, only the main pick could).
+- **Fix:** a fighter that turned lighter mid-match (a squad member swapping
+  in on the same character) flashed the wrong colour, e.g. a green Nana.
+
+## Also in v1.0.6
+
 
 - **Zelda starts as Sheik.** Down-B turns her into Zelda as usual; hold
   **A** while the match loads to start as Zelda.
