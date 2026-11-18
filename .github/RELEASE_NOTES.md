@@ -1,12 +1,20 @@
 Squad Strike for Melee PC: Squad Strike teams, the ACE stages (Metal Cavern,
-WarioWare, Realgam Colosseum), FROZEN Pokémon Stadium, Stage Expansion, SD
+WarioWare), FROZEN Pokémon Stadium, Stage Expansion, SD
 Remix characters, connect codes and better controller support, on top of
 [melee-pc](https://github.com/999sian/melee-pc). Full feature list, controls
 and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike#readme).
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.9
+## What's new in v1.0.10
+
+- **Realgam Colosseum is removed.** Matches on it were crashing the game,
+  and with some graphics drivers freezing the whole PC. The other ACE
+  stages, Metal Cavern and WarioWare, stay. If you unzip over an older
+  folder, Colosseum stays hidden even though its old files are still there.
+- Both players need v1.0.10 for online matches.
+
+## Also in v1.0.9
 
 - **Fix:** a crash partway through a match (seen on Realgam Colosseum) when
   a fighter's animations had been damaged in memory on one of the two

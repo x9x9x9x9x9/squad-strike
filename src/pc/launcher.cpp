@@ -2303,7 +2303,8 @@ extern "C" bool pc_is_stage_expansion_enabled(void) {
     return env ? env[0] != '0' : prefs.stage_expansion;
 }
 extern "C" bool pc_ace_stage_offered(int stage) {
-    if (stage < 1 || stage > 3) {
+    /* 3, Realgam Colosseum: withdrawn (pc_ace_local_bits). */
+    if (stage < 1 || stage > 2) {
         return false;
     }
     unsigned flags;
