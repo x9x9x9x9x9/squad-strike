@@ -29,8 +29,9 @@ data is included.
 - Turn it on or off in the launcher under Settings → Gameplay → Squad Strike.
 
 ### Stages
-- **ACE stages:** Metal Cavern (from Smash 64), WarioWare and Realgam
-  Colosseum, each with its ACE music. Their tiles sit under the stage grid,
+- **ACE stages:** Metal Cavern (from Smash 64) and WarioWare, each with
+  its ACE music. (Realgam Colosseum was taken out in v1.0.10: matches on
+  it were crashing.) Their tiles sit under the stage grid,
   next to FROZEN. The files come with the download, so you don't need the
   ACE disc.
 - **FROZEN Pokémon Stadium:** a second Stadium tile under the grid, tagged
@@ -199,8 +200,7 @@ people on four home networks, so please report how it goes (run
 
 - Pick any stage as usual.
 - **FROZEN** (under the grid): Pokémon Stadium with no transformations.
-- **Metal Cavern, WarioWare, Colosseum** (next to FROZEN): the ACE stages.
-  Colosseum plays one of three Pokémon Colosseum battle themes at random.
+- **Metal Cavern, WarioWare** (next to FROZEN): the ACE stages.
 
 <img width="1870" height="1437" alt="sq" src="https://github.com/user-attachments/assets/1975d134-72ae-45ed-9909-ac2690e354ca" />
 
@@ -251,8 +251,8 @@ Fuck no. This shit was made with Claude over the course of a week. Sure I had to
   [doldecomp/melee](https://github.com/doldecomp/melee),
   [aurora](https://github.com/encounter/aurora) and SDL3.
 - **[ACE build](https://github.com/Chri222k/ACE-BUILD-PUBLIC-)** by
-  **Chri222k** and the ACE team: Metal Cavern, WarioWare and Realgam
-  Colosseum, with their music and stage select icons.
+  **Chri222k** and the ACE team: Metal Cavern and WarioWare, with their
+  music and stage select icons.
 - **[SD Remix](https://sdremix.games)**
   ([repository](https://github.com/underscoreglook/SD-Remix)) by the SD Remix
   team: the SD Remix character files and balance changes.

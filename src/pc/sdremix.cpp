@@ -283,7 +283,11 @@ extern "C" bool pc_ace_has_file(const char* name) {
 extern "C" unsigned pc_ace_local_bits(void) {
     static const char* const k_stage_files[] = {"GrOMc.dat", "GrWw.dat", "GrColosseum.dat"};
     unsigned bits = 0;
-    for (unsigned i = 0; i < 3; ++i) {
+    /* Realgam Colosseum (i == 2) is withdrawn: matches on it were
+     * crashing (and freezing some PCs) and the cause isn't found yet. Its
+     * files no longer ship; this keeps it out where an older ace folder
+     * still has them, and out of what netplay offers the other side. */
+    for (unsigned i = 0; i < 2; ++i) {
         if (pc_ace_has_file(k_stage_files[i])) {
             bits |= 1u << i;
         }
