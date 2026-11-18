@@ -1837,6 +1837,10 @@ static bool ftData_PcAnimReload(Fighter* fp, int msid,
     if (s_pc_aj[k].data != NULL && s_pc_aj[k].head == ftData_Table_Unk0[k].data) {
         return ftData_PcAnimFromCopy(d, dst);
     }
+#ifdef __EMSCRIPTEN__
+    (void) fi;
+    return false; /* the browser's DVD layer has no path lookup */
+#endif
     if (!DVDOpen(lbFileGetFullName(ftData_803C23E4[k]), &fi)) {
         return false;
     }
