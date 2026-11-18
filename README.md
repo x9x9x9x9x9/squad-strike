@@ -131,7 +131,7 @@ With Squad Strike on, in a 4 stock VS match:
 | **Z** on a portrait | Adds that fighter to your squad (up to four in total, coin pick included). The same fighter can go in more than once, e.g. Fox, Fox, Falco, Fox: Z on a fighter already in your squad adds another one. |
 | **Z** on the random area | Adds a random fighter not already in your squad, without dropping your coin. Press it four times for a fully random squad. |
 | **R** | Removes the last fighter you added. |
-| Hold **L** (1.5 seconds) | Clears your whole squad. |
+| Hold **L** (1 second) | Clears your whole squad. |
 | **X / Y** on a squad member's portrait | Changes that member's colour (the last one you added, if that fighter is in twice). With the squad full, **Z** on a member changes its colour too. |
 
 - Your squad is listed on screen in fighting order. A coin still in your

@@ -1313,11 +1313,43 @@ void HSD_SynthResetStreamCounters(int result, uintptr_t length, void* buf, bool 
     HSD_Synth_804D7778 = 0;
 }
 
+#ifdef TARGET_PC
+/* A music block's length as its header gives it, kept to the 64 KB stream
+ * slot it is read into (ARAlloc(0x30000): three slots). Every block of a
+ * well-formed .hps is at most that, but the length is read from the file
+ * while the music plays: a header that arrives wrong (a late or short read
+ * on a slow disk) would otherwise copy past the slots and over whatever
+ * follows them in ARAM -- fighters' animations. A log of 2026-11-17 found
+ * two fighters' animations damaged at once mid-match on Colosseum, whose
+ * music is streamed from the bundled tracks. Clamped, a bad block is a
+ * moment of wrong music. */
+static u32 HSD_SynthPcHakoLen(u32 slot)
+{
+    static int told;
+    s32 len = pstHakoHeader[slot % 3].x0;
+    if (len < 0 || len > 0x10000) {
+        if (told < 5) {
+            told++;
+            pc_log_line("synth: music block of %d bytes (slot %u) is larger "
+                        "than its 65536-byte stream slot; reading 65536",
+                        (int) len, (unsigned) slot);
+        }
+        len = 0x10000;
+    }
+    return (u32) len;
+}
+#define HAKO_DEST(slot) (HSD_Synth_804D7780 + (((slot) % 3) << 16))
+#define HAKO_LEN(slot) HSD_SynthPcHakoLen(slot)
+#else
+#define HAKO_DEST(slot) (HSD_Synth_804D7780 + ((slot) << 16))
+#define HAKO_LEN(slot) (pstHakoHeader[slot].x0)
+#endif
+
 void HSD_SynthPStreamHakoHeaderCallback(u32 offset, uintptr_t src)
 {
     HSD_DevComRequest(HSD_Synth_804D7764, src,
-                      HSD_Synth_804D7780 + (HSD_Synth_804D7768 << 16),
-                      pstHakoHeader[HSD_Synth_804D7768].x0, 0x23, 0,
+                      HAKO_DEST(HSD_Synth_804D7768),
+                      HAKO_LEN(HSD_Synth_804D7768), 0x23, 0,
                       HSD_SynthResetStreamCounters, 0);
 }
 
@@ -1472,9 +1504,8 @@ void HSD_SynthPStreamFirstHakoHeaderCallback(void)
 {
     HSD_DevComRequest(
         HSD_Synth_804D7764, 0xA0,
-        HSD_Synth_804D7780 + (HSD_Synth_804D7768 << 16),
-        pstHakoHeader[HSD_Synth_804D7768].x0, 0x23, 0,
-        (HSD_DevComCallback) HSD_SynthPStreamFirstHakoDataCallback, 0);
+        HAKO_DEST(HSD_Synth_804D7768), HAKO_LEN(HSD_Synth_804D7768), 0x23,
+        0, (HSD_DevComCallback) HSD_SynthPStreamFirstHakoDataCallback, 0);
 }
 
 void HSD_SynthPStreamHeaderCallback(int arg0, uintptr_t arg1, void* arg2,
