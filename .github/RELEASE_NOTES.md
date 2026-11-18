@@ -6,13 +6,13 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.10
+## What's new in v1.0.9.1
 
 - **Realgam Colosseum is removed.** Matches on it were crashing the game,
   and with some graphics drivers freezing the whole PC. The other ACE
   stages, Metal Cavern and WarioWare, stay. If you unzip over an older
   folder, Colosseum stays hidden even though its old files are still there.
-- Both players need v1.0.10 for online matches.
+- Both players need v1.0.9.1 for online matches.
 
 ## Also in v1.0.9
 

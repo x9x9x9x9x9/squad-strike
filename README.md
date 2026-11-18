@@ -30,7 +30,7 @@ data is included.
 
 ### Stages
 - **ACE stages:** Metal Cavern (from Smash 64) and WarioWare, each with
-  its ACE music. (Realgam Colosseum was taken out in v1.0.10: matches on
+  its ACE music. (Realgam Colosseum was taken out in v1.0.9.1: matches on
   it were crashing.) Their tiles sit under the stage grid,
   next to FROZEN. The files come with the download, so you don't need the
   ACE disc.
