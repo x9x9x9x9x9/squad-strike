@@ -9,7 +9,7 @@ struct SemVer {
     int major = 0;
     int minor = 0;
     int patch = 0;
-    int revision = 0; ///< a fourth number, as in v1.0.9.1 (0 when absent)
+    int revision = 0;  ///< a fourth number, as in v1.0.9.1 (0 when absent)
     std::string prerelease;
     int prerelease_num = 0;
     int build_commits = 0;
