@@ -611,6 +611,13 @@ void ftAnim_8006F4C8(Fighter* fp, bool do_blending, FigaTree* tree)
     u32 temp_r3;
     int i = 0;
 
+#ifdef TARGET_PC
+    /* A motion whose animation did not load plays without one
+     * (ftData_PcBadAnim). */
+    if (tree == NULL) {
+        return;
+    }
+#endif
     cur_node = DP(s8, tree->nodes);
     cur_track = DP(FigaTrack, tree->tracks);
 
@@ -662,6 +669,11 @@ void ftAnim_8006F628(Fighter* fp, Fighter_Part part, bool do_blending)
 
     i = 0;
     tree = fp->x590;
+#ifdef TARGET_PC
+    if (tree == NULL) {
+        return; /* no animation loaded (ftData_PcBadAnim) */
+    }
+#endif
     cur_node = DP(s8, tree->nodes);
     x594_bits = fp->x594.x0_1.x594_bits;
     cur_track = DP(FigaTrack, tree->tracks);
@@ -883,6 +895,11 @@ void ftAnim_8006FCE4(Fighter* fp, bool do_blending)
 
     i = 0;
     tree = fp->x590;
+#ifdef TARGET_PC
+    if (tree == NULL) {
+        return; /* no animation loaded (ftData_PcBadAnim) */
+    }
+#endif
     cur_node = DP(s8, tree->nodes);
     x594_bits = fp->x594.x0_1.x594_bits;
     cur_track = DP(FigaTrack, tree->tracks);

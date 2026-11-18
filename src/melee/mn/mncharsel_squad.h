@@ -13,7 +13,7 @@
  *     member's colour (the latest copy, for a fighter in it twice);
  *     elsewhere they change your coin pick's, as usual.
  *   - R, or D-pad up (offline only: online the D-pad is quick chat),
- *     removes the last fighter you added. Holding L for 1.5 s clears the
+ *     removes the last fighter you added. Holding L for 1 s clears the
  *     whole squad.
  *   - Z on the random area beside the portraits (where a dropped coin picks
  *     at random) adds a random fighter not yet in the squad, coin in hand
@@ -466,8 +466,8 @@ static void squad_add(int target, u8 ck)
     squad_add_color(target, ck, -1);
 }
 
-/* Frames L is held to clear a squad: 1.5 s. */
-#define SQUAD_CLEAR_HOLD 90
+/* Frames L is held to clear a squad: 1 s. */
+#define SQUAD_CLEAR_HOLD 60
 static u8 squad_l_held[4];
 
 /* The random area either side of the portraits' bottom row: a coin dropped
@@ -643,7 +643,7 @@ static void squad_buttons(int port)
         return;
     }
     if (squad_l_held[port] == SQUAD_CLEAR_HOLD) {
-        /* Held for 1.5 s: the whole squad goes, once per hold. */
+        /* Held for 1 s: the whole squad goes, once per hold. */
         if (gmSquad_Count(target) != 0) {
             gmSquad_Clear(target);
             sfxBack();

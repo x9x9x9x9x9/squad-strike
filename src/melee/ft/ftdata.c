@@ -4,6 +4,7 @@
 
 #include <sysdolphin/baselib/forward.h>
 
+#include <stdlib.h>
 #include <string.h>
 #ifdef TARGET_PC
 #include <dolphin/ar.h>
@@ -181,6 +182,10 @@ static inline void ft_800852B0_Reset_ft_8045993C(ftData** list, int i)
     ft_8045993C[i].x6_b1_b2 = 0;
 }
 
+#ifdef TARGET_PC
+static void ftData_PcAnimCopiesReset(void);
+#endif
+
 void ft_800852B0(void)
 {
     ftData** list;
@@ -207,6 +212,9 @@ void ft_800852B0(void)
         unk0[i].data = NULL;
         pairs[i].data = NULL;
     }
+#ifdef TARGET_PC
+    ftData_PcAnimCopiesReset();
+#endif
     ft_800852B0_Reset_ft_8045993C(list, new_var);
     ft_800852B0_Reset_ft_8045993C(list, 1);
     ft_800852B0_Reset_ft_8045993C(list, 2);
@@ -1763,6 +1771,121 @@ static void ftData_PcBadAnim(Fighter* fp, int msid, uintptr_t src, u32 size,
 }
 #endif
 
+
+#ifdef TARGET_PC
+/* A private copy of a fighter's animation file (Pl??AJ.dat), read from the
+ * disc when its copy in ARAM turns out to be damaged: a log of 2026-11-17
+ * found two fighters' animations (Mario's and Captain Falcon's, megabytes
+ * apart in ARAM) overwritten mid-match on one of the two machines and
+ * crashed on the next one played. The bytes are the disc's on both
+ * machines, so reading them again keeps the two in step; ARAM itself is left
+ * alone, since whatever now lives at that address may be someone else's. */
+static struct {
+    const void* head; /* ftData_Table_Unk0[kind].data the copy stands in for */
+    u8* data;
+    u32 size;
+} s_pc_aj[Ft_Kind_Max];
+
+static int ftData_PcAnimKind(const struct Fighter_WaitAnimData* d)
+{
+    int k;
+    for (k = 0; k < Ft_Kind_Max; k++) {
+        uintptr_t head = (uintptr_t) ftData_Table_Unk0[k].data;
+        if (head != 0 && d->x14 == head + d->x4) {
+            return k;
+        }
+    }
+    return -1;
+}
+
+/* The motion's bytes from the private copy, if there is one: true when
+ * copied. */
+static bool ftData_PcAnimFromCopy(const struct Fighter_WaitAnimData* d,
+                                  void* dst)
+{
+    int k;
+    for (k = 0; k < Ft_Kind_Max; k++) {
+        if (s_pc_aj[k].data != NULL &&
+            s_pc_aj[k].head == ftData_Table_Unk0[k].data &&
+            d->x14 == (uintptr_t) s_pc_aj[k].head + d->x4)
+        {
+            if (d->x4 + d->x8 > s_pc_aj[k].size) {
+                return false;
+            }
+            memcpy(dst, s_pc_aj[k].data + d->x4, d->x8);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Read the animation file of the fighter this motion belongs to from the
+ * disc and copy the motion out of it: true when done. */
+static bool ftData_PcAnimReload(Fighter* fp, int msid,
+                                const struct Fighter_WaitAnimData* d,
+                                void* dst)
+{
+    DVDFileInfo fi;
+    int k = ftData_PcAnimKind(d);
+    u8* buf;
+    u32 len;
+    int m, bad = 0;
+
+    if (k < 0) {
+        return false;
+    }
+    if (s_pc_aj[k].data != NULL && s_pc_aj[k].head == ftData_Table_Unk0[k].data) {
+        return ftData_PcAnimFromCopy(d, dst);
+    }
+    if (!DVDOpen(lbFileGetFullName(ftData_803C23E4[k]), &fi)) {
+        return false;
+    }
+    len = fi.length;
+    buf = malloc(OSRoundUp32B(len));
+    if (buf == NULL || DVDReadPrio(&fi, buf, (s32) OSRoundUp32B(len), 0, 2) < (s32) len) {
+        DVDClose(&fi);
+        free(buf);
+        return false;
+    }
+    DVDClose(&fi);
+    free(s_pc_aj[k].data);
+    s_pc_aj[k].head = ftData_Table_Unk0[k].data;
+    s_pc_aj[k].data = buf;
+    s_pc_aj[k].size = len;
+
+    /* How much of the ARAM copy is damaged, for the log. */
+    if (PC_IS_ARAM_ADDR(d->x14) && aurora_aram_base() != NULL) {
+        struct Fighter_WaitAnimData* anims =
+            DP(struct Fighter_WaitAnimData, gFtDataList[k]->xC);
+        const u8* aram = aurora_aram_base();
+        for (m = 0; m < (int) ftData_Table_Unk0[k].count; m++) {
+            if (anims[m].x8 >= 4 && anims[m].x4 + 4 <= len &&
+                memcmp(aram + (uintptr_t) s_pc_aj[k].head + anims[m].x4,
+                       buf + anims[m].x4, 4) != 0)
+            {
+                bad++;
+            }
+        }
+    }
+    pc_log_line("ft: re-read %s (%u bytes) from the disc for kind %d motion "
+                "%d; %d of its %d motions were damaged in ARAM at %08x",
+                ftData_803C23E4[k], len, fp->kind, msid, bad,
+                (int) ftData_Table_Unk0[k].count, (u32) (uintptr_t) s_pc_aj[k].head);
+    return ftData_PcAnimFromCopy(d, dst);
+}
+
+static void ftData_PcAnimCopiesReset(void)
+{
+    int k;
+    for (k = 0; k < Ft_Kind_Max; k++) {
+        free(s_pc_aj[k].data);
+        s_pc_aj[k].head = NULL;
+        s_pc_aj[k].data = NULL;
+        s_pc_aj[k].size = 0;
+    }
+}
+#endif
+
 void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
 {
     HSD_Archive sp14;
@@ -1792,6 +1915,12 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
                     }
                 } else {
                     temp_r4_2 = temp_r3->x14;
+#ifdef TARGET_PC
+                    if (ftData_PcAnimFromCopy(
+                            (struct Fighter_WaitAnimData*) temp_r3, fp->x59C))
+                    {
+                    } else
+#endif
                     if (PC_IS_ARAM_ADDR(temp_r4_2)) {
                         lbArq_80014BD0(temp_r4_2, fp->x59C,
                                        OSRoundUp32B(temp_r3->x8), 0, 0);
@@ -1800,6 +1929,16 @@ void ftData_80085CD8(Fighter* fp, Fighter* arg1, int msid)
                     }
                     temp_ret_2 =
                         HSD_ArchiveParse(&sp14, fp->x59C->x0, temp_r3->x8);
+#ifdef TARGET_PC
+                    if (temp_ret_2 == -1 &&
+                        ftData_PcAnimReload(
+                            fp, msid, (struct Fighter_WaitAnimData*) temp_r3,
+                            fp->x59C))
+                    {
+                        temp_ret_2 = HSD_ArchiveParse(&sp14, fp->x59C->x0,
+                                                      temp_r3->x8);
+                    }
+#endif
                     if (temp_ret_2 == -1) {
                         HSD_ASSERTREPORT(0xA0F, 0,
                                          "HSD_ArchiveParse error! %x\n", msid);
@@ -1854,6 +1993,12 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
                     }
                 } else {
                     temp_r4_2 = temp_r3->x14;
+#ifdef TARGET_PC
+                    if (ftData_PcAnimFromCopy(
+                            (struct Fighter_WaitAnimData*) temp_r3, arg0->x5A0))
+                    {
+                    } else
+#endif
                     if (PC_IS_ARAM_ADDR(temp_r4_2)) {
                         lbArq_80014BD0(temp_r4_2, arg0->x5A0,
                                        OSRoundUp32B(temp_r3->x8), 0, 0);
@@ -1862,6 +2007,16 @@ FigaTree* ftData_80085E50(Fighter* arg0, int msid)
                     }
                     temp_ret_2 =
                         HSD_ArchiveParse(&sp10, arg0->x5A0->x0, temp_r3->x8);
+#ifdef TARGET_PC
+                    if (temp_ret_2 == -1 &&
+                        ftData_PcAnimReload(
+                            arg0, msid, (struct Fighter_WaitAnimData*) temp_r3,
+                            arg0->x5A0))
+                    {
+                        temp_ret_2 = HSD_ArchiveParse(&sp10, arg0->x5A0->x0,
+                                                      temp_r3->x8);
+                    }
+#endif
                     if (temp_ret_2 == -1) {
                         HSD_ASSERTREPORT(0xA45, 0,
                                          "HSD_ArchiveParse error! %x\n", msid);
