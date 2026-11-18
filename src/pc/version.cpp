@@ -65,6 +65,18 @@ SemVer SemVer::parse(std::string_view s) {
         }
     }
 
+    // Revision: a fourth number (v1.0.9.1, a follow-up to v1.0.9)
+    if (!s.empty() && s.front() == '.') {
+        s.remove_prefix(1);
+        idx = 0;
+        while (idx < s.size() && s[idx] >= '0' && s[idx] <= '9')
+            ++idx;
+        if (idx > 0) {
+            std::from_chars(s.data(), s.data() + idx, v.revision);
+            s.remove_prefix(idx);
+        }
+    }
+
     v.valid = true;
 
     // Pre-release or build metadata (-beta, -rc1, etc.)
@@ -108,6 +120,9 @@ SemVer SemVer::parse(std::string_view s) {
 std::string SemVer::to_string() const {
     std::string res =
         std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+    if (revision > 0) {
+        res += "." + std::to_string(revision);
+    }
     if (!prerelease.empty()) {
         res += "-" + prerelease;
         if (prerelease_num > 0)
@@ -122,8 +137,9 @@ std::string SemVer::to_string() const {
 bool SemVer::operator==(const SemVer& o) const {
     if (!valid || !o.valid)
         return false;
-    return std::tie(major, minor, patch, prerelease, prerelease_num, build_commits) ==
-           std::tie(o.major, o.minor, o.patch, o.prerelease, o.prerelease_num, o.build_commits);
+    return std::tie(major, minor, patch, revision, prerelease, prerelease_num, build_commits) ==
+           std::tie(o.major, o.minor, o.patch, o.revision, o.prerelease, o.prerelease_num,
+               o.build_commits);
 }
 
 bool SemVer::operator<(const SemVer& o) const {
@@ -135,6 +151,8 @@ bool SemVer::operator<(const SemVer& o) const {
         return minor < o.minor;
     if (patch != o.patch)
         return patch < o.patch;
+    if (revision != o.revision)
+        return revision < o.revision;
 
     // Normal release > pre-release
     // (Empty prerelease is a stable release, which is greater than any prerelease)

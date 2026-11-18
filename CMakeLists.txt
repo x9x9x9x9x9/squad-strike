@@ -17,7 +17,7 @@ endif ()
 if (NOT DEFINED MELEE_VERSION OR MELEE_VERSION STREQUAL "")
     set(MELEE_VERSION "${_melee_version}")
 endif ()
-if (NOT MELEE_VERSION MATCHES "^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[A-Za-z0-9.-]+)?$")
+if (NOT MELEE_VERSION MATCHES "^v?[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-[A-Za-z0-9.-]+)?$")
     message(FATAL_ERROR "Invalid MELEE_VERSION: ${MELEE_VERSION}")
 endif ()
 set_source_files_properties(src/pc/version.cpp PROPERTIES

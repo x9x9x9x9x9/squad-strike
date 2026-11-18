@@ -49,6 +49,15 @@ int main() {
     assert(v_git.build_commits == 2);
     assert(v1 < v_git);
 
+    // A fourth number: v1.0.9.1 follows v1.0.9 and comes before v1.0.10.
+    auto r = SemVer::parse("v1.0.9.1");
+    assert(r.valid && r.patch == 9 && r.revision == 1);
+    assert(r.to_string() == "1.0.9.1");
+    assert(is_update_available("v1.0.9", "v1.0.9.1"));
+    assert(!is_update_available("v1.0.9.1", "v1.0.9"));
+    assert(is_update_available("v1.0.9.1", "v1.0.10"));
+    assert(!is_update_available("v1.0.9.1", "v1.0.9.1"));
+
     std::cout << "PASS: SemVer parsing and update checking\n";
     return 0;
 }
