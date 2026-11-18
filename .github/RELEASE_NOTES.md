@@ -6,7 +6,18 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.8
+## What's new in v1.0.9
+
+- **Fix:** a crash partway through a match (seen on Realgam Colosseum) when
+  a fighter's animations had been damaged in memory on one of the two
+  computers. The game now reloads that fighter's animations from the disc
+  and carries on, and both players stay in sync.
+- **Colosseum music guard:** the stage's music can no longer write past its
+  own buffer into fighter data. A bad block of music plays as a moment of
+  wrong sound instead.
+- Holding **L** to clear your squad now takes 1 second (was 1.5).
+
+## Also in v1.0.8
 
 - **Faster Direct Connect.** Calling a friend you've played before now goes
   straight to where the game reached them last time, so it usually connects
