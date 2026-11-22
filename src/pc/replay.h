@@ -94,8 +94,11 @@ typedef struct PcReplayInfo {
 int pc_replay_list(PcReplayInfo* out, int max);
 /* The replay folder, created if missing. */
 const char* pc_replay_folder(void);
-/* Play this file when the game starts (the launcher's Watch). */
-void pc_replay_request(const char* path);
+/* Play this file when the game starts (the launcher's Watch), or with
+ * `export_to` set, turn it into that video (Export Video). */
+void pc_replay_request(const char* path, const char* export_to);
+/* What the last export said, for the launcher after the relaunch. */
+const char* pc_replay_status(void);
 /* A replay is being turned into a video (MELEE_REPLAY_EXPORT). */
 bool pc_replay_exporting(void);
 /* While a replay plays: how many ticks to run this frame of the game's

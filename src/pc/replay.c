@@ -506,7 +506,12 @@ static bool load(const char* path) {
  * and renders the mix per frame, and writes the video; then the launcher
  * comes back saying where it went. */
 static char s_export_path[1024];
-static bool s_exporting; /* the capture and the encoder are running */
+/* Handed over in memory, not through the environment: on Windows SDL sets
+ * the process environment, which the C runtime's getenv() never sees, so a
+ * replay picked in the launcher was not found when the game started. */
+static char s_request[1024], s_request_export[1024];
+static char s_status[1200]; /* for the launcher, after the relaunch */
+static bool s_exporting;    /* the capture and the encoder are running */
 static bool s_export_failed;
 
 static void capture_cb(const uint8_t* px, uint32_t w, uint32_t h, uint32_t stride, bool bgra,
@@ -558,7 +563,7 @@ static void export_end(bool keep) {
     } else {
         snprintf(msg, sizeof msg, "The video could not be written.");
     }
-    SDL_setenv_unsafe("MELEE_LAUNCHER_STATUS", msg, 1);
+    SDL_strlcpy(s_status, msg, sizeof s_status);
 }
 
 bool pc_replay_exporting(void) {
@@ -566,15 +571,19 @@ bool pc_replay_exporting(void) {
 }
 
 void pc_replay_init(void) {
-    const char* path = getenv("MELEE_REPLAY");
+    const char* path = s_request[0] != '\0' ? s_request : getenv("MELEE_REPLAY");
     if (path != NULL && path[0] != '\0') {
         s_playing = load(path);
-        const char* out = getenv("MELEE_REPLAY_EXPORT");
+        const char* out =
+            s_request_export[0] != '\0' ? s_request_export : getenv("MELEE_REPLAY_EXPORT");
         if (s_playing && out != NULL && out[0] != '\0') {
             SDL_strlcpy(s_export_path, out, sizeof s_export_path);
-            SDL_unsetenv_unsafe("MELEE_REPLAY_EXPORT");
         }
     }
+}
+
+const char* pc_replay_status(void) {
+    return s_status;
 }
 
 bool pc_replay_playing(void) {
@@ -905,8 +914,9 @@ const char* pc_replay_folder(void) {
     return buf;
 }
 
-void pc_replay_request(const char* path) {
-    SDL_setenv_unsafe("MELEE_REPLAY", path, 1);
+void pc_replay_request(const char* path, const char* export_to) {
+    SDL_strlcpy(s_request, path, sizeof s_request);
+    SDL_strlcpy(s_request_export, export_to != NULL ? export_to : "", sizeof s_request_export);
 }
 
 static bool info_from(const char* path, const char* file, PcReplayInfo* out) {

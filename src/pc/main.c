@@ -499,17 +499,19 @@ static char** s_argv;
  * minus the replay. Where a process cannot start itself (mobile) the game
  * just closes. */
 void pc_relaunch_launcher(void) {
+    const char* status = pc_replay_status();
     SDL_unsetenv_unsafe("MELEE_REPLAY");
+    SDL_unsetenv_unsafe("MELEE_REPLAY_EXPORT");
     SDL_setenv_unsafe("MELEE_LAUNCHER_PAGE", "replays", 1);
+    if (status[0] != '\0') {
+        SDL_setenv_unsafe("MELEE_LAUNCHER_STATUS", status, 1);
+    }
     pc_log_line("replay: back to the launcher");
 #if defined(_WIN32)
     SetEnvironmentVariableW(L"MELEE_REPLAY", NULL);
     SetEnvironmentVariableW(L"MELEE_REPLAY_EXPORT", NULL);
     SetEnvironmentVariableW(L"MELEE_LAUNCHER_PAGE", L"replays");
-    {
-        const char* status = getenv("MELEE_LAUNCHER_STATUS");
-        SetEnvironmentVariableA("MELEE_LAUNCHER_STATUS", status);
-    }
+    SetEnvironmentVariableA("MELEE_LAUNCHER_STATUS", status[0] != '\0' ? status : NULL);
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
     memset(&si, 0, sizeof si);

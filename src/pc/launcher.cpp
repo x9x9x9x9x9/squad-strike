@@ -887,7 +887,7 @@ class Launcher final : public Rml::EventListener {
                 status("Choose your Melee disc first: replays play from it.", true);
                 return;
             }
-            pc_replay_request(r.path);
+            pc_replay_request(r.path, nullptr);
             SDL_Log("Launcher: watching %s", r.path);
             begin_game();
             return;
@@ -922,8 +922,7 @@ class Launcher final : public Rml::EventListener {
         out.replace_extension(".mp4");
         const auto u8 = out.u8string();
         const std::string out_utf8(u8.begin(), u8.end());
-        SDL_setenv_unsafe("MELEE_REPLAY_EXPORT", out_utf8.c_str(), 1);
-        pc_replay_request(r.path);
+        pc_replay_request(r.path, out_utf8.c_str());
         SDL_Log("Launcher: exporting %s to %s", r.path, out_utf8.c_str());
         begin_game();
     }
