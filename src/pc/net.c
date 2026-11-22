@@ -289,6 +289,14 @@ static bool s_timer_tried;      /* SDL_AddTimer attempted this session */
  * Snapshot failure uses s_lockstep instead: earlier predicted frames must
  * remain eligible for correction. */
 static int s_scene_last = -1; /* scene_kind() at the last fresh tick */
+/* A scene's exit frame is agreed: fresh ticks run lockstep from here to it.
+ * Frames already predicted stay correctable -- the barrier only goes up to
+ * the exit frame once the scene actually ends. Raising it at the agreement
+ * instead locked in whatever was still predicted then: a correction for one
+ * of those frames, arriving a tick later, was refused ("cannot roll back to
+ * frame 31732 (behind the barrier)") and the match ended desynced (log of
+ * 2026-11-21, a scene-7 exit agreed at 31733 with 31730-31735 predicted). */
+static bool s_scene_exit_lockstep;
 /* Lockstep frames a fight's first loads get before it predicts. */
 #define FIGHT_ENTRY_LEAD 10
 static bool s_rb_lost_logged; /* rb_lost: one log per session */
@@ -1989,13 +1997,15 @@ static bool scene_hold_host(void) {
     s_scene_wait_since = -1;
     if (s_scene_exit_at < 0) {
         s_scene_exit_at = later + scene_handoff();
-        barrier_raise(s_scene_exit_at);
+        s_scene_exit_lockstep = true;
         pc_log_line("net: scene %u ends at frame %d (asked %d, latest %d)", s_scene_seq,
             s_scene_exit_at, s_scene_exit_local, later);
     }
     if (net.frame < s_scene_exit_at) {
         return true;
     }
+    barrier_raise(s_scene_exit_at);
+    s_scene_exit_lockstep = false;
     for (int i = 0; i < net.nlinks; i++) {
         s_scene_exit_remote_l[i][slot] = -1;
     }
@@ -2065,14 +2075,17 @@ bool pc_net_scene_hold(void) {
          * match on different remote inputs. Running the last frames of the
          * scene lockstep costs nothing -- they are the frames after the
          * match has already been decided -- and it is the same thing the
-         * entry side does. */
-        barrier_raise(s_scene_exit_at);
+         * entry side does. The frames predicted before this point stay
+         * correctable until the scene ends (s_scene_exit_lockstep). */
+        s_scene_exit_lockstep = true;
         pc_log_line("net: scene %u ends at frame %d (asked %d, peer %d)", s_scene_seq,
             s_scene_exit_at, s_scene_exit_local, *remote);
     }
     if (net.frame < s_scene_exit_at) {
         return true;
     }
+    barrier_raise(s_scene_exit_at);
+    s_scene_exit_lockstep = false;
     *remote = -1;
     s_scene_exit_local = s_scene_exit_at = -1;
     s_scene_seq++;
@@ -2316,6 +2329,7 @@ static void session_reset_link(void) {
     s_send_frame = -1;
     net.rb_barrier = -1;
     s_scene_last = -1;
+    s_scene_exit_lockstep = false;
     s_rb_lost_logged = false;
     s_last_valid = false;
     rel_reset();
@@ -3821,7 +3835,8 @@ static void fresh_tick(PADStatus* head, bool raw) {
          * opposite ticks -- one simulates a frame the other skips. */
         /* Read across the game/PC boundary: see the layout check below. */
         bool speed_1 = gmVsMelee_StartData.rules.game_speed == 1.0F;
-        bool lockstep = s_lockstep || !in_fight() || net.frame <= net.rb_barrier || !speed_1;
+        bool lockstep = s_lockstep || s_scene_exit_lockstep || !in_fight() ||
+                        net.frame <= net.rb_barrier || !speed_1;
         /* The last lockstep frames before this fight can predict: size and
          * page in the rollback ring now, a slot a frame, while the wait below
          * is for the peer anyway (net_snapshot.c snaps_reserve). A barrier
