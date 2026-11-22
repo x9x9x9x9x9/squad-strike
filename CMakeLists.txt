@@ -299,8 +299,9 @@ target_compile_options(melee PRIVATE
         $<$<AND:$<COMPILE_LANGUAGE:C>,$<BOOL:${WIN32}>>:-mno-ms-bitfields>)
 target_link_libraries(melee PRIVATE melee_game aurora::main ZLIB::ZLIB ${MELEE_CRYPTO_LIBS} ${MELEE_NETWORK_LIBS})
 if (WIN32)
-    # Replay video export (src/pc/video_export.cpp): Media Foundation.
-    target_link_libraries(melee PRIVATE mfplat mfreadwrite mfuuid ole32)
+    # Replay video export (src/pc/video_export.cpp): Media Foundation's GUIDs.
+    # Its DLLs are loaded at run time (N editions of Windows may lack them).
+    target_link_libraries(melee PRIVATE mfuuid ole32)
 endif ()
 
 if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")

@@ -53,6 +53,45 @@ public:
 };
 
 #if defined(_WIN32)
+/* Media Foundation is loaded at run time, not linked: Windows N editions
+ * ship without it until the Media Feature Pack is installed, and a game that
+ * will not start for want of a video exporter would be the wrong trade. */
+struct MfApi {
+    bool tried = false, ok = false;
+    HRESULT(WINAPI* Startup)(ULONG, DWORD) = nullptr;
+    HRESULT(WINAPI* Shutdown)() = nullptr;
+    HRESULT(WINAPI* CreateAttributes)(IMFAttributes**, UINT32) = nullptr;
+    HRESULT(WINAPI* CreateMediaType)(IMFMediaType**) = nullptr;
+    HRESULT(WINAPI* CreateMemoryBuffer)(DWORD, IMFMediaBuffer**) = nullptr;
+    HRESULT(WINAPI* CreateSample)(IMFSample**) = nullptr;
+    HRESULT(WINAPI* CreateSinkWriterFromURL)
+    (LPCWSTR, IMFByteStream*, IMFAttributes*, IMFSinkWriter**) = nullptr;
+} mf;
+
+template <class F>
+bool sym(HMODULE m, const char* name, F& out) {
+    out = reinterpret_cast<F>(reinterpret_cast<void*>(GetProcAddress(m, name)));
+    return out != nullptr;
+}
+
+bool mf_load() {
+    if (mf.tried)
+        return mf.ok;
+    mf.tried = true;
+    HMODULE plat = LoadLibraryW(L"mfplat.dll");
+    HMODULE rw = LoadLibraryW(L"mfreadwrite.dll");
+    mf.ok = plat != nullptr && rw != nullptr && sym(plat, "MFStartup", mf.Startup) &&
+            sym(plat, "MFShutdown", mf.Shutdown) &&
+            sym(plat, "MFCreateAttributes", mf.CreateAttributes) &&
+            sym(plat, "MFCreateMediaType", mf.CreateMediaType) &&
+            sym(plat, "MFCreateMemoryBuffer", mf.CreateMemoryBuffer) &&
+            sym(plat, "MFCreateSample", mf.CreateSample) &&
+            sym(rw, "MFCreateSinkWriterFromURL", mf.CreateSinkWriterFromURL);
+    if (!mf.ok)
+        pc_log_line("video: Media Foundation is not available on this Windows");
+    return mf.ok;
+}
+
 template <class T>
 void release(T*& p) {
     if (p != nullptr) {
@@ -68,31 +107,31 @@ public:
     ~MfBackend() override {
         release(writer);
         if (started)
-            MFShutdown();
+            mf.Shutdown();
         if (com)
             CoUninitialize();
     }
     bool open(const char* path) {
         com = SUCCEEDED(CoInitializeEx(nullptr, COINIT_MULTITHREADED));
-        if (FAILED(MFStartup(MF_VERSION)))
+        if (FAILED(mf.Startup(MF_VERSION, MFSTARTUP_FULL)))
             return fail("MFStartup");
         started = true;
         int n = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
         std::wstring wpath(n > 0 ? n : 1, L'\0');
         MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath.data(), n);
         IMFAttributes* attr = nullptr;
-        MFCreateAttributes(&attr, 2);
+        mf.CreateAttributes(&attr, 2);
         if (attr != nullptr) {
             attr->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
             attr->SetGUID(MF_TRANSCODE_CONTAINERTYPE, MFTranscodeContainerType_MPEG4);
         }
-        HRESULT hr = MFCreateSinkWriterFromURL(wpath.c_str(), nullptr, attr, &writer);
+        HRESULT hr = mf.CreateSinkWriterFromURL(wpath.c_str(), nullptr, attr, &writer);
         release(attr);
         if (FAILED(hr))
             return fail("MFCreateSinkWriterFromURL", hr);
 
         IMFMediaType* type = nullptr;
-        MFCreateMediaType(&type);
+        mf.CreateMediaType(&type);
         type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
         type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
         type->SetUINT32(MF_MT_AVG_BITRATE, width >= 1920 ? 16000000 : 10000000);
@@ -106,7 +145,7 @@ public:
         if (FAILED(hr))
             return fail("AddStream(video)", hr);
 
-        MFCreateMediaType(&type);
+        mf.CreateMediaType(&type);
         type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
         type->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
         type->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
@@ -119,7 +158,7 @@ public:
         if (FAILED(hr))
             return fail("SetInputMediaType(video)", hr);
 
-        MFCreateMediaType(&type);
+        mf.CreateMediaType(&type);
         type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
         type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_AAC);
         type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
@@ -131,7 +170,7 @@ public:
         if (FAILED(hr))
             return fail("AddStream(audio)", hr);
 
-        MFCreateMediaType(&type);
+        mf.CreateMediaType(&type);
         type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Audio);
         type->SetGUID(MF_MT_SUBTYPE, MFAudioFormat_PCM);
         type->SetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE, 16);
@@ -152,7 +191,7 @@ public:
     bool video(const uint8_t* bgra, uint64_t index) override {
         const DWORD size = DWORD(width) * height * 4;
         IMFMediaBuffer* buffer = nullptr;
-        if (FAILED(MFCreateMemoryBuffer(size, &buffer)))
+        if (FAILED(mf.CreateMemoryBuffer(size, &buffer)))
             return false;
         BYTE* dst = nullptr;
         buffer->Lock(&dst, nullptr, nullptr);
@@ -168,7 +207,7 @@ public:
     bool audio(const int16_t* samples, size_t frames) override {
         const DWORD size = DWORD(frames * 4);
         IMFMediaBuffer* buffer = nullptr;
-        if (frames == 0 || FAILED(MFCreateMemoryBuffer(size, &buffer)))
+        if (frames == 0 || FAILED(mf.CreateMemoryBuffer(size, &buffer)))
             return frames == 0;
         BYTE* dst = nullptr;
         buffer->Lock(&dst, nullptr, nullptr);
@@ -191,7 +230,7 @@ public:
 private:
     bool write(DWORD stream, IMFMediaBuffer* buffer, LONGLONG t, LONGLONG d) {
         IMFSample* sample = nullptr;
-        if (FAILED(MFCreateSample(&sample)))
+        if (FAILED(mf.CreateSample(&sample)))
             return false;
         sample->AddBuffer(buffer);
         sample->SetSampleTime(t);
@@ -334,7 +373,7 @@ bool ffmpeg_on_path() {
 
 extern "C" bool pc_video_available(void) {
 #if defined(_WIN32)
-    return true;
+    return mf_load();
 #elif !defined(HAVE_FFMPEG_PIPE)
     return false;
 #else
@@ -350,11 +389,13 @@ extern "C" bool pc_video_open(const char* path, int width, int height, int audio
         return false;
     Backend* backend = nullptr;
 #if defined(_WIN32)
-    auto* mf = new MfBackend(width, height);
-    if (mf->open(path))
-        backend = mf;
+    if (!mf_load())
+        return false;
+    auto* writer = new MfBackend(width, height);
+    if (writer->open(path))
+        backend = writer;
     else
-        delete mf;
+        delete writer;
 #elif defined(HAVE_FFMPEG_PIPE)
     auto* ff = new FfmpegBackend(width, height);
     if (ff->open(path))

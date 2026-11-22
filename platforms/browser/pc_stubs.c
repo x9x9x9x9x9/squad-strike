@@ -18,6 +18,7 @@
 #include "pc/file_cache.h"
 #include "pc/pc.h"
 #include "pc/paths.h"
+#include "pc/replay.h"
 #include "pc/slp.h"
 
 /* Desktop launcher preferences; defaults match launcher_data.hpp. MELEE_UCF is
@@ -180,4 +181,50 @@ void pc_slp_tick_end(uint64_t proc_mask) {
 }
 void pc_slp_pre_frame(struct HSD_GObj* gobj) {
     (void)gobj;
+}
+
+/* Replays (src/pc/replay.c) need the desktop launcher to be watched and a
+ * file system to be kept in, so the browser neither records nor plays them;
+ * the simulation keeps netplay's rules for what reproduces. */
+bool pc_net_deterministic(void);
+bool pc_sim_render_decoupled(void) {
+    return pc_net_deterministic();
+}
+bool pc_online_ruleset(void) {
+    return pc_net_deterministic();
+}
+bool pc_replay_playing(void) {
+    return false;
+}
+bool pc_replay_match_active(void) {
+    return false;
+}
+bool pc_replay_exporting(void) {
+    return false;
+}
+int pc_replay_mode_override(void) {
+    return -1;
+}
+int pc_replay_tick_budget(int count) {
+    return count;
+}
+void pc_replay_match_start(const struct StartMeleeData* data) {
+    (void)data;
+}
+void pc_replay_match_end(void) {}
+void pc_replay_setup_match(struct StartMeleeData* start) {
+    (void)start;
+}
+const struct PADStatus* pc_replay_renew(const struct PADStatus* q, bool* skip) {
+    (void)q;
+    *skip = false;
+    return NULL;
+}
+bool pc_replay_rule_flags(unsigned* flags) {
+    (void)flags;
+    return false;
+}
+void pc_video_audio(const float* samples, int frames) {
+    (void)samples;
+    (void)frames;
 }

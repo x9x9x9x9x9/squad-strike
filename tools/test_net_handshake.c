@@ -84,6 +84,10 @@ void SDL_UnlockMutex(SDL_Mutex* m) {
 }
 void recv_inputs(void) {}
 void net_ports_settle(void) {}
+bool pc_replay_rule_flags(unsigned* flags) {
+    (void)flags;
+    return false;
+}
 void net_desync_reset(void) {
     net.desync_reported = false;
 }
