@@ -75,7 +75,7 @@ bool pc_ace_stage_offered(int stage);
 bool pc_sdremix_active(void);
 const char* pc_get_net_name(void);
 
-#define SSR_VERSION 1
+#define SSR_VERSION 2 /* 2: the squad match state (GmSquadLive) */
 #define SSR_CK_EVERY 30
 /* The setup bytes of StartMeleeRules: everything before its callbacks,
  * which are pointers into this process and mean nothing in another. */
@@ -107,7 +107,8 @@ typedef struct SsrHeader {
     PlayerInitData player[GM_MAX_PLAYERS];
     GmSquadMember squad[GMSQUAD_PORTS][GMSQUAD_EXTRA];
     uint8_t coin_pos[GMSQUAD_PORTS];
-    char name[32]; /* this machine's player name */
+    GmSquadLive squad_live; /* the lineups gmSquad_OnEnterVs built */
+    char name[32];          /* this machine's player name */
     uint32_t frames;
     uint32_t data_size; /* uncompressed frame bytes */
     uint32_t packed_size;
@@ -266,6 +267,7 @@ void pc_replay_match_start(const StartMeleeData* data) {
     s_hdr.unlock = pc_unlock_state_get();
     memcpy(s_hdr.rules, &data->rules, RULES_BYTES);
     memcpy(s_hdr.player, data->players, sizeof s_hdr.player);
+    gmSquad_SaveLive(&s_hdr.squad_live);
     if (gmSquad_ModeAllowed()) {
         memcpy(s_hdr.squad, gmSquad_rows, sizeof s_hdr.squad);
         memcpy(s_hdr.coin_pos, gmSquad_coin_pos, sizeof s_hdr.coin_pos);
@@ -605,6 +607,7 @@ void pc_replay_setup_match(StartMeleeData* start) {
     memcpy(&start->rules, s_play.rules, RULES_BYTES);
     memcpy(start->players, s_play.player, sizeof s_play.player);
     gmSquad_Restore(s_play.squad, s_play.coin_pos);
+    gmSquad_RestoreLive(&s_play.squad_live);
     grAce_Pick = s_play.ace_pick;
     pc_unlock_state_set(s_play.unlock);
 }
@@ -965,10 +968,11 @@ static bool info_from(const char* path, const char* file, PcReplayInfo* out) {
         rp->cpu = pl->slot_type == Gm_PKind_Cpu;
         rp->end_stocks = h.end_stocks[i];
         rp->team = pl->team;
+        /* A squad: its lineup in fighting order, as the match ran it. */
+        const GmSquadLive* sq = &h.squad_live;
         for (int k = 0; k < 3; k++) {
-            rp->squad[k] = k < GMSQUAD_EXTRA && present && (h.rule_flags & PC_RULE_SQUAD_STRIKE) &&
-                                   h.squad[i][k].ckind < 26 ?
-                               (int8_t)h.squad[i][k].ckind :
+            rp->squad[k] = present && sq->live && k + 1 < sq->count[i] && k + 1 < GMSQUAD_SIZE ?
+                               (int8_t)sq->lineup[i][k + 1].ckind :
                                -1;
         }
     }

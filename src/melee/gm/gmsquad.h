@@ -56,6 +56,18 @@ extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
 /// Kept up by character select (gmSquad_TrackCoin).
 extern u8 gmSquad_coin_pos[GMSQUAD_PORTS];
 
+/// A squad match's state as it starts: what gmSquad_OnEnterVs worked out
+/// from the squads picked. A replay keeps it, since its playback starts the
+/// match directly and never passes through gmSquad_OnEnterVs.
+typedef struct GmSquadLive {
+    u8 live;
+    s8 stocks;
+    u8 count[GMSQUAD_PORTS];
+    GmSquadMember lineup[GMSQUAD_PORTS][GMSQUAD_SIZE];
+} GmSquadLive;
+void gmSquad_SaveLive(GmSquadLive* out);
+void gmSquad_RestoreLive(const GmSquadLive* in);
+
 /// The squads a replay recorded (src/pc/replay.c), before its match.
 void gmSquad_Restore(const GmSquadMember rows[GMSQUAD_PORTS][GMSQUAD_EXTRA],
                      const u8 coin_pos[GMSQUAD_PORTS]);

@@ -69,6 +69,26 @@ void gmSquad_Restore(const GmSquadMember rows[GMSQUAD_PORTS][GMSQUAD_EXTRA],
     memcpy(gmSquad_coin_pos, coin_pos, sizeof(gmSquad_coin_pos));
 }
 
+void gmSquad_SaveLive(GmSquadLive* out)
+{
+    memset(out, 0, sizeof(*out));
+    out->live = s_live;
+    out->stocks = s_stocks;
+    memcpy(out->count, s_lineup_count, sizeof(out->count));
+    memcpy(out->lineup, s_lineup, sizeof(out->lineup));
+}
+
+void gmSquad_RestoreLive(const GmSquadLive* in)
+{
+    gmSquad_Disable();
+    init();
+    s_live = in->live != 0;
+    s_stocks = in->stocks;
+    memcpy(s_lineup_count, in->count, sizeof(s_lineup_count));
+    memcpy(s_lineup, in->lineup, sizeof(s_lineup));
+    memset(s_index, 0, sizeof(s_index));
+}
+
 bool gmSquad_ModeAllowed(void)
 {
     if (!pc_is_squad_strike_enabled()) {
