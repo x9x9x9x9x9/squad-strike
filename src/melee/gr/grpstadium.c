@@ -41,6 +41,7 @@
 #include <melee/ft/types.h>
 #include "pc/file_cache.h"
 #include "pc/net.h"
+#include "pc/replay.h"
 #include "pc/widescreen.h"
 /* The transformation archive the pending load is for; in .bss, so a
  * snapshot carries it with the load state it belongs to. */
@@ -1389,7 +1390,7 @@ bool grStadium_801D32D0(Ground_GObj* gobj)
      * question instead: is the fighter inside the stage's camera limits
      * (-170..170, -60..120) less a fixed margin. The monitor placement below
      * still follows the camera; only the decision moves. */
-    if (pc_net_deterministic()) {
+    if (pc_sim_render_decoupled()) {
         player_gobj = Player_GetEntity(gp->u.display.xEE);
         if (player_gobj == NULL || Player_8003219C(gp->u.display.xEE)) {
             return false;

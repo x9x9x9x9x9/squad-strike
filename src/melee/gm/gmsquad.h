@@ -56,6 +56,10 @@ extern GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
 /// Kept up by character select (gmSquad_TrackCoin).
 extern u8 gmSquad_coin_pos[GMSQUAD_PORTS];
 
+/// The squads a replay recorded (src/pc/replay.c), before its match.
+void gmSquad_Restore(const GmSquadMember rows[GMSQUAD_PORTS][GMSQUAD_EXTRA],
+                     const u8 coin_pos[GMSQUAD_PORTS]);
+
 /// Character select, every frame per open door: has_coin_pick is whether
 /// the door has a coin pick now.
 void gmSquad_TrackCoin(int port, bool has_coin_pick);

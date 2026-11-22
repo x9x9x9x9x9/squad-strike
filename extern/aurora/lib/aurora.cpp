@@ -3,6 +3,9 @@
 #include <aurora/performance.h>
 #include "android_performance.hpp"
 #include <cmath>
+#include <array>
+#include <atomic>
+#include <mutex>
 
 #ifdef AURORA_ENABLE_GX
 #include "gfx/resources.hpp"
@@ -30,6 +33,7 @@
 #include "window.hpp"
 
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_timer.h>
 #include <magic_enum.hpp>
 
 #include "system_info.hpp"
@@ -325,6 +329,84 @@ bool begin_frame() noexcept {
   return true;
 }
 
+#ifdef AURORA_ENABLE_GX
+/* ---- melee-pc: frame capture (aurora_capture_*) ---- */
+namespace capture {
+constexpr size_t Slots = 8;
+struct Slot {
+  wgpu::Buffer buffer;
+  std::atomic<int> state{0}; /* 0 free, 1 queued, 2 mapping */
+};
+std::mutex g_mutex;
+bool g_active = false;
+uint32_t g_width = 0, g_height = 0, g_stride = 0;
+bool g_bgra = true;
+AuroraCaptureCallback g_cb = nullptr;
+void* g_user = nullptr;
+wgpu::Texture g_texture;
+wgpu::TextureView g_view;
+std::array<Slot, Slots> g_slots;
+int g_want = -1; /* slot reserved for the next end_frame, -1 none */
+uint64_t g_next = 0;
+
+void poll() {
+  if (webgpu::g_instance) {
+    webgpu::g_instance.ProcessEvents();
+  }
+}
+
+/* Render-thread side, inside the frame's command encoder. */
+void record(wgpu::CommandEncoder& encoder, int slot) {
+  const auto viewport = webgpu::calculate_present_viewport(g_width, g_height, webgpu::present_source().size.width,
+                                                           webgpu::present_source().size.height);
+  const std::array attachments{
+      wgpu::RenderPassColorAttachment{
+          .view = g_view,
+          .loadOp = wgpu::LoadOp::Clear,
+          .storeOp = wgpu::StoreOp::Store,
+          .clearValue = {0.0, 0.0, 0.0, 1.0},
+      },
+  };
+  const wgpu::RenderPassDescriptor desc{
+      .label = "Capture blit",
+      .colorAttachmentCount = attachments.size(),
+      .colorAttachments = attachments.data(),
+  };
+  const auto pass = encoder.BeginRenderPass(&desc);
+  pass.SetPipeline(webgpu::g_CopyPipeline);
+  pass.SetBindGroup(0, webgpu::g_CopyBindGroup, 0, nullptr);
+  set_present_viewport(pass, viewport, g_width, g_height);
+  pass.Draw(3);
+  pass.End();
+  const wgpu::TexelCopyTextureInfo src{.texture = g_texture};
+  const wgpu::TexelCopyBufferInfo dst{
+      .layout = {.offset = 0, .bytesPerRow = g_stride, .rowsPerImage = g_height},
+      .buffer = g_slots[slot].buffer,
+  };
+  const wgpu::Extent3D size{g_width, g_height, 1};
+  encoder.CopyTextureToBuffer(&src, &dst, &size);
+}
+
+/* After the frame's submit: read it back and hand it over. */
+void map(int slot, uint64_t index) {
+  g_slots[slot].state.store(2, std::memory_order_release);
+  g_slots[slot].buffer.MapAsync(
+      wgpu::MapMode::Read, 0, uint64_t(g_stride) * g_height, wgpu::CallbackMode::AllowSpontaneous,
+      [slot, index](wgpu::MapAsyncStatus status, wgpu::StringView) {
+        auto& s = g_slots[slot];
+        if (status == wgpu::MapAsyncStatus::Success) {
+          const auto* data = static_cast<const uint8_t*>(s.buffer.GetConstMappedRange(0, uint64_t(g_stride) * g_height));
+          if (data != nullptr && g_cb != nullptr) {
+            g_cb(data, g_width, g_height, g_stride, g_bgra, index, g_user);
+          }
+          s.buffer.Unmap();
+        }
+        s.state.store(0, std::memory_order_release);
+      });
+}
+} // namespace capture
+#endif
+
 void end_frame() noexcept {
   ZoneScoped;
   AndroidTraceScope trace("Aurora end frame / FIFO drain");
@@ -354,9 +436,22 @@ void end_frame() noexcept {
   }
 #endif
 
+  int captureSlot = -1;
+  uint64_t captureIndex = 0;
+  {
+    std::lock_guard lock{capture::g_mutex};
+    if (capture::g_active && capture::g_want >= 0) {
+      captureSlot = capture::g_want;
+      captureIndex = capture::g_next++;
+      capture::g_want = -1;
+    }
+  }
   gfx::end_frame([rmlBindGroup = std::move(rmlBindGroup), rmlOverlay, viewport,
-                  imguiDrawData = std::move(imguiDrawData)](
+                  imguiDrawData = std::move(imguiDrawData), captureSlot, captureIndex](
                      wgpu::CommandEncoder& encoder, std::vector<gfx::AfterSubmitCallback> afterSubmitCallbacks) {
+    if (captureSlot >= 0) {
+      capture::record(encoder, captureSlot);
+    }
     wgpu::Texture currentTexture;
     wgpu::TextureView currentView;
     auto surfaceStatus = wgpu::SurfaceGetCurrentTextureStatus::Error;
@@ -460,6 +555,9 @@ void end_frame() noexcept {
       ZoneScopedN("Queue Submit");
       AndroidTraceScope trace("GPU queue submit");
       g_queue.Submit(1, &buffer);
+    }
+    if (captureSlot >= 0) {
+      capture::map(captureSlot, captureIndex);
     }
     webgpu::gpu_prof::after_submit();
     if (canPresent && g_surface) {
@@ -580,6 +678,104 @@ void aurora_shutdown() {
 const AuroraEvent* aurora_update() { return aurora::update(); }
 bool aurora_begin_frame() { return aurora::begin_frame(); }
 void aurora_end_frame() { aurora::end_frame(); }
+
+#ifdef AURORA_ENABLE_GX
+bool aurora_capture_begin(uint32_t width, uint32_t height, AuroraCaptureCallback cb, void* user) {
+  using namespace aurora;
+  namespace c = aurora::capture;
+  if (!webgpu::g_device || width == 0 || height == 0 || cb == nullptr) {
+    return false;
+  }
+  const auto format = webgpu::g_graphicsConfig.surfaceConfiguration.format;
+  if (format != wgpu::TextureFormat::BGRA8Unorm && format != wgpu::TextureFormat::RGBA8Unorm &&
+      format != wgpu::TextureFormat::BGRA8UnormSrgb && format != wgpu::TextureFormat::RGBA8UnormSrgb) {
+    Log.warn("Capture: surface format {} is not 8-bit RGBA", magic_enum::enum_name(format));
+    return false;
+  }
+  std::lock_guard lock{c::g_mutex};
+  c::g_width = width;
+  c::g_height = height;
+  c::g_stride = (width * 4 + 255) & ~255u;
+  c::g_bgra = format == wgpu::TextureFormat::BGRA8Unorm || format == wgpu::TextureFormat::BGRA8UnormSrgb;
+  c::g_cb = cb;
+  c::g_user = user;
+  const wgpu::TextureDescriptor td{
+      .label = "Capture texture",
+      .usage = wgpu::TextureUsage::RenderAttachment | wgpu::TextureUsage::CopySrc,
+      .size = {width, height, 1},
+      .format = format,
+  };
+  c::g_texture = webgpu::g_device.CreateTexture(&td);
+  c::g_view = c::g_texture.CreateView();
+  for (auto& s : c::g_slots) {
+    const wgpu::BufferDescriptor bd{
+        .label = "Capture readback",
+        .usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst,
+        .size = uint64_t(c::g_stride) * height,
+    };
+    s.buffer = webgpu::g_device.CreateBuffer(&bd);
+    s.state.store(0);
+  }
+  c::g_want = -1;
+  c::g_next = 0;
+  c::g_active = true;
+  return true;
+}
+
+void aurora_capture_frame(void) {
+  namespace c = aurora::capture;
+  for (;;) {
+    {
+      std::lock_guard lock{c::g_mutex};
+      if (!c::g_active || c::g_want >= 0) {
+        return;
+      }
+      for (size_t i = 0; i < c::Slots; ++i) {
+        int expected = 0;
+        if (c::g_slots[i].state.compare_exchange_strong(expected, 1)) {
+          c::g_want = int(i);
+          return;
+        }
+      }
+    }
+    c::poll();
+    SDL_Delay(1);
+  }
+}
+
+void aurora_capture_end(void) {
+  namespace c = aurora::capture;
+  {
+    std::lock_guard lock{c::g_mutex};
+    if (!c::g_active) {
+      return;
+    }
+    if (c::g_want >= 0) {
+      c::g_slots[c::g_want].state.store(0);
+      c::g_want = -1;
+    }
+  }
+  aurora::gfx::render_worker::synchronize();
+  for (int tries = 0; tries < 5000; ++tries) {
+    bool busy = false;
+    for (auto& s : c::g_slots) {
+      busy = busy || s.state.load() != 0;
+    }
+    if (!busy) {
+      break;
+    }
+    c::poll();
+    SDL_Delay(1);
+  }
+  std::lock_guard lock{c::g_mutex};
+  c::g_active = false;
+  for (auto& s : c::g_slots) {
+    s.buffer = {};
+  }
+  c::g_view = {};
+  c::g_texture = {};
+}
+#endif
 SDL_Window* aurora_get_window() { return aurora::window::get_sdl_window(); }
 AuroraWindowSize aurora_get_window_size() {
   return aurora::window::get_sdl_window() != nullptr ? aurora::window::get_window_size() : AuroraWindowSize{};

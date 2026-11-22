@@ -9,6 +9,8 @@
 #include "net_identity.h"
 #include "net.h"
 #include "pc.h"
+#include "replay.h"
+#include "video_export.h"
 #include "android_hooks.h"
 #include <RmlUi/Core/Elements/ElementFormControl.h>
 #include <aurora/dvd.h>
@@ -253,7 +255,48 @@ constexpr const char* disc_note = "Use Choose Disc to pick a disc image.";
 constexpr const char* disc_note = "Drop a disc image here, or use Choose Disc.";
 #endif
 /* Melee colours the menu frame after the entry under the cursor. */
-constexpr const char* main_ids[] = {"play", "choose", "verify", "settings", "discord", "quit"};
+constexpr const char* main_ids[] = {
+    "play", "replays", "choose", "verify", "settings", "discord", "quit"};
+constexpr const char* replay_action_ids[] = {
+    "replay-watch", "replay-export", "replay-delete", "replay-folder", "replay-back"};
+
+/* Names for the replay list. */
+const char* replay_fighter(int ckind) {
+    static const char* const names[] = {"Captain Falcon", "Donkey Kong", "Fox", "Mr. Game & Watch",
+        "Kirby", "Bowser", "Link", "Luigi", "Mario", "Marth", "Mewtwo", "Ness", "Peach", "Pikachu",
+        "Ice Climbers", "Jigglypuff", "Samus", "Yoshi", "Zelda", "Sheik", "Falco", "Young Link",
+        "Dr. Mario", "Roy", "Pichu", "Ganondorf"};
+    return ckind >= 0 && ckind < int(std::size(names)) ? names[ckind] : "?";
+}
+std::string replay_stage(const PcReplayInfo& r) {
+    if (r.stkind == 0x35) {
+        static const char* const ace[] = {
+            "ACE stage", "Metal Cavern", "WarioWare", "Realgam Colosseum"};
+        return r.ace_pick < std::size(ace) ? ace[r.ace_pick] : ace[0];
+    }
+    static const char* const names[] = {"", "Test", "Fountain of Dreams", "Pok\xc3\xa9mon Stadium",
+        "Princess Peach's Castle", "Kongo Jungle", "Brinstar", "Corneria", "Yoshi's Story", "Onett",
+        "Mute City", "Rainbow Cruise", "Jungle Japes", "Great Bay", "Hyrule Temple",
+        "Brinstar Depths", "Yoshi's Island", "Green Greens", "Fourside", "Mushroom Kingdom",
+        "Mushroom Kingdom II", "Akaneia", "Venom", "Pok\xc3\xa9 Floats", "Big Blue",
+        "Icicle Mountain", "Icetop", "Flat Zone", "Dream Land", "Yoshi's Island (N64)",
+        "Kongo Jungle (N64)", "Battlefield", "Final Destination"};
+    return r.stkind < std::size(names) ? names[r.stkind] : "Stage " + std::to_string(r.stkind);
+}
+std::string rml_escape(const std::string& in) {
+    std::string out;
+    for (char c : in) {
+        if (c == '&')
+            out += "&amp;";
+        else if (c == '<')
+            out += "&lt;";
+        else if (c == '>')
+            out += "&gt;";
+        else
+            out += c;
+    }
+    return out;
+}
 
 class Launcher final : public Rml::EventListener {
     SDL_Window* window;
@@ -265,6 +308,13 @@ class Launcher final : public Rml::EventListener {
     std::atomic_uint progress{0};
     std::string pending_path, verification_identity, selected_identity;
     bool supported = false, settings = false, quiet = false;
+    // The replay list (Replays on the main menu).
+    bool replays = false, delete_armed = false;
+    std::vector<PcReplayInfo> replay_list;
+    std::vector<std::string> replay_rows;
+    int replay_sel = -1;
+    bool open_replays_after_inspect = false;
+    std::string replay_status; /* what a replay export said, for the list */
     uint64_t last_identity_check = 0, last_axis = 0, last_axis_x = 0;
     unsigned last_progress = 101;
     std::vector<std::string> focus_ids;
@@ -333,7 +383,7 @@ class Launcher final : public Rml::EventListener {
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
-            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
+            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen", "save-replays"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping", "net-two-players"};
         case 5:
@@ -357,6 +407,11 @@ class Launcher final : public Rml::EventListener {
      * settings whichever column holds the focus, the categories or the rows
      * of the open page. */
     std::vector<std::string> column() {
+        if (replays) {
+            if (within(document->GetContext()->GetFocusElement(), "replay-list"))
+                return replay_rows;
+            return {std::begin(replay_action_ids), std::end(replay_action_ids)};
+        }
         if (!settings)
             return focus_ids;
         if (in_rows(document->GetContext()->GetFocusElement()))
@@ -393,7 +448,11 @@ class Launcher final : public Rml::EventListener {
             return;
         // Only one plate lit: the open page's gives way to Back's.
         document->SetClass("on-back", e->GetId() == "back");
-        if (!settings) {
+        if (replays) {
+            const auto id = e->GetId();
+            if (id.rfind("replay-row-", 0) == 0)
+                select_replay(std::atoi(id.c_str() + 11));
+        } else if (!settings) {
             for (const char* t : main_ids)
                 if (e->GetId() == t)
                     set_theme(t);
@@ -434,6 +493,7 @@ class Launcher final : public Rml::EventListener {
         enabled("verify", verification.valid() || (supported && !busy()));
         enabled("settings", !busy());
         enabled("discord", !busy());
+        enabled("replays", !busy());
         text("verify-label", verification.valid() ? "Cancel Verify" : "Verify Disc");
         focus_ids.assign(std::begin(main_ids), std::end(main_ids));
     }
@@ -473,6 +533,10 @@ class Launcher final : public Rml::EventListener {
     }
     // B or Escape: rows to categories, categories to the main menu.
     void back() {
+        if (replays) {
+            show_replays(false);
+            return;
+        }
         if (!settings) {
             if (verification.valid())
                 cancel = true;
@@ -517,6 +581,18 @@ class Launcher final : public Rml::EventListener {
         if (!focus || focus->IsPseudoClassSet("disabled"))
             return;
         const auto id = focus->GetId();
+        if (replays) {
+            if (direction < 0 && within(focus, "replay-list"))
+                element("replay-watch")->Focus();
+            else if (direction > 0 && !within(focus, "replay-list") && !replay_rows.empty()) {
+                const int i = replay_sel >= 0 ? replay_sel : 0;
+                if (auto* row = element(replay_rows[i].c_str())) {
+                    row->Focus();
+                    row->ScrollIntoView();
+                }
+            }
+            return;
+        }
         if (settings && index_of(tab_ids, id) >= 0) {
             if (direction > 0)
                 enter_rows();
@@ -594,6 +670,7 @@ class Launcher final : public Rml::EventListener {
         text("sd-remix", prefs.sd_remix ? "On" : "Off");
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
         text("results-screen", prefs.results_screen ? "On" : "Off");
+        text("save-replays", prefs.save_replays ? "On" : "Off");
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("rumble", prefs.rumble ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -627,6 +704,7 @@ class Launcher final : public Rml::EventListener {
     }
     void show_settings(bool show) {
         settings = show;
+        text("title-sub", "/ Settings");
         document->SetClass("in-settings", show);
         refresh_settings();
         if (show) {
@@ -636,6 +714,218 @@ class Launcher final : public Rml::EventListener {
         }
         controls();
         element("settings")->Focus();
+    }
+    /* ---- Replays ---- */
+    void show_replays(bool show) {
+        replays = show;
+        delete_armed = false;
+        document->SetClass("in-replays", show);
+        if (show) {
+            text("title-sub", "/ Replays");
+            set_theme("replays");
+            refresh_replays();
+            if (!replay_rows.empty()) {
+                if (auto* row = element(replay_rows[0].c_str()))
+                    row->Focus();
+            } else
+                element("replay-back")->Focus();
+            return;
+        }
+        controls();
+        element("replays")->Focus();
+    }
+    void refresh_replays() {
+        replay_list.resize(1000);
+        const int n = pc_replay_list(replay_list.data(), int(replay_list.size()));
+        replay_list.resize(std::max(n, 0));
+        replay_rows.clear();
+        std::string rml;
+        for (size_t i = 0; i < replay_list.size(); ++i) {
+            const auto& r = replay_list[i];
+            const auto id = "replay-row-" + std::to_string(i);
+            replay_rows.push_back(id);
+            rml += "<button id=\"" + id + "\" class=\"replay" + (r.playable ? "" : " unplayable") +
+                   "\" data-desc=\"" + rml_escape(replay_desc(r)) + "\">" +
+                   rml_escape(replay_title(r)) + "<span class=\"detail\">" +
+                   rml_escape(replay_detail(r)) + "</span></button>";
+        }
+        if (rml.empty())
+            rml = "<p class=\"note\">No replays yet. Every match you play is saved here "
+                  "(Settings, Gameplay, Save replays).</p>";
+        if (auto* list = element("replay-list"))
+            list->SetInnerRML(rml);
+        replay_sel = replay_list.empty() ? -1 : 0;
+        update_replay_buttons();
+    }
+    static std::string fighters(const PcReplayPlayer& p) {
+        std::string s = replay_fighter(p.ckind);
+        for (int k = 0; k < 3; ++k)
+            if (p.squad[k] >= 0)
+                s += std::string(" + ") + replay_fighter(p.squad[k]);
+        if (p.cpu)
+            s += " (CPU)";
+        return s;
+    }
+    std::string replay_title(const PcReplayInfo& r) const {
+        if (!r.playable)
+            return r.file;
+        std::string s;
+        for (const auto& p : r.players) {
+            if (p.ckind < 0)
+                continue;
+            if (!s.empty())
+                s += "  vs  ";
+            s += fighters(p);
+        }
+        return s.empty() ? r.file : s;
+    }
+    std::string replay_detail(const PcReplayInfo& r) const {
+        std::string s;
+        SDL_DateTime dt;
+        if (SDL_TimeToDateTime(SDL_Time(r.created) * SDL_NS_PER_SECOND, &dt, true)) {
+            static const char* const months[] = {
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+            const int hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+            char when[64];
+            std::snprintf(when, sizeof when, "%s %d, %d  %d:%02d %s", months[(dt.month + 11) % 12],
+                dt.day, dt.year, hour, dt.minute, dt.hour < 12 ? "AM" : "PM");
+            s = when;
+        }
+        if (!r.playable)
+            return s + "  \xc2\xb7  made by " + r.version + ", can't be played on this version";
+        const unsigned secs = r.frames / 60;
+        s += "  \xc2\xb7  " + replay_stage(r) + "  \xc2\xb7  " + std::to_string(secs / 60) + ":" +
+             (secs % 60 < 10 ? "0" : "") + std::to_string(secs % 60);
+        if (r.online)
+            s += "  \xc2\xb7  Online";
+        if (r.sdremix)
+            s += "  \xc2\xb7  SD Remix";
+        /* The winner of a stock match: the only side with stocks left. */
+        if (r.stock_match && !r.is_teams) {
+            int alive = 0, port = -1;
+            for (int i = 0; i < 4; ++i)
+                if (r.players[i].ckind >= 0 && r.players[i].end_stocks > 0) {
+                    ++alive;
+                    port = i;
+                }
+            if (alive == 1)
+                s += "  \xc2\xb7  P" + std::to_string(port + 1) + " won";
+        }
+        return s;
+    }
+    std::string replay_desc(const PcReplayInfo& r) const {
+        return std::string(r.file) + "  \xc2\xb7  " + std::to_string(r.bytes / 1024 + 1) +
+               " KB  \xc2\xb7  " + r.version;
+    }
+    void select_replay(int i) {
+        if (i < 0 || i >= int(replay_list.size()) || i == replay_sel)
+            return;
+        if (replay_sel >= 0 && replay_sel < int(replay_rows.size()))
+            if (auto* e = element(replay_rows[replay_sel].c_str()))
+                e->SetClass("selected", false);
+        replay_sel = i;
+        delete_armed = false;
+        if (auto* e = element(replay_rows[i].c_str()))
+            e->SetClass("selected", true);
+        update_replay_buttons();
+    }
+    void update_replay_buttons() {
+        const bool any = replay_sel >= 0 && replay_sel < int(replay_list.size());
+        const bool playable = any && replay_list[replay_sel].playable;
+        enabled("replay-watch", playable);
+        enabled("replay-export", playable);
+        enabled("replay-delete", any);
+        if (any && replay_sel < int(replay_rows.size()))
+            if (auto* e = element(replay_rows[replay_sel].c_str()))
+                e->SetClass("selected", true);
+    }
+    void replay_action(const std::string& id) {
+        if (id == "replay-back") {
+            show_replays(false);
+            return;
+        }
+        if (id == "replay-folder") {
+            std::string url = "file://";
+            const char* dir = pc_replay_folder();
+            if (dir[0] != '/')
+                url += "/";
+            url += dir;
+            SDL_OpenURL(url.c_str());
+            return;
+        }
+        if (id.rfind("replay-row-", 0) == 0) {
+            select_replay(std::atoi(id.c_str() + 11));
+            replay_action("replay-watch"); /* A on a match watches it */
+            return;
+        }
+        if (replay_sel < 0 || replay_sel >= int(replay_list.size()))
+            return;
+        const auto& r = replay_list[replay_sel];
+        if (id == "replay-delete") {
+            if (!delete_armed) {
+                delete_armed = true;
+                status("Press Delete again to delete " + std::string(r.file) + ".");
+                return;
+            }
+            std::error_code ec;
+            std::filesystem::remove(r.path, ec);
+            status(ec ? "Could not delete " + std::string(r.file) + "." :
+                        "Deleted " + std::string(r.file) + ".",
+                bool(ec));
+            const int keep = replay_sel;
+            refresh_replays();
+            if (!replay_rows.empty()) {
+                const int i = std::min(keep, int(replay_rows.size()) - 1);
+                if (auto* row = element(replay_rows[i].c_str()))
+                    row->Focus();
+            } else
+                element("replay-back")->Focus();
+            return;
+        }
+        if (id == "replay-watch") {
+            if (!supported) {
+                status("Choose your Melee disc first: replays play from it.", true);
+                return;
+            }
+            pc_replay_request(r.path);
+            SDL_Log("Launcher: watching %s", r.path);
+            begin_game();
+            return;
+        }
+        if (id == "replay-export") {
+            start_export(r);
+            return;
+        }
+    }
+    void start_export(const PcReplayInfo& r) {
+        if (!pc_video_available()) {
+#if defined(_WIN32)
+            status("Video export is not available here.", true);
+#else
+            status("Video export needs ffmpeg installed (it is built in on Windows).", true);
+#endif
+            return;
+        }
+        if (!supported) {
+            status("Choose your Melee disc first: replays play from it.", true);
+            return;
+        }
+        /* Videos go to the system's Videos folder, under Melee Replays. */
+        std::filesystem::path dir;
+        if (const char* videos = SDL_GetUserFolder(SDL_FOLDER_VIDEOS))
+            dir = std::filesystem::u8path(videos) / "Melee Replays";
+        else
+            dir = std::filesystem::u8path(pc_replay_folder());
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        auto out = dir / std::filesystem::u8path(r.file);
+        out.replace_extension(".mp4");
+        const auto u8 = out.u8string();
+        const std::string out_utf8(u8.begin(), u8.end());
+        SDL_setenv_unsafe("MELEE_REPLAY_EXPORT", out_utf8.c_str(), 1);
+        pc_replay_request(r.path);
+        SDL_Log("Launcher: exporting %s to %s", r.path, out_utf8.c_str());
+        begin_game();
     }
     // Left/right on a slider.
     void step_slider(int direction) {
@@ -688,6 +978,14 @@ class Launcher final : public Rml::EventListener {
         controls();
     }
     void action(const std::string& id, int direction = 1) {
+        if (id == "replays" && !busy()) {
+            show_replays(true);
+            return;
+        }
+        if (replays && id.rfind("replay-", 0) == 0) {
+            replay_action(id);
+            return;
+        }
         if (id == "export-logs") {
             pc_android_export_logs();
             return;
@@ -818,6 +1116,11 @@ class Launcher final : public Rml::EventListener {
             save();
             refresh_settings();
             element("results-screen")->Focus();
+        } else if (id == "save-replays") {
+            prefs.save_replays = !prefs.save_replays;
+            save();
+            refresh_settings();
+            element("save-replays")->Focus();
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
             save();
@@ -1033,6 +1336,18 @@ public:
         }
     }
     int run(const std::string& initial_error, bool start_requested = false) {
+        /* Back from watching a replay (pc_relaunch_launcher): its list. */
+        if (const char* page = std::getenv("MELEE_LAUNCHER_PAGE");
+            page && std::strcmp(page, "replays") == 0)
+        {
+            start_requested = false;
+            SDL_unsetenv_unsafe("MELEE_LAUNCHER_PAGE");
+            open_replays_after_inspect = true;
+        }
+        if (const char* msg = std::getenv("MELEE_LAUNCHER_STATUS")) {
+            replay_status = msg;
+            SDL_unsetenv_unsafe("MELEE_LAUNCHER_STATUS");
+        }
         if (!prefs.disc.empty())
             inspect(prefs.disc);
         if (!initial_error.empty())
@@ -1147,6 +1462,12 @@ public:
                 }
                 controls();
                 element(supported ? "play" : "choose")->Focus();
+                if (open_replays_after_inspect) {
+                    open_replays_after_inspect = false;
+                    show_replays(true);
+                    if (!replay_status.empty())
+                        status(replay_status, replay_status.rfind("Video saved", 0) != 0);
+                }
                 if (start_requested) {
                     start_requested = false;
                     if (supported)
@@ -1394,6 +1715,8 @@ class PortMenu final : public Rml::EventListener {
 public:
     Rml::ElementDocument* document = nullptr;
     Rml::ElementDocument* counter = nullptr;
+    Rml::ElementDocument* replay_hud = nullptr;
+    std::string replay_line;
     SDL_Window* window = nullptr;
     bool open = false;
     // Set while the menu writes its own widgets: suppresses the Change and
@@ -1443,7 +1766,7 @@ public:
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale"};
         case 2:
-            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen"};
+            return {"unlock-all", "free-camera", "ucf", "rumble", "results-screen", "save-replays"};
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping", "net-two-players"};
         default: {
@@ -1653,6 +1976,7 @@ public:
                                                                   "Off (after restart)");
         label("free-camera", prefs.free_camera ? "Free" : "Normal");
         label("results-screen", prefs.results_screen ? "On" : "Off");
+        label("save-replays", prefs.save_replays ? "On" : "Off");
         label("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         label("rumble", prefs.rumble ? "On" : "Off");
         label("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -1921,6 +2245,8 @@ public:
             prefs.magnifier = !prefs.magnifier;
         } else if (id == "results-screen") {
             prefs.results_screen = !prefs.results_screen;
+        } else if (id == "save-replays") {
+            prefs.save_replays = !prefs.save_replays;
         } else if (id == "frozen-stadium") {
             prefs.frozen_stadium = !prefs.frozen_stadium;
         } else if (id == "squad-strike") {
@@ -2234,6 +2560,8 @@ extern "C" void pc_menu_init(SDL_Window* window) {
     port_menu.window = window;
     port_menu.document = context->LoadDocument((resources / "port-menu.rml").string());
     port_menu.counter = context->LoadDocument((resources / "fps.rml").string());
+    if (pc_replay_playing())
+        port_menu.replay_hud = context->LoadDocument((resources / "replay-hud.rml").string());
     if (!port_menu.document) {
         SDL_Log("F1 menu: could not load port-menu.rml");
         return;
@@ -2271,6 +2599,18 @@ extern "C" void pc_menu_update(void) {
         } else if (port_menu.counter->IsVisible())
             port_menu.counter->Hide();
     }
+    if (port_menu.replay_hud) {
+        char line[256];
+        if (pc_replay_hud(line, sizeof line)) {
+            if (!port_menu.replay_hud->IsVisible())
+                port_menu.replay_hud->Show(Rml::ModalFlag::None, Rml::FocusFlag::None);
+            if (port_menu.replay_line != line) {
+                port_menu.replay_line = line;
+                port_menu.replay_hud->GetElementById("line")->SetInnerRML(line);
+            }
+        } else if (port_menu.replay_hud->IsVisible())
+            port_menu.replay_hud->Hide();
+    }
     port_menu.poll_binding();
 }
 
@@ -2279,7 +2619,10 @@ extern "C" bool pc_is_custom_textures_enabled(void) {
 }
 extern "C" bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
 extern "C" bool pc_is_unlock_all_enabled(void) {
-    bool unlock_all, frozen;
+    bool unlock_all, frozen, replay;
+    if (pc_replay_unlock_all(&replay)) {
+        return replay;
+    }
     return pc_net_rules(&unlock_all, &frozen) ? unlock_all : prefs.unlock_all;
 }
 extern "C" bool pc_net_rule_flags(unsigned* flags);
@@ -2313,12 +2656,23 @@ extern "C" bool pc_ace_stage_offered(int stage) {
     }
     return (pc_ace_local_bits() >> (stage - 1) & 1) != 0;
 }
+extern "C" bool pc_is_replay_saving_enabled(void) {
+    return prefs.save_replays;
+}
 extern "C" bool pc_sdremix_wanted(void) {
+    bool replay;
+    if (pc_replay_sdremix(&replay)) {
+        return replay; /* as the replay was recorded */
+    }
     static const char* env = std::getenv("MELEE_SD_REMIX");
     return env ? env[0] != '0' : prefs.sd_remix;
 }
 extern "C" bool pc_is_frozen_stadium_enabled(void) {
     bool unlock_all, frozen;
+    unsigned replay_flags;
+    if (pc_replay_rule_flags(&replay_flags)) {
+        return (replay_flags & PC_RULE_FROZEN_STADIUM) != 0;
+    }
     if (pc_net_rules(&unlock_all, &frozen)) {
         return frozen;
     }
@@ -2337,6 +2691,10 @@ extern "C" bool pc_is_frozen_stadium_enabled(void) {
  * build (the handshake binds it), so forcing here keeps them agreed without
  * a RULES field. */
 extern "C" bool pc_is_free_camera_enabled(void) {
+    bool replay;
+    if (pc_replay_free_camera(&replay)) {
+        return replay;
+    }
     return !pc_net_deterministic() && prefs.free_camera;
 }
 /* True once per install (per launcher.cfg): this build's Random Stage list
@@ -2362,6 +2720,10 @@ extern "C" const char* pc_app_rev(void) {
     return pc::get_app_version().c_str();
 }
 extern "C" bool pc_is_ucf_enabled(void) {
+    bool replay;
+    if (pc_replay_ucf(&replay)) {
+        return replay;
+    }
     if (pc_net_deterministic()) {
         return true;
     }

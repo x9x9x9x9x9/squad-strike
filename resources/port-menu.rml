@@ -145,6 +145,11 @@
               </span>
               <button id="results-screen" class="value">On</button>
             </div>
+            <div class="row" data-desc="Save every match as a small replay file, offline and online. Watch them from Replays on the launcher's main menu.">
+              <span class="name">Save replays<span class="detail">Save every match as a small replay file, offline and online. Watch them from Replays on the launcher's main menu.</span>
+              </span>
+              <button id="save-replays" class="value">On</button>
+            </div>
           </div>
           <div id="page-audio" class="page">
             <div class="row" data-desc="Left/right or drag to adjust.">

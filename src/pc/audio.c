@@ -757,10 +757,53 @@ static void render_frame(float* out) {
 /* MELEE_AUDIO_DUMP=<file>: also write the mix as raw f32 stereo 32kHz. */
 static FILE* s_dump;
 
+/* Replay video export (src/pc/replay.c): the mix is rendered per game frame
+ * for the video instead of in real time for the speakers, which play
+ * silence meanwhile. SDL runs audio_pull with the stream locked, so taking
+ * the same lock keeps the two from ever mixing at once. */
+static volatile bool s_export_audio;
+void pc_audio_export(bool on) {
+    if (s_stream) {
+        SDL_LockAudioStream(s_stream);
+    }
+    s_export_audio = on;
+    if (s_stream) {
+        SDL_UnlockAudioStream(s_stream);
+    }
+}
+void pc_video_audio(const float* samples, int frames);
+void pc_audio_export_step(void) {
+    static double acc;
+    static float frame[AX_FRAME * 2];
+    if (!s_export_audio) {
+        return;
+    }
+    if (s_stream) {
+        SDL_LockAudioStream(s_stream);
+    }
+    acc += (double)AX_RATE / 60.0 / AX_FRAME;
+    while (acc >= 1.0) {
+        acc -= 1.0;
+        render_frame(frame);
+        pc_video_audio(frame, AX_FRAME);
+    }
+    if (s_stream) {
+        SDL_UnlockAudioStream(s_stream);
+    }
+}
+
 static void SDLCALL audio_pull(void* userdata, SDL_AudioStream* stream, int additional, int total) {
     static float frame[AX_FRAME * 2];
     (void)userdata;
     (void)total;
+    if (s_export_audio) {
+        memset(frame, 0, sizeof(frame));
+        while (additional > 0) {
+            SDL_PutAudioStreamData(stream, frame, sizeof(frame));
+            additional -= (int)sizeof(frame);
+        }
+        return;
+    }
     while (additional > 0) {
         render_frame(frame);
         SDL_PutAudioStreamData(stream, frame, sizeof(frame));

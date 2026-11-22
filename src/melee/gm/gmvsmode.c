@@ -16,6 +16,9 @@
 #include <melee/if/if_2FD9.h>
 #include <melee/lb/types.h>
 #include <melee/mn/types.h>
+#ifdef TARGET_PC
+#include "pc/replay.h"
+#endif
 
 /* 1B13B8 */ static void onEnterDebugVs(GameModeState*);
 /* 1B14A0 */ static void onEnterCss(GameModeState*);
@@ -269,6 +272,9 @@ void onEnterDebugVs(GameModeState* state)
     start->players[3].rumble_enabled = false;
 
     gm_LoadAnnouncer();
+#ifdef TARGET_PC
+    pc_replay_setup_match(start); /* a replay's own setup, over all of the above */
+#endif
 }
 
 void onEnterCss(GameModeState* state)

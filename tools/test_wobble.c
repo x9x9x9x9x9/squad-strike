@@ -17,6 +17,9 @@ static bool teams;
 bool pc_net_deterministic(void) {
     return rule_on;
 }
+bool pc_online_ruleset(void) {
+    return rule_on;
+}
 bool gm_8016B168(void) {
     return teams;
 }

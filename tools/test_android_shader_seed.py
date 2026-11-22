@@ -93,6 +93,7 @@ StartMeleeData* gm_GetGameModeStateEnterData(GameModeState* s) {return &data;}
 void gm_SetupRulesDefaults(struct Rules* r) {memset(r,0,sizeof(*r));}
 void gm_SetupPlayerDefaults(struct Player* p) {memset(p,0,sizeof(*p));}
 void gm_LoadAnnouncer(void) {}
+void pc_replay_setup_match(StartMeleeData* start) {(void)start;}
 ''' + function + r'''
 int main(void) {
  setenv("MELEE_DEBUG_VS","cpu4",1);

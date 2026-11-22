@@ -75,6 +75,8 @@ scrollbarhorizontal { height: 0; }
 .theme-settings .stripes span { background-color: #c9a227; }
 .theme-discord #frame { border-color: #5865f2; }
 .theme-discord .stripes span { background-color: #5865f2; }
+.theme-replays #frame { border-color: #e07a2a; }
+.theme-replays .stripes span { background-color: #e07a2a; }
 .theme-quit #frame { border-color: #8a4ad8; }
 .theme-quit .stripes span { background-color: #8a4ad8; }
 
@@ -197,12 +199,13 @@ button {
 /* Melee stacks its plates touching, staggered into a wedge that points left
  * at the middle two; the lower half mirrors the upper. */
 #plates .plate { width: 76%; margin-bottom: -10dp; }
-#play { margin-left: 11%; }
-#choose { margin-left: 5.5%; }
+#play { margin-left: 12%; }
+#replays { margin-left: 8%; }
+#choose { margin-left: 4%; }
 #verify { margin-left: 0; }
-#settings { margin-left: 0; }
-#discord { margin-left: 5.5%; }
-#quit { margin-left: 11%; }
+#settings { margin-left: 4%; }
+#discord { margin-left: 8%; }
+#quit { margin-left: 12%; }
 
 #side {
     flex: 1;
@@ -264,6 +267,57 @@ button.mini {
 button.mini:hover { border-color: #e0b030; }
 button.mini:focus { background-color: #ffcb00; border-color: #fff0a0; color: #141008; }
 button.mini.primary { border-color: #e0b030; }
+
+/* ---- Replays ------------------------------------------------------------ */
+
+#replays-view { display: none; flex: 1; min-height: 0; flex-direction: row; }
+.in-replays #home { display: none; }
+.in-replays #replays-view { display: flex; }
+.in-replays #title-sub { display: inline-block; }
+#replay-actions {
+    width: 28%;
+    max-width: 320dp;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 22dp;
+}
+#replay-actions .plate { width: 80%; margin-bottom: -10dp; }
+#replay-watch { margin-left: 8%; }
+#replay-export { margin-left: 4%; }
+#replay-delete { margin-left: 0; }
+#replay-folder { margin-left: 4%; }
+#replay-back { margin-top: 22dp; margin-left: 6%; }
+#replay-list {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 14dp 18dp 10dp 22dp;
+    background-color: #0a0c26c8;
+    border: 2dp #b8bccb50;
+    border-radius: 6dp 18dp 18dp 6dp;
+}
+button.replay {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    padding: 6dp 12dp;
+    margin-bottom: 4dp;
+    border-radius: 4dp;
+    background-color: #ffffff08;
+    border: 2dp #00000000;
+    font-size: 18dp;
+    font-weight: bold;
+    color: #e8e8f0;
+}
+button.replay .detail { font-weight: normal; }
+button.replay:hover { border-color: #e0b03080; }
+button.replay:focus { background-color: #ffcb0024; border-color: #e0b030; color: #ffd84a; }
+button.replay.selected { border-color: #e0b030; }
+button.replay.unplayable { color: #7d8199; }
 
 /* ---- Settings ----------------------------------------------------------- */
 

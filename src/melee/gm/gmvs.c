@@ -52,6 +52,7 @@
 #include <sysdolphin/baselib/gobjproc.h>
 #include <stdlib.h>
 #ifdef TARGET_PC
+#include "pc/replay.h"
 #include "pc/slp.h"
 #include "pc/pc.h"
 #endif
@@ -2030,6 +2031,7 @@ void fn_8016E730(StartMeleeData* arg0)
 
 #ifdef TARGET_PC
     pc_slp_match_start(arg0); /* Slippi's SendGameInfo hooks here too */
+    pc_replay_match_start(arg0);
     {
         /* Hash fields, not struct bytes: rules contain pointers and padding. */
         u64 key = (14695981039346656037ull ^ arg0->rules.stkind) * 1099511628211ull;
@@ -2149,6 +2151,7 @@ void gm_Scene_Vs_OnExit(void* user_data)
 
 #ifdef TARGET_PC
     pc_slp_match_end();
+    pc_replay_match_end();
 #endif
     if (controller.state.match_over == 0) {
         data->xC = controller.state.x24C;

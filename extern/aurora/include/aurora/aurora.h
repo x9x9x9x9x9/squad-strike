@@ -150,6 +150,19 @@ void aurora_preserve_frame_buffer(bool preserve);
 /** Sets the clock timescale. Default 1.0f. 0.0f is paused. Range 0.0f-16.0f. */
 void aurora_set_timescale(float scale);
 
+/** melee-pc: frame capture for video export. Each aurora_capture_frame()
+ *  call marks the next aurora_end_frame() for capture: the game image (no
+ *  overlays) is scaled into width x height, letterboxed, read back and
+ *  handed to `cb` in capture order, on whichever thread finishes it.
+ *  `pixels` are 8-bit, four per pixel, top row first; `bgra` says the order.
+ *  aurora_capture_frame() blocks while every readback slot is in use, and
+ *  aurora_capture_end() until all have been delivered. */
+typedef void (*AuroraCaptureCallback)(const uint8_t* pixels, uint32_t width, uint32_t height,
+                                      uint32_t stride, bool bgra, uint64_t index, void* user);
+bool aurora_capture_begin(uint32_t width, uint32_t height, AuroraCaptureCallback cb, void* user);
+void aurora_capture_frame(void);
+void aurora_capture_end(void);
+
 SDL_Window* aurora_get_window();
 AuroraWindowSize aurora_get_window_size();
 

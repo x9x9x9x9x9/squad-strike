@@ -22,6 +22,9 @@
 #include <melee/pl/player.h>
 #include "pc/net.h"
 #include "pc/pc.h"
+#ifdef TARGET_PC
+#include "pc/replay.h"
+#endif
 
 /* Squad members after the coin pick, per port (character, colour). */
 GmSquadMember gmSquad_rows[GMSQUAD_PORTS][GMSQUAD_EXTRA];
@@ -58,10 +61,21 @@ static void init(void)
     }
 }
 
+void gmSquad_Restore(const GmSquadMember rows[GMSQUAD_PORTS][GMSQUAD_EXTRA],
+                     const u8 coin_pos[GMSQUAD_PORTS])
+{
+    init();
+    memcpy(gmSquad_rows, rows, sizeof(gmSquad_rows));
+    memcpy(gmSquad_coin_pos, coin_pos, sizeof(gmSquad_coin_pos));
+}
+
 bool gmSquad_ModeAllowed(void)
 {
     if (!pc_is_squad_strike_enabled()) {
         return false; /* launcher / in-game menu: Squad Strike off */
+    }
+    if (pc_replay_playing()) {
+        return true; /* Squad Strike on in the recording (the rule flags) */
     }
     switch (gm_GetCurrentGameMode()) {
     case GM_VS:

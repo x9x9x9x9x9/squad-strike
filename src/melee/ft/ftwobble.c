@@ -13,6 +13,7 @@
 #include <melee/it/types.h>
 #include <melee/pl/player.h>
 #include <pc/net.h>
+#include <pc/replay.h>
 #include <sysdolphin/baselib/gobj.h>
 
 /* Slippi Online's "Disable Wobbling" (UnclePunch, slippi-ssbm-asm
@@ -31,8 +32,8 @@
  * whatever she was doing.
  *
  * Slippi gates the codeset on the online and playback scenes. Here
- * pc_net_deterministic() covers the same set (netplay, replay record and
- * playback, sync test), so offline play stays retail. */
+ * pc_online_ruleset() covers the same set (netplay, sync tests and the
+ * playback of a match that had them), so offline play stays retail. */
 
 enum {
     WOBBLE_MAX_HITS = 3,
@@ -44,7 +45,7 @@ enum {
 /// (0x800DB880) and fn_800DBAE4 (0x800DBBD4): entering CaptureWaitHi/Lw.
 void ftWobble_Reset(Fighter* fp)
 {
-    if (!pc_net_deterministic()) {
+    if (!pc_online_ruleset()) {
         return;
     }
     fp->mv.co.wobble.count = 0;
@@ -65,7 +66,7 @@ bool ftWobble_Check(Fighter_GObj* gobj)
     u16 move_id;
     u16 prev_move_id;
 
-    if (!pc_net_deterministic()) {
+    if (!pc_online_ruleset()) {
         return false;
     }
     if (fp->motion_id < ftCo_MS_CapturePulledHi ||

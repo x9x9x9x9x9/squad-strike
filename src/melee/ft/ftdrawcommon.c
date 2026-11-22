@@ -24,6 +24,7 @@
 #include <sysdolphin/baselib/state.h>
 #ifdef TARGET_PC
 #include "pc/net.h"
+#include "pc/replay.h"
 #endif
 
 static U8Vec4 ftDrawCommon_804D3A88 = { 0xFF, 0xFF, 0xFF, 0x80 };
@@ -378,7 +379,7 @@ static inline void ftDrawCommon_80080E18_inline2(HSD_GObj* gobj, Fighter* old)
      * nothing else. Writing cur_pos here made the physics position depend
      * on whether this frame was drawn, which a rollback resim is not (see
      * ftCo_DeadUpFall_Anim). */
-    if (pc_net_deterministic()) {
+    if (pc_sim_render_decoupled()) {
         Vec3 model;
         PSMTXMultVec(matrix, (Vec3*) &old->mv.co.walk.fast_anim_frame,
                      &model);

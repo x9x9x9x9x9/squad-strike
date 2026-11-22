@@ -23,6 +23,7 @@
 #endif
 
 #include "pc/pc.h"
+#include "pc/replay.h"
 #include "pc/android_hooks.h"
 #include "pc/launcher.h"
 
@@ -478,7 +479,75 @@ static void pc_env_file_bootstrap(void) {
     }
 }
 
+/* For pc_relaunch_launcher. */
+static char** s_argv;
+
+#if defined(__APPLE__)
+#include <TargetConditionals.h>
+#if !TARGET_OS_IPHONE
+#include <mach-o/dyld.h>
+#endif
+#endif
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
+
+/* A replay has ended (src/pc/replay.c): start this program again on the
+ * launcher's replay list. The game cannot go back to the launcher in the
+ * same process -- it owns the window and the disc from the first frame -- so
+ * this is a fresh start of the same executable with the same arguments,
+ * minus the replay. Where a process cannot start itself (mobile) the game
+ * just closes. */
+void pc_relaunch_launcher(void) {
+    SDL_unsetenv_unsafe("MELEE_REPLAY");
+    SDL_setenv_unsafe("MELEE_LAUNCHER_PAGE", "replays", 1);
+    pc_log_line("replay: back to the launcher");
+#if defined(_WIN32)
+    SetEnvironmentVariableW(L"MELEE_REPLAY", NULL);
+    SetEnvironmentVariableW(L"MELEE_REPLAY_EXPORT", NULL);
+    SetEnvironmentVariableW(L"MELEE_LAUNCHER_PAGE", L"replays");
+    {
+        const char* status = getenv("MELEE_LAUNCHER_STATUS");
+        SetEnvironmentVariableA("MELEE_LAUNCHER_STATUS", status);
+    }
+    STARTUPINFOW si;
+    PROCESS_INFORMATION pi;
+    memset(&si, 0, sizeof si);
+    si.cb = sizeof si;
+    memset(&pi, 0, sizeof pi);
+    wchar_t* cmd = _wcsdup(GetCommandLineW());
+    if (cmd != NULL && CreateProcessW(NULL, cmd, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    free(cmd);
+    exit(0);
+#elif defined(__ANDROID__) ||                                                                      \
+    (defined(__APPLE__) && defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) ||                       \
+    defined(__EMSCRIPTEN__)
+    exit(0);
+#else
+    char exe[4096];
+#if defined(__APPLE__)
+    uint32_t size = sizeof exe;
+    if (_NSGetExecutablePath(exe, &size) != 0) {
+        exit(0);
+    }
+#else
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n <= 0) {
+        exit(0);
+    }
+    exe[n] = '\0';
+#endif
+    pc_shutdown_once();
+    execv(exe, s_argv);
+    _exit(0); /* execv failed */
+#endif
+}
+
 MELEE_EXPORT int main(int argc, char* argv[]) {
+    s_argv = argv;
     melee_install_crash_handler(); /* before anything can crash */
     pc_env_file_bootstrap();       /* before anything calls getenv() */
 #if defined(_WIN32)
@@ -711,6 +780,7 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
     pc_android_set_launcher_active(false);
 
     pc_menu_init(info.window);
+    pc_replay_init();  /* before SD Remix: a replay says whether it is on */
     pc_sdremix_init(); /* before the game opens any fighter file */
     pc_platform_init();
     aurora_card_set_present(card);

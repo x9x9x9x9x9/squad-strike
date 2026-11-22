@@ -25,6 +25,9 @@
 #include <sysdolphin/baselib/video.h>
 #ifdef TARGET_PC
 #include "pc/pc.h"
+#ifdef TARGET_PC
+#include "pc/replay.h"
+#endif
 #endif
 
 struct routingInfo {
@@ -283,6 +286,14 @@ void gm_ChangeGameModeAfterCurrentScene(int pending_mode)
 
 u8 gm_GetCurrentGameMode(void)
 {
+#ifdef TARGET_PC
+    /* A replay's match plays in the mode it was recorded in, though the
+     * playback itself runs as GM_DEBUG_VS (src/pc/replay.c). */
+    int replay_mode = pc_replay_mode_override();
+    if (replay_mode >= 0) {
+        return (u8) replay_mode;
+    }
+#endif
     return state_machine.routing.curr_mode;
 }
 

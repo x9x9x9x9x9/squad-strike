@@ -2,6 +2,7 @@
 #ifdef TARGET_PC
 #include "pc/net.h"
 #include "pc/pc.h"
+#include "pc/replay.h"
 #include "pc/slp.h"
 #include "pc/widescreen.h"
 #endif
@@ -397,6 +398,11 @@ void gm_801A4D34(void (*on_frame)(void), GameSceneInfo* info)
         gmMainLib_8046B0F0.xC = false;
 
         while ((pad_queue_count = lb_80019894()) == 0) {
+#ifdef TARGET_PC
+            if (pc_replay_exporting() && pc_replay_match_active()) {
+                break; /* an export does not wait for the pad clock */
+            }
+#endif
             lb_800195D0();
 #ifdef TARGET_PC
             /* PORT: sleep until the pad alarm is due instead of spinning a
@@ -404,6 +410,10 @@ void gm_801A4D34(void (*on_frame)(void), GameSceneInfo* info)
             pc_os_wait_alarm();
 #endif
         }
+#ifdef TARGET_PC
+        /* A replay's pause, slow motion and fast forward (src/pc/replay.c). */
+        pad_queue_count = pc_replay_tick_budget(pad_queue_count);
+#endif
         lb_800195D0();
 
         if (HSD_PadGetResetSwitch()) {

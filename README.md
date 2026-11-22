@@ -86,6 +86,23 @@ data is included.
 
 <img width="1810" height="1437" alt="squad other online" src="https://github.com/user-attachments/assets/62da45d6-bf00-4907-a170-1abaa6347218" />
 
+### Replays
+- **Every match is saved**, offline and online, as a small replay file (a few
+  hundred KB at most): the match setup plus each frame's controller inputs,
+  like Slippi. Settings → Gameplay → Save replays turns it off.
+- **Watch them** from **Replays** on the launcher's main menu. While one
+  plays: **Start** pauses, **L / R** (or D-pad left/right) slow it down or speed
+  it up from ¼x to 4x, **A** steps one frame while paused, **D-pad down**
+  rewinds about 10 seconds, **B** goes back to the list.
+- **Export Video** turns a replay into an MP4 (H.264 and AAC sound) in your
+  Videos folder, under *Melee Replays*. Built in on Windows; on Linux and macOS
+  it needs `ffmpeg` installed.
+- A replay plays back on the same game files: your disc, and the same SD
+  Remix files if SD Remix was on. If a playback ever drifts from what was
+  recorded, the bar at the bottom says **OUT OF SYNC**.
+- Replays are stored in the `replays` folder beside your settings (see
+  [Settings](#settings)); **Open Folder** on the Replays page opens it.
+
 ### Controllers
 - Official and third-party **GameCube controller adapters**, including the
   HandHeldLegend RP2040 adapter in Slippi mode, at 1000 Hz.
@@ -221,7 +238,7 @@ settings:
 
 - **Gameplay:** Unlock everything, Squad Strike, Stage Expansion, SD Remix
   characters, Free camera, Universal Controller Fix (UCF 0.8), Rumble, Post
-  match results screen (online, the host's choice is used).
+  match results screen (online, the host's choice is used), Save replays.
 - **Video:** Magnifying glass: turn off the bubble that shows a fighter off
   the edge of the screen (handy in widescreen).
 - **Online:** your connect code, a friend's code, input delay, ping display,

@@ -1,0 +1,3 @@
+<rml><head><title>Replay</title><style>
+body { font-family: "Liberation Sans"; font-size: 15dp; color: #ffffff; background-color: #0b101cdd; position: absolute; bottom: 10dp; left: 50%; margin-left: -330dp; width: 660dp; height: 24dp; padding: 5dp 10dp; text-align: center; pointer-events: none; z-index: 100; border-radius: 4dp; }
+</style></head><body><span id="line">REPLAY</span></body></rml>

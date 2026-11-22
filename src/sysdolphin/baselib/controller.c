@@ -5,6 +5,10 @@
 #include "rumble.h"
 #include <dolphin/os.h>
 #include <dolphin/pad.h>
+#ifdef TARGET_PC
+#include <string.h>
+#include "pc/replay.h"
+#endif
 
 HSD_PadStatus default_status_data = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 };
@@ -365,10 +369,37 @@ void HSD_PadRenewMasterStatus(void)
     p = &HSD_PadLibData;
     mp = &HSD_PadMasterStatus[0];
     intr = OSDisableInterrupts();
+#ifdef TARGET_PC
+    /* A replay notes the entry this tick consumes, or (playing one back)
+     * hands over its own in place of it. The real queue is still drained
+     * one entry per tick, so the playback keeps the game's own pace. */
+    {
+        bool skip = false;
+        const PADStatus* rep = pc_replay_renew(
+            p->qcount != 0 ? &p->queue->stat[p->qread * 4] : NULL, &skip);
+        if (rep != NULL || skip) {
+            if (p->qcount != 0) {
+                HSD_PadRawQueueShift(p->qnum, &p->qread);
+                p->qcount -= 1;
+            }
+            if (skip) {
+                OSRestoreInterrupts(intr);
+                return;
+            }
+            static PADStatus replay_entry[4];
+            memcpy(replay_entry, rep, sizeof replay_entry);
+            qread = replay_entry;
+            goto consume;
+        }
+    }
+#endif
     if (p->qcount != 0) {
         qread = &p->queue->stat[p->qread * 4];
         HSD_PadRawQueueShift(p->qnum, &p->qread);
         p->qcount -= 1;
+#ifdef TARGET_PC
+    consume:
+#endif
 
         for (i = 0; i < 4; i++, mp += 1, qread += 1) {
             mp->last_button = mp->button;

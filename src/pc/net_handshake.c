@@ -38,6 +38,7 @@
  * yet, so none of it is implemented here. */
 #include "compat.h"
 #include "pc/net_internal.h"
+#include "pc/replay.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wscalar-storage-order" /* disc-struct unions in lb/types.h */
@@ -370,6 +371,9 @@ void rules_restore(void) {
 }
 
 bool pc_net_rule_flags(unsigned* flags) {
+    if (pc_replay_rule_flags(flags)) {
+        return true; /* a replay plays under the rules it was recorded with */
+    }
     if (!s_rules_on) {
         return false;
     }

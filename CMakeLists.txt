@@ -218,6 +218,7 @@ set(PC_SOURCES
         src/pc/misc.c
         src/pc/os.c
         src/pc/region.c
+        src/pc/replay.c
         src/pc/slp.c
         src/pc/slp_format.c
         src/pc/stb_vorbis.c
@@ -228,6 +229,7 @@ set(PC_SOURCES
         src/pc/android_compat.cpp
         src/pc/file_cache.cpp
         src/pc/launcher.cpp
+        src/pc/video_export.cpp
         src/pc/launcher_data.cpp
         src/pc/music_stream.cpp
         src/pc/sdremix.cpp
@@ -295,7 +297,11 @@ target_compile_options(melee PRIVATE
         # net.c read the wrong word, saw "not game speed 1" and ran every
         # online fight in lockstep. C++ here only sees aurora's headers.
         $<$<AND:$<COMPILE_LANGUAGE:C>,$<BOOL:${WIN32}>>:-mno-ms-bitfields>)
-target_link_libraries(melee PRIVATE melee_game aurora::main ${MELEE_CRYPTO_LIBS} ${MELEE_NETWORK_LIBS})
+target_link_libraries(melee PRIVATE melee_game aurora::main ZLIB::ZLIB ${MELEE_CRYPTO_LIBS} ${MELEE_NETWORK_LIBS})
+if (WIN32)
+    # Replay video export (src/pc/video_export.cpp): Media Foundation.
+    target_link_libraries(melee PRIVATE mfplat mfreadwrite mfuuid ole32)
+endif ()
 
 if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS")
     target_link_libraries(melee PRIVATE

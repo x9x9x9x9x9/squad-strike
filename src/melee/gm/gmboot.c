@@ -11,6 +11,9 @@
 #include "gmonlinemode.h"
 #include <stdlib.h>
 #include <string.h>
+#ifdef TARGET_PC
+#include "pc/replay.h"
+#endif
 #endif
 
 /* 1BF948 */ static void bootOnLoad(GameModeState*);
@@ -54,7 +57,9 @@ u8 pc_boot_scene(void)
     if (!done) {
         const char* want = getenv("MELEE_BOOT_SCENE");
         done = 1;
-        if (want == NULL || want[0] == '\0') {
+        if (pc_replay_playing()) {
+            scene = GM_DEBUG_VS; /* a replay is a direct start too */
+        } else if (want == NULL || want[0] == '\0') {
             /* nothing */
         } else if (strcmp(want, "title") == 0) {
             scene = GM_TITLE;
