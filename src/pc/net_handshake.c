@@ -204,7 +204,7 @@ static void hs_done(void) {
     net.hs = HS_DONE;
     net_ports_settle();
     net.ck_from = net.start_frame;
-    net.desync_reported = false; /* anything before start_frame was the lobbies differing */
+    net_desync_reset(); /* anything before start_frame was the lobbies differing */
     pc_log_line("net: handshake done seed=%u start_frame=%d (frame %d)", net.seed, net.start_frame,
         net.tick_frame);
 }

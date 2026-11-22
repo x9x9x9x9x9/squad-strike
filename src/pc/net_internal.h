@@ -455,6 +455,8 @@ extern struct NetSession net;
 /* Settle which controller port each computer plays on, once the seed is
  * agreed (net_handshake.c hs_done). */
 void net_ports_settle(void);
+/* Forget any desync (net.c): the comparison starts over from here. */
+void net_desync_reset(void);
 
 /* The computer that settles what a party needs one voice for: the rules,
  * the start frame and the frame a scene ends on. */

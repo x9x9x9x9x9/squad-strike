@@ -86,6 +86,21 @@ static struct {
 static int32_t s_ck_checked_l[NET_LINKS] = {
     [0 ... NET_LINKS - 1] = -1}; /* newest frame compared against the peer's */
 #define s_ck_checked (s_ck_checked_l[t_li])
+/* A link's desync and how many frames have matched since. The warning used
+ * to stand for the rest of the session and the comparison stopped with it,
+ * so a mismatch confined to a scene's last frames (the state is rebuilt on
+ * the next scene) kept "DESYNC" on screen game after game, and a real one
+ * later went unseen. Now checking carries on and the warning clears once
+ * INSYNC_FRAMES consecutive confirmed frames match again. */
+#define INSYNC_FRAMES 180 /* 3 s */
+#define DESYNC_DUMPS 4    /* ring/state dumps per session: they are long */
+static bool s_link_desync_l[NET_LINKS];
+#define s_link_desync (s_link_desync_l[t_li])
+static int32_t s_desync_at_l[NET_LINKS];
+#define s_desync_at (s_desync_at_l[t_li])
+static int s_insync_run_l[NET_LINKS];
+#define s_insync_run (s_insync_run_l[t_li])
+static int s_desync_dumps;
 static uint32_t s_ck_ring[RING];  /* our checksum entering each frame */
 static bool s_heard_l[NET_LINKS]; /* any packet from the peer yet */
 #define s_heard (s_heard_l[t_li])
@@ -1521,7 +1536,7 @@ static void check_desync(void) {
 }
 
 static void check_desync_link(void) {
-    if (net.desync_reported || net.hs == HS_PENDING) {
+    if (net.hs == HS_PENDING) {
         return;
     }
     int32_t upto = confirmed_frame();
@@ -1535,13 +1550,42 @@ static void check_desync_link(void) {
             continue;
         }
         s_ck_checked = f;
-        if (s_ck_ring[i] != s_rck[i].ck) {
-            net.desync_reported = true;
-            pc_log_line(
-                "net: DESYNC at frame %d (local %08x remote %08x)", f, s_ck_ring[i], s_rck[i].ck);
-            dump_rings_around(f);
-            dump_states_around(f);
-            return;
+        static int32_t flip_from = -2, flip_n;
+        if (flip_from == -2) {
+            /* MELEE_NET_SIM_CK_FLIP=frame,count: those frames compare as
+             * mismatched, a desync that ends (tools/net_test.py --ck-flip). */
+            const char* e = getenv("MELEE_NET_SIM_CK_FLIP");
+            flip_from = -1;
+            if (e != NULL && sscanf(e, "%d,%d", &flip_from, &flip_n) != 2) {
+                flip_from = -1;
+            }
+        }
+        bool flipped = flip_from >= 0 && f >= flip_from && f < flip_from + flip_n;
+        if (flipped || s_ck_ring[i] != s_rck[i].ck) {
+            s_insync_run = 0;
+            if (!s_link_desync) {
+                s_link_desync = true;
+                s_desync_at = f;
+                net.desync_reported = true;
+                pc_log_line("net: DESYNC at frame %d (local %08x remote %08x)", f, s_ck_ring[i],
+                    s_rck[i].ck);
+                if (s_desync_dumps < DESYNC_DUMPS) {
+                    s_desync_dumps++;
+                    dump_rings_around(f);
+                    dump_states_around(f);
+                }
+            }
+            continue;
+        }
+        if (s_link_desync && ++s_insync_run >= INSYNC_FRAMES) {
+            s_link_desync = false;
+            s_insync_run = 0;
+            pc_log_line("net: back in sync at frame %d (desynced at %d)", f, s_desync_at);
+            bool any = false;
+            for (int l = 0; l < NET_LINKS; l++) {
+                any = any || s_link_desync_l[l];
+            }
+            net.desync_reported = any;
         }
     }
 }
@@ -2141,6 +2185,12 @@ static void own_ports(void) {
  * way on both, until the session ends. Before this, frames are the lobby's
  * lead-in, which the checksum does not cover (ck_from = start_frame).
  * MELEE_NET_PORT_SWAP=0|1 fixes it (tests). */
+void net_desync_reset(void) {
+    net.desync_reported = false;
+    memset(s_link_desync_l, 0, sizeof s_link_desync_l);
+    memset(s_insync_run_l, 0, sizeof s_insync_run_l);
+}
+
 void net_ports_settle(void) {
     if (net.party) {
         return;
@@ -2275,6 +2325,9 @@ static void session_reset_link(void) {
         s_rck[i].frame = -1;
     }
     net.desync_reported = s_heard = s_peer_left = s_no_progress = false;
+    memset(s_link_desync_l, 0, sizeof s_link_desync_l);
+    memset(s_insync_run_l, 0, sizeof s_insync_run_l);
+    s_desync_dumps = 0;
     s_last_rx_ns = 0;
     s_progress_ns = 0;
     s_warn_src = s_warn_sess = s_warn_bad = s_warn_mac = false;
@@ -2440,8 +2493,8 @@ int pc_net_quality(void) {
     if (s_rc == RSM_ACTIVE) {
         return 3; /* reconnecting; RSM_FAILED is one tick from the disconnect */
     }
-    /* A desync is as bad as a stall and never recovers, so it reads as at
-     * least 2 however healthy the link looks around it. */
+    /* A desync is as bad as a stall, so it reads as at least 2 however
+     * healthy the link looks around it, until it is back in sync. */
     if (s_peer_left || net.desync_reported || net.frame - s_stall_frame < 120) {
         return 2;
     }
