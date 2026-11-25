@@ -50,7 +50,7 @@ struct Preferences {
     bool custom_textures = true;
     bool unlock_all = false;
     int hud_mode = 0;
-    bool magnifier = true;       // the off-screen magnifying glass (off suits widescreen)
+    bool magnifier = true;       // the off-screen magnifying glass (off: only above the top)
     bool results_screen = true;  // the results screen after a match
     bool save_replays = true;    // every VS match to a replay file (replay.c)
     bool frozen_stadium = false;

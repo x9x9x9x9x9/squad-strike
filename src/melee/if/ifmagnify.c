@@ -220,10 +220,12 @@ void ifMagnify_802FB8C0(HSD_GObj* gobj, intptr_t code)
             HSD_JObjSetTranslate(player->gobj->hsd_obj, &translate);
 
 #ifdef TARGET_PC
-            /* "Magnifying glass" off: the bubble and its name-tag arrow are
-             * not drawn. Everything above still runs, so the edge and the
-             * off-screen state the simulation reads stay as they were. */
-            if (!pc_is_magnifier_enabled()) {
+            /* "Magnifying glass: Widescreen (top only)": a widescreen view
+             * shows fighters past the 4:3 sides, so the bubble is drawn only
+             * for one above the top of the screen. Everything above still
+             * runs, so the edge and the off-screen state the simulation
+             * reads stay as they were. */
+            if (!pc_is_magnifier_enabled() && screen_pos.y >= 0) {
                 un_802FD9D8((u8) slot);
                 return;
             }
