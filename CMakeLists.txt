@@ -234,6 +234,7 @@ set(PC_SOURCES
         src/pc/music_stream.cpp
         src/pc/sdremix.cpp
         src/pc/textures.cpp
+        src/pc/updater.cpp
         src/pc/version.cpp
         # Netplay (docs/netcode-plan.md). net.c is the session and rollback
         # loop; the rest are its modules behind src/pc/net_internal.h.
@@ -485,6 +486,24 @@ if (NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     add_test(NAME launcher_data COMMAND launcher_data_test)
     set_tests_properties(launcher_data PROPERTIES LABELS melee)
     add_dependencies(unit_tests launcher_data_test)
+
+    add_executable(updater_test EXCLUDE_FROM_ALL tools/test_updater.cpp src/pc/updater.cpp
+            src/pc/version.cpp)
+    target_include_directories(updater_test PRIVATE src src/pc)
+    target_link_libraries(updater_test PRIVATE aurora::main ZLIB::ZLIB ${MELEE_NETWORK_LIBS})
+    target_compile_options(updater_test PRIVATE -UNDEBUG)
+    if (Python3_Interpreter_FOUND)
+        add_test(NAME updater_zip COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/make_test_zip.py
+                ${CMAKE_CURRENT_BINARY_DIR}/updater_test.zip)
+        add_test(NAME updater COMMAND updater_test ${CMAKE_CURRENT_BINARY_DIR}/updater_test.zip)
+        set_tests_properties(updater_zip PROPERTIES LABELS melee FIXTURES_SETUP updater_zip)
+        set_tests_properties(updater PROPERTIES FIXTURES_REQUIRED updater_zip)
+    else ()
+        add_test(NAME updater COMMAND updater_test)
+    endif ()
+    set_tests_properties(updater PROPERTIES LABELS melee TIMEOUT 30)
+    add_dependencies(unit_tests updater_test)
 
     add_executable(version_test EXCLUDE_FROM_ALL tools/test_version.cpp src/pc/version.cpp)
     target_include_directories(version_test PRIVATE src)

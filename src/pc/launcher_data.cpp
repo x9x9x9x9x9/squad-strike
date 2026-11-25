@@ -415,7 +415,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
                    key == "free_camera" || key == "ucf" || key == "reverb" ||
                    key == "squad_strike" || key == "stage_expansion" || key == "sd_remix" ||
                    key == "show_ping" || key == "vibration" || key == "magnifier" ||
-                   key == "results_screen" || key == "net_two_players" || key == "save_replays")
+                   key == "results_screen" || key == "net_two_players" || key == "save_replays" ||
+                   key == "check_updates")
         {
             int value;
             if (row >> value && (value == 0 || value == 1)) {
@@ -449,6 +450,8 @@ Preferences load_preferences(const std::filesystem::path& path) {
                     prefs.net_two_players = value;
                 else if (key == "save_replays")
                     prefs.save_replays = value;
+                else if (key == "check_updates")
+                    prefs.check_updates = value;
             }
         } else if (key == "hud_mode") {
             int value;
@@ -506,6 +509,7 @@ bool save_preferences(
          << "magnifier " << prefs.magnifier << '\n'
          << "results_screen " << prefs.results_screen << '\n'
          << "save_replays " << prefs.save_replays << '\n'
+         << "check_updates " << prefs.check_updates << '\n'
          << "net_two_players " << prefs.net_two_players << '\n'
          << "keys";
     for (int code : prefs.keys)

@@ -53,6 +53,7 @@ struct Preferences {
     bool magnifier = true;       // the off-screen magnifying glass (off suits widescreen)
     bool results_screen = true;  // the results screen after a match
     bool save_replays = true;    // every VS match to a replay file (replay.c)
+    bool check_updates = true;   // look for a new release at each start (updater.cpp)
     bool frozen_stadium = false;
     bool free_camera = false;
     bool ucf = false;

@@ -9,6 +9,7 @@
 #include "net_identity.h"
 #include "net.h"
 #include "pc.h"
+#include "updater.hpp"
 #include "replay.h"
 #include "video_export.h"
 #include "android_hooks.h"
@@ -310,6 +311,10 @@ class Launcher final : public Rml::EventListener {
     bool supported = false, settings = false, quiet = false;
     // The replay list (Replays on the main menu).
     bool replays = false, delete_armed = false;
+    // The update notice on the main menu (updater.cpp).
+    bool update_dismissed = false, update_card_shown = false;
+    pc::updater::Status last_update_status = pc::updater::Status::Idle;
+    uint64_t last_update_done = ~0ull;
     std::vector<PcReplayInfo> replay_list;
     std::vector<std::string> replay_rows;
     int replay_sel = -1;
@@ -387,7 +392,7 @@ class Launcher final : public Rml::EventListener {
         case 4:
             return {"net-code", "net-target", "net-delay", "show-ping", "net-two-players"};
         case 5:
-            return {"scale", "settings-discord", "export-logs"};
+            return {"scale", "check-updates", "check-now", "settings-discord", "export-logs"};
         default:
             return {};
         }
@@ -412,6 +417,8 @@ class Launcher final : public Rml::EventListener {
                 return replay_rows;
             return {std::begin(replay_action_ids), std::end(replay_action_ids)};
         }
+        if (!settings && within(document->GetContext()->GetFocusElement(), "update-card"))
+            return {"update-action", "update-browser", "update-later"};
         if (!settings)
             return focus_ids;
         if (in_rows(document->GetContext()->GetFocusElement()))
@@ -593,6 +600,15 @@ class Launcher final : public Rml::EventListener {
             }
             return;
         }
+        if (!settings) {
+            /* The main menu: Right to the update notice beside it, Left back. */
+            if (within(focus, "update-card")) {
+                if (direction < 0)
+                    element(supported ? "play" : "choose")->Focus();
+            } else if (direction > 0 && update_card_shown)
+                element("update-action")->Focus();
+            return;
+        }
         if (settings && index_of(tab_ids, id) >= 0) {
             if (direction > 0)
                 enter_rows();
@@ -671,6 +687,12 @@ class Launcher final : public Rml::EventListener {
         text("free-camera", prefs.free_camera ? "Free" : "Normal");
         text("results-screen", prefs.results_screen ? "On" : "Off");
         text("save-replays", prefs.save_replays ? "On" : "Off");
+        text("check-updates", prefs.check_updates ? "On" : "Off");
+        {
+            const auto st = pc::updater::state();
+            text("check-status",
+                st.message.empty() ? "Version " + pc::get_app_version() : st.message);
+        }
         text("ucf", std::getenv("MELEE_UCF") ? "Environment override" : prefs.ucf ? "On" : "Off");
         text("rumble", prefs.rumble ? "On" : "Off");
         text("unlock-all", prefs.unlock_all ? "Unlocked" : "Normal");
@@ -926,6 +948,57 @@ class Launcher final : public Rml::EventListener {
         SDL_Log("Launcher: exporting %s to %s", r.path, out_utf8.c_str());
         begin_game();
     }
+    /* The update notice: shown from the moment a newer release is found until
+     * Later, and the restart once it is installed. */
+    void refresh_update(bool force = false) {
+        using pc::updater::Status;
+        const auto st = pc::updater::state();
+        if (!force && st.status == last_update_status && st.done == last_update_done)
+            return;
+        last_update_status = st.status;
+        last_update_done = st.done;
+        if (st.status == Status::Ready) {
+            status(st.message);
+            if (aurora_begin_frame()) /* show it before the restart */
+                aurora_end_frame();
+            pc::updater::restart();
+        }
+        const bool busy_update =
+            st.status == Status::Downloading || st.status == Status::Installing;
+        const bool show =
+            !update_dismissed && !st.latest.empty() &&
+            (st.status == Status::Available || busy_update || st.status == Status::Failed);
+        if (auto* card = element("update-card"))
+            card->SetProperty("display", show ? "block" : "none");
+        if (!show && update_card_shown &&
+            within(document->GetContext()->GetFocusElement(), "update-card"))
+            element(supported ? "play" : "choose")->Focus();
+        update_card_shown = show;
+        if (settings)
+            refresh_settings();
+        if (!show)
+            return;
+        text("update-tag", st.latest);
+        text("update-desc",
+            st.status == Status::Failed || busy_update ? st.message :
+            st.can_install ? "Update now downloads it and restarts. Your settings, replays and "
+                             "disc stay as they are." :
+                             "Get it from the release page.");
+        text("update-action", st.status == Status::Failed ? "Try again" :
+                              st.can_install              ? "Update now" :
+                                                            "Download");
+        enabled("update-action", !busy_update);
+        enabled("update-later", !busy_update);
+        if (auto* row = element("update-progress-row"))
+            row->SetProperty("display", busy_update ? "flex" : "none");
+        if (busy_update) {
+            const int pct = st.total ? int(std::min<uint64_t>(100, st.done * 100 / st.total)) : 0;
+            if (auto* fill = element("update-progress-fill"))
+                fill->SetProperty("width", std::to_string(pct) + "%");
+            text("update-progress-text",
+                st.status == Status::Installing ? "..." : std::to_string(pct) + "%");
+        }
+    }
     // Left/right on a slider.
     void step_slider(int direction) {
         auto* focus = document->GetContext()->GetFocusElement();
@@ -998,6 +1071,42 @@ class Launcher final : public Rml::EventListener {
         if (id == "quit") {
             result = 0;
             cancel = true;
+            return;
+        }
+        if (id == "update-action") {
+            const auto st = pc::updater::state();
+            if (st.can_install) {
+                pc::updater::install_async();
+            } else {
+                status("Opening the " + st.latest + " release page...");
+                SDL_OpenURL(st.release_url.c_str());
+            }
+            return;
+        }
+        if (id == "update-browser") {
+            const auto st = pc::updater::state();
+            SDL_OpenURL(st.release_url.empty() ?
+                            "https://github.com/x9x9x9x9x9/squad-strike/releases" :
+                            st.release_url.c_str());
+            return;
+        }
+        if (id == "update-later") {
+            update_dismissed = true;
+            refresh_update(true);
+            element(supported ? "play" : "choose")->Focus();
+            return;
+        }
+        if (id == "check-updates") {
+            prefs.check_updates = !prefs.check_updates;
+            save();
+            refresh_settings();
+            element("check-updates")->Focus();
+            return;
+        }
+        if (id == "check-now") {
+            update_dismissed = false;
+            pc::updater::check_async();
+            refresh_settings();
             return;
         }
         if (id == "discord" || id == "settings-discord") {
@@ -1351,6 +1460,14 @@ public:
             inspect(prefs.disc);
         if (!initial_error.empty())
             status(initial_error, true);
+        pc::updater::cleanup_previous();
+        if (!pc::updater::supported()) {
+            for (const char* id : {"check-updates", "check-now"})
+                if (auto* e = element(id))
+                    if (auto* row = e->GetParentNode())
+                        row->SetProperty("display", "none");
+        } else if (prefs.check_updates)
+            pc::updater::check_async();
         while (result == -2) {
             if (pc_exit_requested) { /* SIGINT/SIGTERM, src/pc/main.c */
                 result = 0;
@@ -1529,6 +1646,7 @@ public:
                            " left). Press Play again to start now.");
                 }
             }
+            refresh_update();
             if (result != -2)
                 break;
             if (aurora_begin_frame())
