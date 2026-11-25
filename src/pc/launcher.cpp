@@ -679,7 +679,7 @@ class Launcher final : public Rml::EventListener {
         text("filter-mode", filter_name(prefs.filter_mode));
         text("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         text("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
-        text("magnifier", prefs.magnifier ? "On" : "Off");
+        text("magnifier", prefs.magnifier ? "On" : "Widescreen (top only)");
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         text("squad-strike", prefs.squad_strike ? "On" : "Off");
         text("stage-expansion", prefs.stage_expansion ? "On" : "Off");
@@ -2097,7 +2097,7 @@ public:
         label("filter-mode", filter_name(prefs.filter_mode));
         label("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
         label("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
-        label("magnifier", prefs.magnifier ? "On" : "Off");
+        label("magnifier", prefs.magnifier ? "On" : "Widescreen (top only)");
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
         label("squad-strike", prefs.squad_strike ? "On" : "Off");
         label("stage-expansion", prefs.stage_expansion ? "On" : "Off");
@@ -2871,7 +2871,8 @@ extern "C" bool pc_is_ucf_enabled(void) {
     static const char* env = std::getenv("MELEE_UCF");
     return env ? env[0] != '0' : prefs.ucf;
 }
-/* The off-screen magnifying glass: drawn or not. Display only (the bubble's
+/* The off-screen magnifying glass: everywhere, or (widescreen) only above
+ * the top of the screen. Display only (the bubble's
  * state, which off-screen damage reads, keeps updating), so it is a local
  * choice even in netplay. */
 /* The results screen after a match. Online it is the host's choice (RULES),
