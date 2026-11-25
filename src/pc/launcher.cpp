@@ -1095,18 +1095,19 @@ class Launcher final : public Rml::EventListener {
             form += std::string("<span class=\"form ") + (c == 'W' ? "win" : "loss") + "\">" + c +
                     "</span>";
         auto& overview = stats_rml[0];
-        overview =
-            "<div class=\"stat-tiles\">" + stat_tile(std::to_string(total), "Matches") +
-            stat_tile(std::to_string(you.wins) + " - " + std::to_string(you.losses),
-                "Your wins - losses") +
-            stat_tile(percent(you), "Win rate") + stat_tile(duration(frames), "Time played") +
-            stat_tile(std::to_string(online), "Online matches") +
-            stat_tile(streak ?
-                          std::to_string(streak) + " " + (streak_kind == 'W' ? "won" : "lost") :
-                          std::string("-"),
-                "Current streak") +
-            stat_tile(most_played, "Most played") +
-            stat_tile(favourite_stage, "Most played stage") + "</div>";
+        overview = "<div class=\"stat-tiles\">" + stat_tile(std::to_string(total), "Matches") +
+                   stat_tile(std::to_string(you.wins) + " - " + std::to_string(you.losses),
+                       "Your wins - losses") +
+                   stat_tile(percent(you), "Win rate") +
+                   stat_tile(duration(frames), "Time played") +
+                   stat_tile(std::to_string(online), "Online matches") +
+                   stat_tile(streak ? std::to_string(streak) + " " +
+                                          (streak_kind == 'W' ? (streak == 1 ? "win" : "wins") :
+                                                                (streak == 1 ? "loss" : "losses")) :
+                                      std::string("-"),
+                       "Current streak") +
+                   stat_tile(most_played, "Most played") +
+                   stat_tile(favourite_stage, "Most played stage") + "</div>";
         overview += "<div class=\"stat-form\"><span class=\"stat-label\">Last 10</span>" +
                     (form.empty() ? std::string("<span class=\"stat-label\"> -</span>") : form) +
                     "</div>";
