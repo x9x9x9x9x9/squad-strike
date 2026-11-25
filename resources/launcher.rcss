@@ -314,6 +314,7 @@ button.mini.primary { border-color: #e0b030; }
 #replay-actions .plate { width: 80%; margin-bottom: -10dp; }
 #replay-watch { margin-left: 8%; }
 #replay-export { margin-left: 4%; }
+#replay-stats { margin-left: 0; }
 #replay-delete { margin-left: 0; }
 #replay-folder { margin-left: 4%; }
 #replay-back { margin-top: 22dp; margin-left: 6%; }
@@ -346,6 +347,76 @@ button.replay:hover { border-color: #e0b03080; }
 button.replay:focus { background-color: #ffcb0024; border-color: #e0b030; color: #ffd84a; }
 button.replay.selected { border-color: #e0b030; }
 button.replay.unplayable { color: #7d8199; }
+
+/* ---- Stats (from the replay list) ---------------------------------------- */
+
+#stats-view { display: none; flex: 1; min-height: 0; flex-direction: row; }
+.in-stats #home, .in-stats #replays-view { display: none; }
+.in-stats #stats-view { display: flex; }
+.in-stats #title-sub { display: inline-block; }
+#stats-tabs {
+    width: 28%;
+    max-width: 320dp;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 22dp;
+}
+#stats-tabs .plate { width: 80%; margin-bottom: -10dp; }
+#stats-overview { margin-left: 8%; }
+#stats-characters { margin-left: 4%; }
+#stats-opponents { margin-left: 0; }
+#stats-stages { margin-left: 4%; }
+#stats-back { margin-top: 22dp; margin-left: 6%; }
+#stats-panel {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 14dp 18dp 10dp 22dp;
+    background-color: #0a0c26c8;
+    border: 2dp #b8bccb50;
+    border-radius: 6dp 18dp 18dp 6dp;
+}
+.stat-tiles { display: flex; flex-wrap: wrap; }
+.stat-tile {
+    width: 23%;
+    box-sizing: border-box;
+    margin: 0 2% 12dp 0;
+    padding: 8dp 10dp;
+    background-color: #ffffff0a;
+    border-radius: 6dp;
+}
+.stat-value { font-size: 24dp; font-weight: bold; color: #ffd84a; }
+.stat-label { font-size: 14dp; color: #9da2bb; }
+.stat-form { display: flex; align-items: center; margin: 4dp 0 6dp; }
+.stat-form .stat-label { margin-right: 10dp; }
+.form {
+    width: 26dp;
+    height: 26dp;
+    line-height: 26dp;
+    margin-right: 5dp;
+    text-align: center;
+    font-weight: bold;
+    font-size: 15dp;
+    border-radius: 4dp;
+    color: #141008;
+}
+.form.win { background-color: #5cc46a; }
+.form.loss { background-color: #e05a4a; }
+.stat-row {
+    display: flex;
+    padding: 4dp 10dp;
+    margin-bottom: 2dp;
+    border-radius: 4dp;
+    background-color: #ffffff08;
+    font-size: 17dp;
+    color: #e8e8f0;
+}
+.stat-row.stat-head { background-color: transparent; color: #9da2bb; font-size: 14dp; font-weight: bold; }
+.stat-name { flex: 1; min-width: 0; font-weight: bold; }
+.stat-num { width: 90dp; text-align: right; }
 
 /* ---- Settings ----------------------------------------------------------- */
 

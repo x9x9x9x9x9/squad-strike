@@ -23,6 +23,7 @@
 #include "pc/replay.h"
 #include "pc/net.h"
 #include "pc/net_internal.h"
+#include "pc/net_match.h"
 #include "pc/paths.h"
 #include "pc/pc.h"
 #include "pc/slp.h"
@@ -116,7 +117,13 @@ typedef struct SsrHeader {
     /* The seed entering the match's setup: fighter and stage creation draw
      * from it before the first tick (CPU timers, the stage's own state). */
     uint32_t start_seed;
-    uint8_t reserved[28];
+    /* Who recorded it, for the stats page: this machine's port + 1 (0 when
+     * there is no single one, as with two people on one controller set),
+     * and online the opponent's connect code. Zero in files from before
+     * they were kept, which read as unknown. */
+    uint8_t local_port;
+    char opponent[16];
+    uint8_t reserved[11];
 } __attribute__((packed)) SsrHeader;
 
 /* ---- recording -------------------------------------------------------- */
@@ -277,6 +284,27 @@ void pc_replay_match_start(const StartMeleeData* data) {
     }
     SDL_strlcpy(s_hdr.name, pc_get_net_name(), sizeof s_hdr.name);
     s_hdr.start_seed = *HSD_RandSeedPtr;
+    s_hdr.local_port = 0;
+    memset(s_hdr.opponent, 0, sizeof s_hdr.opponent);
+    if (pc_net_active()) {
+        const int port = pc_net_local_player();
+        s_hdr.local_port = port >= 0 && port < 4 ? (uint8_t)(port + 1) : 0;
+        const char* code = pc_net_match_opponent_code();
+        SDL_strlcpy(s_hdr.opponent, code != NULL ? code : "", sizeof s_hdr.opponent);
+    } else {
+        /* Offline the player is the one human; with two or more there is no
+         * telling which one is this machine's owner. */
+        int humans = 0;
+        for (int i = 0; i < 4; i++) {
+            if (data->players[i].slot_type == Gm_PKind_Human) {
+                humans++;
+                s_hdr.local_port = (uint8_t)(i + 1);
+            }
+        }
+        if (humans != 1) {
+            s_hdr.local_port = 0;
+        }
+    }
 
     for (int i = 0; i < STAGE_RING; i++) {
         s_ring[i].frame = -1;
@@ -945,6 +973,8 @@ static bool info_from(const char* path, const char* file, PcReplayInfo* out) {
     out->bytes = (uint32_t)size;
     SDL_strlcpy(out->name, h.name, sizeof out->name);
     SDL_strlcpy(out->version, h.app_version, sizeof out->version);
+    out->local_port = h.local_port >= 1 && h.local_port <= 4 ? h.local_port - 1 : -1;
+    SDL_strlcpy(out->opponent, h.opponent, sizeof out->opponent);
     if (!out->playable) {
         return true; /* listed, but its layout is not this build's */
     }
