@@ -31,10 +31,12 @@ extern void browser_yield(void);
 #include <melee/if/ifnetchat.h>
 #include <dolphin/pad.h>
 #include "pc/net_lan.h"
+#include "pc/replay.h"
 #include "pc/net_match.h"
 #include "pc/net_rank_session.h"
 
 bool pc_exit_requested;
+bool pc_relaunch_requested;
 
 static u32 s_retrace_count;
 static VIRetraceCallback s_pre_cb;
@@ -205,6 +207,10 @@ void pc_frame_boundary(void) {
 
     u64 update_started = timing_debug ? SDL_GetTicksNS() : 0;
     bool update_trace = aurora_trace_begin("Melee update");
+    /* Escape opens the F1 menu. While it is open the menu has Escape (back, then
+     * close), so only a press that finds it closed both before and after the
+     * menu saw the event opens it, whichever of the two runs first. */
+    const bool menu_was_open = pc_menu_is_open();
     const AuroraEvent* event = aurora_update();
     if (timing_debug) {
         u64 elapsed = SDL_GetTicksNS() - update_started;
@@ -218,6 +224,10 @@ void pc_frame_boundary(void) {
         } else if (event->type == AURORA_SDL_EVENT) {
             if (event->sdl.type == SDL_EVENT_KEY_DOWN &&
                 event->sdl.key.scancode == SDL_SCANCODE_F1 && !event->sdl.key.repeat)
+                pc_menu_toggle();
+            else if (event->sdl.type == SDL_EVENT_KEY_DOWN &&
+                     event->sdl.key.scancode == SDL_SCANCODE_ESCAPE && !event->sdl.key.repeat &&
+                     !menu_was_open && !pc_menu_is_open())
                 pc_menu_toggle();
             pc_menu_event(&event->sdl);
             pc_keyboard_event(&event->sdl);
@@ -249,6 +259,9 @@ void pc_frame_boundary(void) {
         pc_net_match_stop();
         pc_net_disconnect();
         pc_lan_stop();
+        if (pc_relaunch_requested) {
+            pc_relaunch_to(pc_replay_playing() ? "replays" : "home", "");
+        }
         exit(0);
     }
 

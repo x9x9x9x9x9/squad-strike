@@ -74,6 +74,16 @@ bool pc_is_input_hud_enabled(void);
 
 /* Set once the window is closed; the game loop is expected to exit. */
 extern bool pc_exit_requested;
+/* Set with pc_exit_requested by Back to launcher (F1 menu): the exit path
+ * restarts the program on the launcher instead of closing (src/pc/vi.c). */
+extern bool pc_relaunch_requested;
+/* Restart this program on a launcher page ("home", "replays") with a line for
+ * its status bar (src/pc/main.c). Does not return. Mobile and the browser,
+ * which cannot start themselves, just close. */
+void pc_relaunch_to(const char* page, const char* status);
+/* Whether pc_relaunch_to brings the launcher back (desktop) rather than just
+ * closing. */
+bool pc_can_relaunch(void);
 
 /* Vertex array byte sizes for aurora's GXSetArray (src/pc/vtxarray.c).
  * pc_vtx_array_scan walks a PObj's display list at load time; the size of

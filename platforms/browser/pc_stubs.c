@@ -183,6 +183,17 @@ void pc_slp_pre_frame(struct HSD_GObj* gobj) {
     (void)gobj;
 }
 
+/* A page cannot start itself again: Back to launcher is not offered there,
+ * and a restart request just closes, as on mobile (src/pc/main.c). */
+void pc_relaunch_to(const char* page, const char* status) {
+    (void)page;
+    (void)status;
+    exit(0);
+}
+bool pc_can_relaunch(void) {
+    return false;
+}
+
 /* Replays (src/pc/replay.c) need the desktop launcher to be watched and a
  * file system to be kept in, so the browser neither records nor plays them;
  * the simulation keeps netplay's rules for what reproduces. */

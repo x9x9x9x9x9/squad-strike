@@ -1335,13 +1335,13 @@ public:
         }
     }
     int run(const std::string& initial_error, bool start_requested = false) {
-        /* Back from watching a replay (pc_relaunch_launcher): its list. */
-        if (const char* page = std::getenv("MELEE_LAUNCHER_PAGE");
-            page && std::strcmp(page, "replays") == 0)
-        {
+        /* Back from the game (pc_relaunch_to): from a replay, its list; from
+         * Back to launcher, the main menu. Either way not straight back into
+         * the game, as a disc on the command line would. */
+        if (const char* page = std::getenv("MELEE_LAUNCHER_PAGE"); page && page[0] != '\0') {
             start_requested = false;
+            open_replays_after_inspect = std::strcmp(page, "replays") == 0;
             SDL_unsetenv_unsafe("MELEE_LAUNCHER_PAGE");
-            open_replays_after_inspect = true;
         }
         if (const char* msg = std::getenv("MELEE_LAUNCHER_STATUS")) {
             replay_status = msg;
@@ -1738,8 +1738,17 @@ public:
     // the menu would go black: hold the change until the menu closes.
     bool resize_pending = false;
 
+    /* Below the categories: Resume, Back to launcher (desktop only) and Quit. */
+    std::vector<const char*> exits() const {
+        if (pc_can_relaunch())
+            return {"resume", "to-launcher", "quit-game"};
+        return {"resume", "quit-game"};
+    }
+    static bool is_exit(const Rml::String& id) {
+        return id == "resume" || id == "to-launcher" || id == "quit-game";
+    }
     static bool is_sidebar(const Rml::String& id) {
-        return index_of(tab_ids, id) >= 0 || id == "resume" || id == "quit-game";
+        return index_of(tab_ids, id) >= 0 || is_exit(id);
     }
     static bool is_slider(const Rml::String& id) {
         return id == "volume" || id == "resolution" || id == "scale" || id == "music-volume" ||
@@ -1794,8 +1803,8 @@ public:
         focus_ids = {tab_ids[tab]};
         for (const auto& id : page_focus())
             focus_ids.push_back(id);
-        focus_ids.push_back("resume");
-        focus_ids.push_back("quit-game");
+        for (const char* id : exits())
+            focus_ids.push_back(id);
         quiet = true;
         if (auto* e = document->GetElementById(tab_ids[tab])) {
             e->Focus();
@@ -1826,11 +1835,16 @@ public:
         const auto id = focus ? focus->GetId() : Rml::String();
         if (is_sidebar(id)) {
             const int count = std::size(tab_ids) - 1;
-            const int current = id == "quit-game" ? count + 1 : id == "resume" ? count : tab;
-            const int next = (current + direction + count + 2) % (count + 2);
+            const auto ex = exits();
+            const int total = count + int(ex.size());
+            int current = tab;
+            for (size_t i = 0; i < ex.size(); ++i)
+                if (id == ex[i])
+                    current = count + int(i);
+            const int next = (current + direction + total) % total;
             if (next < count)
                 show_tab(next);
-            else if (auto* e = document->GetElementById(next == count ? "resume" : "quit-game"))
+            else if (auto* e = document->GetElementById(ex[next - count]))
                 e->Focus();
             return;
         }
@@ -2164,6 +2178,14 @@ public:
             toggle();
             return;
         }
+        if (id == "to-launcher") {
+            // The same way out, then the program starts again on the launcher
+            // (pc_relaunch_requested, src/pc/vi.c).
+            pc_relaunch_requested = true;
+            pc_exit_requested = true;
+            toggle();
+            return;
+        }
         if (id == "resume") {
             toggle();
             return;
@@ -2476,8 +2498,7 @@ public:
             current_row = row;
             if (current_row)
                 current_row->SetClass("current", true);
-            document->SetClass("on-back",
-                target && (target->GetId() == "resume" || target->GetId() == "quit-game"));
+            document->SetClass("on-back", target && is_exit(target->GetId()));
             if (!description.empty())
                 label("menu-status", description);
             if (!quiet)
@@ -2565,6 +2586,9 @@ extern "C" void pc_menu_init(SDL_Window* window) {
         SDL_Log("F1 menu: could not load port-menu.rml");
         return;
     }
+    if (!pc_can_relaunch())
+        if (auto* e = port_menu.document->GetElementById("to-launcher"))
+            e->SetProperty("display", "none");
     port_menu.document->AddEventListener(Rml::EventId::Click, &port_menu);
     port_menu.document->AddEventListener(Rml::EventId::Keydown, &port_menu);
     port_menu.document->AddEventListener(Rml::EventId::Change, &port_menu);

@@ -18,7 +18,7 @@
         </span>
         <span id="edition">
           <span id="menu-version">Melee PC</span>
-          <span> · F1 to close</span>
+          <span> · F1 or Esc to close</span>
         </span>
       </div>
       <div id="preferences">
@@ -40,6 +40,9 @@
           </button>
           <button id="resume" class="plate small back" data-desc="Close settings and return to the game.">
             <span>Resume</span>
+          </button>
+          <button id="to-launcher" class="plate small back" data-desc="Leave the game and go back to the launcher, without closing Melee PC.">
+            <span>Launcher</span>
           </button>
           <button id="quit-game" class="plate small back" data-desc="Quit the game and return to the desktop.">
             <span>Quit game</span>

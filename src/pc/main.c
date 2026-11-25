@@ -499,18 +499,34 @@ static char** s_argv;
  * minus the replay. Where a process cannot start itself (mobile) the game
  * just closes. */
 void pc_relaunch_launcher(void) {
-    const char* status = pc_replay_status();
+    pc_relaunch_to("replays", pc_replay_status());
+}
+
+bool pc_can_relaunch(void) {
+#if defined(__ANDROID__) ||                                                                        \
+    (defined(__APPLE__) && defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) ||                       \
+    defined(__EMSCRIPTEN__)
+    return false;
+#else
+    return true;
+#endif
+}
+
+/* The same restart for any launcher page ("home", "replays"), with a line for
+ * its status bar (or ""). Back to launcher in the F1 menu and the updater use
+ * it too. */
+void pc_relaunch_to(const char* page, const char* status) {
     SDL_unsetenv_unsafe("MELEE_REPLAY");
     SDL_unsetenv_unsafe("MELEE_REPLAY_EXPORT");
-    SDL_setenv_unsafe("MELEE_LAUNCHER_PAGE", "replays", 1);
+    SDL_setenv_unsafe("MELEE_LAUNCHER_PAGE", page, 1);
     if (status[0] != '\0') {
         SDL_setenv_unsafe("MELEE_LAUNCHER_STATUS", status, 1);
     }
-    pc_log_line("replay: back to the launcher");
+    pc_log_line("relaunch: back to the launcher (%s)", page);
 #if defined(_WIN32)
     SetEnvironmentVariableW(L"MELEE_REPLAY", NULL);
     SetEnvironmentVariableW(L"MELEE_REPLAY_EXPORT", NULL);
-    SetEnvironmentVariableW(L"MELEE_LAUNCHER_PAGE", L"replays");
+    SetEnvironmentVariableA("MELEE_LAUNCHER_PAGE", page);
     SetEnvironmentVariableA("MELEE_LAUNCHER_STATUS", status[0] != '\0' ? status : NULL);
     STARTUPINFOW si;
     PROCESS_INFORMATION pi;
