@@ -27,6 +27,7 @@ class BrowserStubs(unittest.TestCase):
 extern "C" char* SDL_strdup(const char* text) { return strdup(text); }
 extern "C" void SDL_free(void* pointer) { free(pointer); }
 extern "C" bool pc_net_deterministic(void) { return false; }
+extern "C" void pc_log_line(const char*, ...) {}
 int main() {
     for (int slot = 0; slot < int(launcher::default_keys.size()); ++slot)
         assert(pc_get_key_binding(slot) == launcher::default_keys[slot]);
