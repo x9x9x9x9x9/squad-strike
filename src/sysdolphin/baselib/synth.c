@@ -1345,8 +1345,43 @@ static u32 HSD_SynthPcHakoLen(u32 slot)
 #define HAKO_LEN(slot) (pstHakoHeader[slot].x0)
 #endif
 
+#ifdef TARGET_PC
+/* A block header that just arrived, checked before anything uses it: its
+ * length within the 64 KB slot, its end address inside that length, and the
+ * next block's offset 32-byte aligned past the file header (or -1, the end).
+ * A wrong one (2026-11-25, Metal Cavern: a "length" of -44080452, then
+ * static, then a crash at the next screen) otherwise points the voices and
+ * the next read anywhere. Replaced by an almost empty block whose next block
+ * is the song's first, the music restarts instead. */
+static void HSD_SynthPcCheckHako(u32 slot)
+{
+    static int told;
+    struct pstHakoHeader_t* h = &pstHakoHeader[slot % 3];
+    s32 len = h->x0;
+    s32 end = h->x4;
+    s32 next = h->x8;
+    if (len > 0 && len <= 0x10000 && end >= 0 && end < 2 * len &&
+        (next == -1 || (next >= 0x80 && (next & 0x1F) == 0)))
+    {
+        return;
+    }
+    if (told < 5) {
+        told++;
+        pc_log_line("synth: bad music block header (length %d, end %d, next %d) "
+                    "in slot %u; restarting the song",
+                    (int) len, (int) end, (int) next, (unsigned) slot);
+    }
+    h->x0 = 0x20;
+    h->x4 = 0x1F;
+    h->x8 = 0x80;
+}
+#endif
+
 void HSD_SynthPStreamHakoHeaderCallback(u32 offset, uintptr_t src)
 {
+#ifdef TARGET_PC
+    HSD_SynthPcCheckHako(HSD_Synth_804D7768);
+#endif
     HSD_DevComRequest(HSD_Synth_804D7764, src,
                       HAKO_DEST(HSD_Synth_804D7768),
                       HAKO_LEN(HSD_Synth_804D7768), 0x23, 0,
@@ -1403,6 +1438,13 @@ void HSD_SynthPStreamMasterClockCallback(void)
             node->voice[0]->pb.addr.currentAddressLo) -
            HSD_Synth_804D7780 * 2) >>
           0x11;
+#ifdef TARGET_PC
+    /* The voice is somewhere past the three slots (a bad block got it
+     * there): nothing here indexes a fourth header. */
+    if (pos > 2) {
+        return;
+    }
+#endif
     if (pos != HSD_Synth_804D7774) {
         HSD_Synth_804D7774 = pos;
         for (i = 0; i < node->voice_count; i++) {
@@ -1502,6 +1544,9 @@ void HSD_SynthPStreamFirstHakoDataCallback(void)
 
 void HSD_SynthPStreamFirstHakoHeaderCallback(void)
 {
+#ifdef TARGET_PC
+    HSD_SynthPcCheckHako(HSD_Synth_804D7768);
+#endif
     HSD_DevComRequest(
         HSD_Synth_804D7764, 0xA0,
         HAKO_DEST(HSD_Synth_804D7768), HAKO_LEN(HSD_Synth_804D7768), 0x23,

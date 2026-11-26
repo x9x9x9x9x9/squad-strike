@@ -30,8 +30,12 @@
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_stdinc.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -71,39 +75,83 @@ const char* const k_files[] = {
     "PlZd.dat",
 };
 
+/* Each overlay file is read from its folder once, whole, the first time the
+ * game opens it, and served from memory after that: music streams from these
+ * files mid-match, and a folder on a synced drive (OneDrive) or one an
+ * antivirus watches can make a read late or short (2026-11-25: Metal
+ * Cavern's music read a block header from the wrong place). About 12 MB with
+ * every SD Remix fighter and both ACE stages. */
 struct Overlay {
     std::string disc_name; /* "/PlCa.dat" */
     std::string host_path;
+    std::shared_ptr<const std::vector<uint8_t>> data; /* once loaded */
+};
+
+struct OverlayHandle {
+    std::shared_ptr<const std::vector<uint8_t>> data;
+    size_t pos = 0;
 };
 
 std::vector<Overlay> s_overlays;
+std::mutex s_overlay_mutex;
 bool s_active = false;
 
 void* overlay_open(void* userdata) {
-    const auto* ov = static_cast<const Overlay*>(userdata);
-    return std::fopen(ov->host_path.c_str(), "rb");
+    auto* ov = static_cast<Overlay*>(userdata);
+    std::lock_guard lock(s_overlay_mutex);
+    if (!ov->data) {
+        FILE* f = std::fopen(ov->host_path.c_str(), "rb");
+        if (f == nullptr) {
+            return nullptr;
+        }
+        auto bytes = std::make_shared<std::vector<uint8_t>>();
+        uint8_t chunk[1 << 16];
+        size_t got;
+        while ((got = std::fread(chunk, 1, sizeof chunk, f)) > 0) {
+            bytes->insert(bytes->end(), chunk, chunk + got);
+        }
+        const bool failed = std::ferror(f) != 0;
+        std::fclose(f);
+        if (failed) {
+            pc_log_line("overlay: could not read %s", ov->host_path.c_str());
+            return nullptr;
+        }
+        ov->data = std::move(bytes);
+    }
+    return new OverlayHandle{ov->data, 0};
 }
 
 void overlay_close(void* handle) {
-    if (handle != nullptr) {
-        std::fclose(static_cast<FILE*>(handle));
-    }
+    delete static_cast<OverlayHandle*>(handle);
 }
 
 int64_t overlay_read(void* handle, uint8_t* buf, size_t len) {
-    if (handle == nullptr) {
+    auto* h = static_cast<OverlayHandle*>(handle);
+    if (h == nullptr) {
         return -1;
     }
-    return static_cast<int64_t>(std::fread(buf, 1, len, static_cast<FILE*>(handle)));
+    const size_t size = h->data->size();
+    const size_t n = h->pos < size ? std::min(len, size - h->pos) : 0;
+    std::memcpy(buf, h->data->data() + h->pos, n);
+    h->pos += n;
+    return static_cast<int64_t>(n);
 }
 
 int64_t overlay_seek(void* handle, int64_t offset, int32_t whence) {
-    auto* f = static_cast<FILE*>(handle);
-    /* fseek takes a long; the fighter files are well under 2 GB. */
-    if (f == nullptr || std::fseek(f, static_cast<long>(offset), whence) != 0) {  // NOLINT
+    auto* h = static_cast<OverlayHandle*>(handle);
+    if (h == nullptr) {
         return -1;
     }
-    return std::ftell(f);
+    const int64_t size = static_cast<int64_t>(h->data->size());
+    const int64_t base = whence == SEEK_CUR ? static_cast<int64_t>(h->pos) :
+                         whence == SEEK_END ? size :
+                                              0;
+    const int64_t to = base + offset;
+    if (to < 0) {
+        return -1;
+    }
+    h->pos = static_cast<size_t>(to);
+    return to;
 }
 
 bool file_size(const std::string& path, size_t* size) {
