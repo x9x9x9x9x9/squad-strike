@@ -6,7 +6,31 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.10
+## What's new in v1.0.11
+
+- **Updater.** The launcher tells you when a new version is out. On Windows,
+  **Update now** downloads, checks and installs it, then restarts. Your
+  settings, replays and disc stay. (Settings → Launcher → Check for updates.)
+- **Stats for every game.** A on a replay opens its page: kills, deaths,
+  damage, openings, neutral wins, best punish, L-cancels, APM and every
+  stock lost. **Stats** on the Replays page adds up your record by fighter,
+  opponent and stage, using each game's real result (Squad Strike and
+  time-outs included).
+- **20XX Captain Falcon.** On character select, D-pad left with Falcon
+  picked switches to the 20XX HackPack's SD Remix Falcon (a quick,
+  shine-like grounded down-B). Each player picks their own.
+- **Esc** opens the in-game menu, and its new **Launcher** button takes you
+  back to the launcher without closing the game.
+- **Magnifying glass: Widescreen (top only)** replaces Off: the bubble shows
+  only for a fighter above the screen.
+- **Fix:** music on the ACE stages (Metal Cavern, WarioWare) could turn to
+  static and crash the game at the next screen. Each block of music is now
+  checked as it plays, and the stage files are kept in memory.
+- **Fix:** a crash freeing a file that was never loaded (seen on Pokémon
+  Stadium online). Crashes now also leave a full report in melee-pc.log.
+- Both players need v1.0.11 for online matches.
+
+## Also in v1.0.10
 
 - **Replays.** Every match, offline and online, is saved as a small replay
   file. Watch them from **Replays** on the launcher: pause, slow motion,

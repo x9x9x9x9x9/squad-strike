@@ -108,6 +108,21 @@ data is included.
   recorded, the bar at the bottom says **OUT OF SYNC**.
 - Replays are stored in the `replays` folder beside your settings (see
   [Settings](#settings)); **Open Folder** on the Replays page opens it.
+- **A on a replay** opens its page: a **Summary** with a column per player
+  (result, kills, deaths, self-destructs, damage dealt and taken, openings,
+  damage per opening, openings per kill, neutral wins, best punish,
+  L-cancels, ledge grabs, actions per minute), the **Stocks** each player
+  lost (when, at what damage, to whom), and **Watch**. Games from before
+  v1.0.11 have only their final stocks.
+- **Stats** on the Replays page adds up your record: wins and losses, win
+  rate, streak and last 10 games, and tables by fighter, opponent and stage.
+
+### Updates
+- The launcher looks for a new release each time it opens. On Windows,
+  **Update now** downloads it, checks it, installs it and restarts; your
+  settings, replays and disc stay. Linux AppImages update the same way;
+  other builds open the release page. Settings → Launcher → Check for
+  updates turns it off, and **Check now** looks again.
 
 ### Controllers
 - Official and third-party **GameCube controller adapters**, including the
@@ -118,11 +133,6 @@ data is included.
   While it's on, a filter removes the one-report input glitches some
   adapters produce when the motor runs.
 - Keyboard play (see [Controls](#controls)).
-
-### Removed from melee-pc
-- The **auto-updater** and its setting are gone. This build never downloads
-  or replaces itself. New versions are posted on the
-  [Releases page](https://github.com/x9x9x9x9x9/squad-strike/releases).
 
 ## How to install
 
@@ -234,8 +244,9 @@ Any Gamecube adapter or GC Ultimate should work.
 Keyboard: arrows or WASD = control stick, IJKL = C-stick, X = A, Z = B,
 C = X, V = Y, Q / E = L / R, Tab = Z, Enter = Start, TFGH = D-pad.
 
-**F1** (or Back/Select on a gamepad) opens the settings overlay in game, with
-the game paused underneath.
+**F1** or **Esc** (or Back/Select on a gamepad) opens the settings overlay in
+game, with the game paused underneath. Its **Launcher** button leaves the game
+and goes back to the launcher without closing Melee PC.
 
 ## Settings
 
@@ -245,8 +256,9 @@ settings:
 - **Gameplay:** Unlock everything, Squad Strike, Stage Expansion, SD Remix
   characters, Free camera, Universal Controller Fix (UCF 0.8), Rumble, Post
   match results screen (online, the host's choice is used), Save replays.
-- **Video:** Magnifying glass: turn off the bubble that shows a fighter off
-  the edge of the screen (handy in widescreen).
+- **Video:** Magnifying glass: **Widescreen (top only)** shows the bubble only
+  for a fighter above the screen, since a widescreen view keeps fighters past
+  the sides in sight.
 - **Online:** your connect code, a friend's code, input delay, ping display,
   players on this computer.
 - **Graphics / Audio / Controls:** resolution up to 10x, MSAA, filtering,

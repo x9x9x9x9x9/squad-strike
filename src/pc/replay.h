@@ -85,7 +85,7 @@ typedef struct PcReplayInfo {
     uint16_t stkind;
     uint8_t ace_pick; /* GrAce_* when the stage was an ACE stage */
     uint8_t is_teams, stock_match;
-    char name[32];        /* the recording machine's player name */
+    char name[32];        /* the recording player's connect code (older: player name) */
     char version[32];     /* the build that recorded it */
     int8_t local_port;    /* the recording machine's player's port, -1 unknown */
     bool has_stats;       /* it carries the match's statistics (pc_replay_read_stats) */

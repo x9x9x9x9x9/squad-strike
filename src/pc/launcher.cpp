@@ -1270,14 +1270,16 @@ class Launcher final : public Rml::EventListener {
         std::snprintf(buf, sizeof buf, "%.1f", v);
         return buf;
     }
+    /* A player by port and connect code: not by fighter, which Squad
+     * Strike changes mid-game. */
     std::string player_name(const PcReplayInfo& r, int i) const {
-        std::string s = "P" + std::to_string(i + 1) + " " + replay_fighter(r.players[i].ckind);
+        std::string s = "P" + std::to_string(i + 1);
         if (r.players[i].cpu)
-            s += " (CPU)";
-        else if (i == r.local_port)
-            s += " (you)";
-        else if (r.online && r.opponent[0])
-            s += std::string(" (") + r.opponent + ")";
+            return s + " \xc2\xb7 CPU";
+        if (i == r.local_port && r.name[0] && std::strcmp(r.name, "PLAYER") != 0)
+            return s + " \xc2\xb7 " + r.name;
+        if (i != r.local_port && r.online && r.opponent[0])
+            return s + " \xc2\xb7 " + r.opponent;
         return s;
     }
     void build_game(const PcReplayInfo& r) {
@@ -1368,8 +1370,7 @@ class Launcher final : public Rml::EventListener {
             for (int d = 0; d < p.n_deaths && d < GMSTATS_DEATHS; ++d) {
                 const auto& death = p.deaths[d];
                 std::string by = death.by >= 0 && death.by < 4 && death.by != i ?
-                                     "P" + std::to_string(death.by + 1) + " " +
-                                         replay_fighter(r.players[death.by].ckind) :
+                                     player_name(r, death.by) :
                                      std::string("Self-destruct");
                 k += "<div class=\"stat-row\"><span class=\"stat-name\">Stock " +
                      std::to_string(d + 1) + " \xc2\xb7 " + replay_fighter(death.ckind) +

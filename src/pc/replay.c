@@ -78,6 +78,7 @@ bool pc_is_results_screen_enabled(void);
 bool pc_ace_stage_offered(int stage);
 bool pc_sdremix_active(void);
 const char* pc_get_net_name(void);
+const char* pc_get_net_code(void);
 
 #define SSR_VERSION 2 /* 2: the squad match state (GmSquadLive) */
 #define SSR_CK_EVERY 30
@@ -297,7 +298,20 @@ void pc_replay_match_start(const StartMeleeData* data) {
         memset(s_hdr.squad, GMSQUAD_NONE, sizeof s_hdr.squad);
         memset(s_hdr.coin_pos, GMSQUAD_NONE, sizeof s_hdr.coin_pos);
     }
-    SDL_strlcpy(s_hdr.name, pc_get_net_name(), sizeof s_hdr.name);
+    /* This player's connect code (the replay viewer names players by it),
+     * or the old player name where there is none. */
+    {
+        /* Online the identity is loaded already; offline, asking for it
+         * could create one, so the chosen code from the settings. */
+        const char* code = pc_net_active() ? pc_net_match_local_code() : NULL;
+        if (code == NULL || code[0] == '\0') {
+            code = pc_get_net_code();
+        }
+        if (code == NULL || code[0] == '\0') {
+            code = pc_get_net_name();
+        }
+        SDL_strlcpy(s_hdr.name, code, sizeof s_hdr.name);
+    }
     s_hdr.start_seed = *HSD_RandSeedPtr;
     s_hdr.local_port = 0;
     memset(s_hdr.opponent, 0, sizeof s_hdr.opponent);
