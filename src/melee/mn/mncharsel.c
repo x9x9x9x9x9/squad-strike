@@ -78,6 +78,7 @@ static s8 mnCharSel_804D6CF9;
 #ifdef TARGET_PC
 static void mnCharSel_SquadReset(int canvas); /* mncharsel_squad.h */
 static bool mnCharSel_SquadTakesXY(int port); /* mncharsel_squad.h */
+static void mnCharSel_VariantReset(void);     /* mncharsel_variant.h */
 #endif
 
 /// Can't be enum bc float, but reused values
@@ -4460,6 +4461,7 @@ s32 mnCharSel_802640A0(void)
     ctx = HSD_SisLib_803A611C(0, gobj, 7, 8, 0x80, 1, 0x80, 0);
 #ifdef TARGET_PC
     mnCharSel_SquadReset(ctx);
+    mnCharSel_VariantReset();
 #endif
 
     gobj = GObj_Create(3, 4, 0x80);
@@ -5535,6 +5537,7 @@ void mnCharSel_Scene_OnEnter(void* arg0)
 
 #ifdef TARGET_PC
 #include "mncharsel_squad.h"
+#include "mncharsel_variant.h"
 #endif
 
 void mnCharSel_Scene_OnFrame(void)
@@ -5548,6 +5551,7 @@ void mnCharSel_Scene_OnFrame(void)
 
 #ifdef TARGET_PC
     mnCharSel_SquadFrame();
+    mnCharSel_VariantFrame();
 #endif
 
     mnCharSel_804D6CEC += 1;
