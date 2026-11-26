@@ -300,6 +300,78 @@ static LONG WINAPI crash_handler(EXCEPTION_POINTERS* info) {
     }
     return EXCEPTION_EXECUTE_HANDLER;
 }
+
+/* The same backtrace for a panic (an assert in the game) or an abort, which
+ * never reach crash_handler: abort() ends the process without an exception.
+ * Frame #00 is this function; the caller of OSPanic is a few frames down. */
+static void log_backtrace_as(const char* tag, const char* why) {
+    void* frames[40];
+    const USHORT count = CaptureStackBackTrace(1, 40, frames, NULL);
+    FILE* streams[] = {stderr, log_file()};
+    for (size_t i = 0; i < sizeof(streams) / sizeof(*streams); i++) {
+        FILE* s = streams[i];
+        if (s == NULL) {
+            continue;
+        }
+        fprintf(s, "%s %s\n", tag, why);
+        for (USHORT f = 0; f < count; f++) {
+            char where[MAX_PATH + 64];
+            describe_addr(frames[f], where, sizeof(where));
+            fprintf(s, "%s   #%02u %s\n", tag, (unsigned)f, where);
+        }
+        fflush(s);
+    }
+}
+
+static void log_backtrace(const char* why) {
+    log_backtrace_as("[FATAL]", why);
+}
+
+void pc_log_stack(const char* why) {
+    log_backtrace_as("[WARN]", why);
+}
+
+static bool s_panicked;
+
+static void panic_hook(const char* file, int line, const char* msg) {
+    char why[512];
+    s_panicked = true;
+    snprintf(why, sizeof why, "panic: %s:%d: %s", file, line, msg != NULL ? msg : "");
+    log_backtrace(why);
+}
+
+static void abort_signal(int sig) {
+    (void)sig;
+    if (!s_panicked) { /* a panic's abort is already written */
+        log_backtrace("abort");
+    }
+}
+
+/* Crashes the unhandled-exception filter never sees: the heap noticing it
+ * was overwritten (0xC0000374) and a stack overflow end the process before
+ * it runs, so a log just stopped (2026-11-25, entering character select).
+ * A vectored handler runs first; it only writes and lets the crash go on. */
+static LONG WINAPI fatal_first_chance(EXCEPTION_POINTERS* info) {
+    const DWORD code = info->ExceptionRecord->ExceptionCode;
+    if (code != 0xC0000374u /* STATUS_HEAP_CORRUPTION */ && code != EXCEPTION_STACK_OVERFLOW) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    static volatile LONG told;
+    if (InterlockedExchange(&told, 1) == 0) {
+        char where[MAX_PATH + 64];
+        char why[MAX_PATH + 128];
+        describe_addr(info->ExceptionRecord->ExceptionAddress, where, sizeof(where));
+        snprintf(why, sizeof why, "crash: %s (exception 0x%08X) at %s",
+            code == EXCEPTION_STACK_OVERFLOW ? "stack overflow" : "heap corruption",
+            (unsigned int)code, where);
+        log_backtrace(why);
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#else
+void pc_log_stack(const char* why) {
+    pc_log_line("%s", why);
+}
 #endif
 
 static void usage(const char* argv0) {
@@ -554,6 +626,9 @@ MELEE_EXPORT int main(int argc, char* argv[]) {
     pc_env_file_bootstrap();       /* before anything calls getenv() */
 #if defined(_WIN32)
     SetUnhandledExceptionFilter(crash_handler);
+    AddVectoredExceptionHandler(1, fatal_first_chance);
+    pc_panic_hook = panic_hook;
+    signal(SIGABRT, abort_signal);
 #endif
 
     /* Pre-initialize GameCube OS memory immediately so that MEM1 (96 MB) is

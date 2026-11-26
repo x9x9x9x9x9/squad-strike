@@ -249,6 +249,15 @@ HSD_Archive*(lbArchive_80016DBC) (const char* filename, void* symbols, ...)
 
 void lbArchive_80016EFC(HSD_Archive* archive)
 {
+#ifdef TARGET_PC
+    /* Freeing no archive: there is nothing to give back, so say so instead
+     * of ending the match (a netplay game panicked here on 2026-11-25 on
+     * Pokemon Stadium, with no record of the caller). */
+    if (archive == NULL) {
+        pc_log_stack("archive: asked to free no archive; ignored");
+        return;
+    }
+#endif
     HSD_ASSERT(0xFC, archive);
     HSD_ASSERT(0xFD, archive->flags & HSD_ARCHIVE_DONT_FREE);
     lbHeap_80015CA8(0, archive->data - sizeof(archive->header));

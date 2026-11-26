@@ -72,6 +72,12 @@ bool pc_input_latency(float* mean_ms, float* max_ms, float* p99_ms);
  * a log summary every 600 frames. */
 bool pc_is_input_hud_enabled(void);
 
+/* Called by OSPanic before it aborts, with the formatted message: the
+ * Windows build logs it and a backtrace (src/pc/main.c). */
+extern void (*pc_panic_hook)(const char* file, int line, const char* msg);
+/* A line in the log, with the call stack where the build can give one
+ * (Windows: module+offset per frame), for a fault the game survives. */
+void pc_log_stack(const char* why);
 /* Set once the window is closed; the game loop is expected to exit. */
 extern bool pc_exit_requested;
 

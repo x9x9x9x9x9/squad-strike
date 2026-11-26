@@ -52,6 +52,7 @@
 #include <SDL3/SDL_time.h>
 #include <SDL3/SDL_timer.h>
 #include <stddef.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -451,15 +452,41 @@ void pc_replay_match_end(void) {
         fclose(exists);
         snprintf(path + strlen(path) - 4, 16, "_%d.ssr", n);
     }
-    FILE* f = fopen(path, "wb");
-    bool ok = f != NULL && fwrite(&s_hdr, sizeof s_hdr, 1, f) == 1 &&
-              fwrite(packed, packed_cap, 1, f) == 1;
-    if (f != NULL) {
-        ok = fclose(f) == 0 && ok;
+    /* Twice: a scanner or sync tool can hold a new file for a moment. Say
+     * why it failed: a log of 2026-11-25 only said that it had. */
+    bool ok = false;
+    const char* step = "open";
+    int err = 0;
+    for (int attempt = 0; attempt < 2 && !ok; attempt++) {
+        if (attempt > 0) {
+            SDL_Delay(100);
+        }
+        errno = 0;
+        FILE* f = fopen(path, "wb");
+        step = "open";
+        ok = f != NULL;
+        if (ok) {
+            step = "write";
+            ok = fwrite(&s_hdr, sizeof s_hdr, 1, f) == 1 && fwrite(packed, packed_cap, 1, f) == 1;
+        }
+        err = errno;
+        if (f != NULL) {
+            if (fclose(f) != 0 && ok) {
+                step = "close";
+                err = errno;
+                ok = false;
+            }
+        }
     }
     free(packed);
-    pc_log_line("replay: %s %s (%u frames, %zu bytes)", ok ? "saved" : "could not save", path,
-        s_frames, (size_t)(sizeof s_hdr + packed_cap));
+    if (ok) {
+        pc_log_line("replay: saved %s (%u frames, %zu bytes)", path, s_frames,
+            (size_t)(sizeof s_hdr + packed_cap));
+    } else {
+        pc_log_line("replay: could not save %s (%u frames, %zu bytes): %s failed: %s", path,
+            s_frames, (size_t)(sizeof s_hdr + packed_cap), step,
+            err != 0 ? strerror(err) : "no reason given");
+    }
 }
 
 /* ---- playback --------------------------------------------------------- */

@@ -451,9 +451,23 @@ void OSReport(const char* msg, ...) {
     va_end(args);
 }
 
+void (*pc_panic_hook)(const char* file, int line, const char* msg);
+
 void OSPanic(const char* file, int line, const char* msg, ...) {
     va_list args;
     va_start(args, msg);
+    if (pc_panic_hook != NULL) {
+        /* The log file and a backtrace (Windows; src/pc/main.c): stderr alone
+         * goes nowhere in a double-clicked build. */
+        char text[1024];
+        va_list copy;
+        va_copy(copy, args);
+        vsnprintf(text, sizeof text, msg, copy);
+        va_end(copy);
+        void (*hook)(const char*, int, const char*) = pc_panic_hook;
+        pc_panic_hook = NULL; /* once, even if the hook itself fails */
+        hook(file, line, text);
+    }
 #if defined(__ANDROID__)
     char buf[1024];
     vsnprintf(buf, sizeof(buf), msg, args);
