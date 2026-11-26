@@ -85,14 +85,20 @@ typedef struct PcReplayInfo {
     uint16_t stkind;
     uint8_t ace_pick; /* GrAce_* when the stage was an ACE stage */
     uint8_t is_teams, stock_match;
-    char name[32];     /* the recording machine's player name */
-    char version[32];  /* the build that recorded it */
-    int8_t local_port; /* the recording machine's player's port, -1 unknown */
-    char opponent[16]; /* online: the opponent's connect code, or "" */
+    char name[32];        /* the recording machine's player name */
+    char version[32];     /* the build that recorded it */
+    int8_t local_port;    /* the recording machine's player's port, -1 unknown */
+    bool has_stats;       /* it carries the match's statistics (pc_replay_read_stats) */
+    bool has_result;      /* ... and the game's own result: */
+    uint8_t winners_mask; /* a bit per winning port */
+    char opponent[16];    /* online: the opponent's connect code, or "" */
     PcReplayPlayer players[4];
 } PcReplayInfo;
 
 /* Every replay in the replay folder, newest first, up to `max`. */
+struct GmMatchStats;
+/* A replay's statistics (src/melee/gm/gmstats.h), false if it has none. */
+bool pc_replay_read_stats(const char* path, struct GmMatchStats* out);
 int pc_replay_list(PcReplayInfo* out, int max);
 /* The replay folder, created if missing. */
 const char* pc_replay_folder(void);

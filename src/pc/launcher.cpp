@@ -10,6 +10,7 @@
 #include "net.h"
 #include "pc.h"
 #include "updater.hpp"
+#include <melee/gm/gmstats.h>
 #include "replay.h"
 #include "video_export.h"
 #include "android_hooks.h"
@@ -263,6 +264,8 @@ constexpr const char* main_ids[] = {
 constexpr const char* replay_action_ids[] = {"replay-watch", "replay-export", "replay-stats",
     "replay-delete", "replay-folder", "replay-back"};
 /* The stats page's categories, each a section of the panel beside them. */
+/* One game's page (A on a replay): its sections, then Watch and Back. */
+constexpr const char* game_tab_ids[] = {"game-summary", "game-stocks"};
 constexpr const char* stats_tab_ids[] = {
     "stats-overview", "stats-characters", "stats-opponents", "stats-stages"};
 
@@ -322,6 +325,10 @@ class Launcher final : public Rml::EventListener {
     uint64_t last_update_done = ~0ull;
     // The stats page (Stats on the replay list), over the replay list.
     bool stats = false;
+    // One game's page, over the replay list.
+    bool game = false;
+    int game_tab = 0;
+    std::string game_rml[std::size(game_tab_ids)];
     int stats_tab = 0;
     std::string stats_rml[std::size(stats_tab_ids)];
     std::vector<PcReplayInfo> replay_list;
@@ -421,6 +428,12 @@ class Launcher final : public Rml::EventListener {
      * settings whichever column holds the focus, the categories or the rows
      * of the open page. */
     std::vector<std::string> column() {
+        if (game) {
+            std::vector<std::string> ids(std::begin(game_tab_ids), std::end(game_tab_ids));
+            ids.push_back("game-watch");
+            ids.push_back("game-back");
+            return ids;
+        }
         if (stats) {
             std::vector<std::string> ids(std::begin(stats_tab_ids), std::end(stats_tab_ids));
             ids.push_back("stats-back");
@@ -468,8 +481,12 @@ class Launcher final : public Rml::EventListener {
         if (!e)
             return;
         // Only one plate lit: the open page's gives way to Back's.
-        document->SetClass("on-back", e->GetId() == "back" || e->GetId() == "stats-back");
-        if (stats) {
+        document->SetClass("on-back",
+            e->GetId() == "back" || e->GetId() == "stats-back" || e->GetId() == "game-back");
+        if (game) {
+            if (const int i = index_of(game_tab_ids, e->GetId()); i >= 0)
+                select_game_tab(i);
+        } else if (stats) {
             if (const int i = index_of(stats_tab_ids, e->GetId()); i >= 0)
                 select_stats_tab(i);
         } else if (replays) {
@@ -557,6 +574,10 @@ class Launcher final : public Rml::EventListener {
     }
     // B or Escape: rows to categories, categories to the main menu.
     void back() {
+        if (game) {
+            show_game(false);
+            return;
+        }
         if (stats) {
             show_stats(false);
             return;
@@ -609,9 +630,9 @@ class Launcher final : public Rml::EventListener {
         if (!focus || focus->IsPseudoClassSet("disabled"))
             return;
         const auto id = focus->GetId();
-        if (stats) {
+        if (game || stats) {
             /* Up and Down pick a section; Left and Right scroll it. */
-            if (auto* panel = element("stats-panel"))
+            if (auto* panel = element(game ? "game-panel" : "stats-panel"))
                 panel->SetScrollTop(std::max(0.0f, panel->GetScrollTop() + direction * 160.0f));
             return;
         }
@@ -849,8 +870,18 @@ class Launcher final : public Rml::EventListener {
             s += "  \xc2\xb7  Online";
         if (r.sdremix)
             s += "  \xc2\xb7  SD Remix";
-        /* The winner of a stock match: the only side with stocks left. */
-        if (r.stock_match && !r.is_teams) {
+        if (r.has_stats) {
+            if (!r.has_result)
+                s += "  \xc2\xb7  No result";
+            else {
+                std::string who;
+                for (int i = 0; i < 4; ++i)
+                    if ((r.winners_mask >> i) & 1u)
+                        who += (who.empty() ? "P" : " and P") + std::to_string(i + 1);
+                s += "  \xc2\xb7  " + who + " won";
+            }
+        } else if (r.stock_match && !r.is_teams) {
+            /* Before results were kept: the only side with stocks left. */
             int alive = 0, port = -1;
             for (int i = 0; i < 4; ++i)
                 if (r.players[i].ckind >= 0 && r.players[i].end_stocks > 0) {
@@ -908,7 +939,9 @@ class Launcher final : public Rml::EventListener {
         }
         if (id.rfind("replay-row-", 0) == 0) {
             select_replay(std::atoi(id.c_str() + 11));
-            replay_action("replay-watch"); /* A on a match watches it */
+            /* A on a match opens its page (stats, stocks, Watch). */
+            if (replay_sel >= 0 && replay_list[replay_sel].playable)
+                show_game(true);
             return;
         }
         if (replay_sel < 0 || replay_sel >= int(replay_list.size()))
@@ -1062,14 +1095,15 @@ class Launcher final : public Rml::EventListener {
         std::string rml = "<div class=\"stat-row stat-head\"><span class=\"stat-name\">" +
                           std::string(heading) +
                           "</span><span class=\"stat-num\">Games</span><span "
-                          "class=\"stat-num\">W - L</span><span class=\"stat-num\">Win "
-                          "rate</span></div>";
+                          "class=\"stat-num\">W - L</span><span class=\"stat-num\">No "
+                          "result</span><span class=\"stat-num\">Win rate</span></div>";
         for (const auto& [name, r] : rows)
             rml += "<div class=\"stat-row\"><span class=\"stat-name\">" + rml_escape(name) +
                    "</span><span class=\"stat-num\">" + std::to_string(r.games) +
                    "</span><span class=\"stat-num\">" + std::to_string(r.wins) + " - " +
-                   std::to_string(r.losses) + "</span><span class=\"stat-num\">" + percent(r) +
-                   "</span></div>";
+                   std::to_string(r.losses) + "</span><span class=\"stat-num\">" +
+                   std::to_string(r.games - r.wins - r.losses) +
+                   "</span><span class=\"stat-num\">" + percent(r) + "</span></div>";
         if (rows.empty())
             rml += std::string("<p class=\"note\">") + empty + "</p>";
         return rml;
@@ -1112,7 +1146,12 @@ class Launcher final : public Rml::EventListener {
             if (me < 0 || me > 3 || r.players[me].ckind < 0)
                 continue;
             ++known;
-            const int result = winner < 0 ? 0 : winner == side(me) ? 1 : -1;
+            /* The game's own result where the replay kept it (time-outs,
+             * Squad Strike and team battles included); else the one side
+             * with stocks left. */
+            int result = winner < 0 ? 0 : winner == side(me) ? 1 : -1;
+            if (r.has_stats)
+                result = !r.has_result ? 0 : (r.winners_mask >> me) & 1u ? 1 : -1;
             you.add(result);
             if (result != 0) {
                 if (recent.size() < 10)
@@ -1184,13 +1223,14 @@ class Launcher final : public Rml::EventListener {
         overview += "<div class=\"stat-form\"><span class=\"stat-label\">Last 10</span>" +
                     (form.empty() ? std::string("<span class=\"stat-label\"> -</span>") : form) +
                     "</div>";
-        overview +=
-            "<p class=\"note\">From your " + std::to_string(total) +
-            " saved replays. Wins and losses count stock matches where the replay knows which "
-            "player you were: online matches, and offline ones with a single human player" +
-            (known < total ? " (" + std::to_string(total - known) + " could not tell)" :
-                             std::string()) +
-            ".</p>";
+        overview += "<p class=\"note\">From your " + std::to_string(total) +
+                    " saved replays. Wins and losses count matches where the replay knows which "
+                    "player you were (online matches, and offline ones with a single human player) "
+                    "and the match had a winner. No result: a match left early or lost to a "
+                    "disconnect, or one from before results were saved where it could not tell" +
+                    (known < total ? " (" + std::to_string(total - known) + " could not tell)" :
+                                     std::string()) +
+                    ".</p>";
         stats_rml[1] = stat_table(characters, "Your fighters", "No matches yet.") + "<br/>" +
                        stat_table(against, "Against", "");
         stats_rml[2] = stat_table(opponents, "Opponent", "No matches yet.");
@@ -1218,6 +1258,153 @@ class Launcher final : public Rml::EventListener {
         }
         text("title-sub", "/ Replays");
         element("replay-stats")->Focus();
+    }
+    /* ---- One game's page ---- */
+    static std::string clock(uint32_t frames) {
+        const unsigned secs = frames / 60;
+        return std::to_string(secs / 60) + ":" + (secs % 60 < 10 ? "0" : "") +
+               std::to_string(secs % 60);
+    }
+    static std::string fixed1(double v) {
+        char buf[32];
+        std::snprintf(buf, sizeof buf, "%.1f", v);
+        return buf;
+    }
+    std::string player_name(const PcReplayInfo& r, int i) const {
+        std::string s = "P" + std::to_string(i + 1) + " " + replay_fighter(r.players[i].ckind);
+        if (r.players[i].cpu)
+            s += " (CPU)";
+        else if (i == r.local_port)
+            s += " (you)";
+        else if (r.online && r.opponent[0])
+            s += std::string(" (") + r.opponent + ")";
+        return s;
+    }
+    void build_game(const PcReplayInfo& r) {
+        GmMatchStats st{};
+        const bool have = pc_replay_read_stats(r.path, &st);
+        std::vector<int> ports;
+        for (int i = 0; i < 4; ++i)
+            if (r.players[i].ckind >= 0)
+                ports.push_back(i);
+        std::string head = "<p class=\"game-head\">" + rml_escape(replay_detail(r)) + "</p>";
+        if (!have) {
+            game_rml[0] = head +
+                          "<p class=\"note\">Detailed stats are kept for games played on "
+                          "v1.0.11 and later. This one has only how many stocks each player had "
+                          "left:</p>";
+            for (int i : ports)
+                game_rml[0] += "<div class=\"stat-row\"><span class=\"stat-name\">" +
+                               rml_escape(player_name(r, i)) + "</span><span class=\"stat-num\">" +
+                               std::to_string(std::max(0, int(r.players[i].end_stocks))) +
+                               "</span></div>";
+            game_rml[1] = game_rml[0];
+            return;
+        }
+        const double minutes = st.frames / 3600.0;
+        auto row = [&](const char* label, auto cell) {
+            std::string out = "<div class=\"stat-row\"><span class=\"stat-name\">" +
+                              std::string(label) + "</span>";
+            for (int i : ports)
+                out += "<span class=\"game-num\">" + rml_escape(cell(st.p[i], i)) + "</span>";
+            return out + "</div>";
+        };
+        std::string t = head + "<div class=\"stat-row stat-head\"><span class=\"stat-name\">"
+                               "</span>";
+        for (int i : ports)
+            t += "<span class=\"game-num\">" + rml_escape(player_name(r, i)) + "</span>";
+        t += "</div>";
+        t += row("Result", [&](const GmMatchStatsPlayer&, int i) -> std::string {
+            if (!st.has_result || st.winners_mask == 0)
+                return "No result";
+            return ((st.winners_mask >> i) & 1u) ? "Win" : "Loss";
+        });
+        t += row("Kills", [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.kos); });
+        t +=
+            row("Deaths", [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.falls); });
+        t += row("Self-destructs",
+            [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.sds); });
+        t += row("Damage dealt",
+            [](const GmMatchStatsPlayer& p, int) { return fixed1(p.damage_dealt) + "%"; });
+        t += row("Damage taken",
+            [](const GmMatchStatsPlayer& p, int) { return fixed1(p.damage_taken) + "%"; });
+        t += row("Openings",
+            [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.openings); });
+        t += row("Damage per opening", [](const GmMatchStatsPlayer& p, int) -> std::string {
+            return p.openings ? fixed1(p.opening_damage / p.openings) + "%" : "-";
+        });
+        t += row("Openings per kill", [](const GmMatchStatsPlayer& p, int) -> std::string {
+            return p.kos ? fixed1(double(p.openings) / p.kos) : "-";
+        });
+        t += row("Neutral wins",
+            [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.neutral_wins); });
+        t += row("Best punish",
+            [](const GmMatchStatsPlayer& p, int) { return fixed1(p.best_punish) + "%"; });
+        t += row("L-cancels", [](const GmMatchStatsPlayer& p, int) -> std::string {
+            if (!p.lcancel_total)
+                return "-";
+            return std::to_string(p.lcancel_ok * 100 / p.lcancel_total) + "% (" +
+                   std::to_string(p.lcancel_ok) + "/" + std::to_string(p.lcancel_total) + ")";
+        });
+        t += row("Ledge grabs",
+            [](const GmMatchStatsPlayer& p, int) { return std::to_string(p.ledge_grabs); });
+        t += row("Actions per minute", [&](const GmMatchStatsPlayer& p, int) -> std::string {
+            return minutes > 0.1 ? std::to_string(int(p.actions / minutes + 0.5)) : "-";
+        });
+        t += "<p class=\"note\">An opening is a punish: hits on an opponent until they go "
+             "45 frames without being hit. A neutral win is one started while you were not "
+             "being punished yourself.</p>";
+        game_rml[0] = t;
+
+        std::string k = head;
+        for (int i : ports) {
+            const auto& p = st.p[i];
+            k += "<div class=\"stat-row stat-head\"><span class=\"stat-name\">" +
+                 rml_escape(player_name(r, i)) +
+                 "</span><span class=\"game-num\">Time</span>"
+                 "<span class=\"game-num\">Damage</span><span class=\"game-num\">By</span></div>";
+            if (p.n_deaths == 0)
+                k += "<p class=\"note\">Lost no stocks.</p>";
+            for (int d = 0; d < p.n_deaths && d < GMSTATS_DEATHS; ++d) {
+                const auto& death = p.deaths[d];
+                std::string by = death.by >= 0 && death.by < 4 && death.by != i ?
+                                     "P" + std::to_string(death.by + 1) + " " +
+                                         replay_fighter(r.players[death.by].ckind) :
+                                     std::string("Self-destruct");
+                k += "<div class=\"stat-row\"><span class=\"stat-name\">Stock " +
+                     std::to_string(d + 1) + " \xc2\xb7 " + replay_fighter(death.ckind) +
+                     "</span><span class=\"game-num\">" + clock(death.frame) +
+                     "</span><span class=\"game-num\">" + fixed1(death.percent) +
+                     "%</span><span class=\"game-num\">" + rml_escape(by) + "</span></div>";
+            }
+            k += "<br/>";
+        }
+        game_rml[1] = k;
+    }
+    void select_game_tab(int i) {
+        game_tab = i;
+        for (int k = 0; k < int(std::size(game_tab_ids)); ++k)
+            if (auto* e = element(game_tab_ids[k]))
+                e->SetClass("selected", k == i);
+        if (auto* panel = element("game-panel")) {
+            panel->SetInnerRML(game_rml[i]);
+            panel->SetScrollTop(0);
+        }
+    }
+    void show_game(bool show) {
+        game = show;
+        document->SetClass("in-game", show);
+        if (show) {
+            build_game(replay_list[replay_sel]);
+            text("title-sub", "/ Game");
+            select_game_tab(0);
+            element(game_tab_ids[0])->Focus();
+            return;
+        }
+        text("title-sub", "/ Replays");
+        if (replay_sel >= 0 && replay_sel < int(replay_rows.size()))
+            if (auto* row = element(replay_rows[replay_sel].c_str()))
+                row->Focus();
     }
     // Left/right on a slider.
     void step_slider(int direction) {
@@ -1272,6 +1459,16 @@ class Launcher final : public Rml::EventListener {
     void action(const std::string& id, int direction = 1) {
         if (id == "replays" && !busy()) {
             show_replays(true);
+            return;
+        }
+        if (game) {
+            if (id == "game-back")
+                show_game(false);
+            else if (id == "game-watch") {
+                show_game(false);
+                replay_action("replay-watch");
+            } else if (const int i = index_of(game_tab_ids, id); i >= 0)
+                select_game_tab(i);
             return;
         }
         if (stats) {

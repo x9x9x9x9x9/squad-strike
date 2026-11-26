@@ -1,6 +1,7 @@
 #include "gmvs.h"
 #ifdef TARGET_PC
 #include <melee/gm/gmsquad.h>
+#include <melee/gm/gmstats.h>
 #include <melee/gr/grstageexp.h>
 #endif
 
@@ -2031,6 +2032,7 @@ void fn_8016E730(StartMeleeData* arg0)
 
 #ifdef TARGET_PC
     pc_slp_match_start(arg0); /* Slippi's SendGameInfo hooks here too */
+    gmStats_Reset();
     pc_replay_match_start(arg0);
     {
         /* Hash fields, not struct bytes: rules contain pointers and padding. */
@@ -2151,7 +2153,6 @@ void gm_Scene_Vs_OnExit(void* user_data)
 
 #ifdef TARGET_PC
     pc_slp_match_end();
-    pc_replay_match_end();
 #endif
     if (controller.state.match_over == 0) {
         data->xC = controller.state.x24C;
@@ -2168,6 +2169,11 @@ void gm_Scene_Vs_OnExit(void* user_data)
     } else {
         data->xC = controller.state.x24C;
     }
+#ifdef TARGET_PC
+    /* After the game has worked out the result: the replay keeps it. */
+    gmStats_Finish(&data->xC);
+    pc_replay_match_end();
+#endif
     if (controller.start.x4_4) {
         data->x0 = fn_8017F294();
     } else {

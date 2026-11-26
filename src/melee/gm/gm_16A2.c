@@ -1,6 +1,7 @@
 #include "gm_16A2.h"
 #ifdef TARGET_PC
 #include <melee/gm/gmsquad.h>
+#include <melee/gm/gmstats.h>
 #endif
 
 #include <stddef.h>
@@ -772,6 +773,7 @@ void fn_8016A4C8(void)
 
 #ifdef TARGET_PC
     gmSquad_OnVsFrame();
+    gmStats_OnVsFrame();
 #endif
     gp = &lbl_8046B488;
     has_active_spawn = 0;

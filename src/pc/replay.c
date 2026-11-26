@@ -39,6 +39,7 @@
 #include <melee/gm/gm_1A3F.h>
 #include <melee/gm/gmsquad.h>
 #include <melee/ft/ftvariant.h>
+#include <melee/gm/gmstats.h>
 #include <melee/gm/types.h>
 #include <melee/gr/grace.h>
 #include <melee/mn/types.h>
@@ -130,6 +131,14 @@ typedef struct SsrHeader {
      * Zero, the disc's fighters, in files from before. */
     uint8_t variants[4];
 } __attribute__((packed)) SsrHeader;
+
+/* After the compressed frames: the match's statistics and its result
+ * (src/melee/gm/gmstats.h). Readers that predate it stop at the frames. */
+typedef struct {
+    char magic[4]; /* "SSRS" */
+    uint32_t size; /* sizeof(GmMatchStats) when written */
+    GmMatchStats stats;
+} __attribute__((packed)) SsrStatsBlock;
 
 /* ---- recording -------------------------------------------------------- */
 
@@ -500,7 +509,12 @@ void pc_replay_match_end(void) {
         ok = f != NULL;
         if (ok) {
             step = "write";
-            ok = fwrite(&s_hdr, sizeof s_hdr, 1, f) == 1 && fwrite(packed, packed_cap, 1, f) == 1;
+            SsrStatsBlock block;
+            memcpy(block.magic, "SSRS", 4);
+            block.size = (uint32_t)sizeof(GmMatchStats);
+            block.stats = *gmStats_Get();
+            ok = fwrite(&s_hdr, sizeof s_hdr, 1, f) == 1 && fwrite(packed, packed_cap, 1, f) == 1 &&
+                 fwrite(&block, sizeof block, 1, f) == 1;
         }
         err = errno;
         if (f != NULL) {
@@ -983,6 +997,31 @@ void pc_replay_request(const char* path, const char* export_to) {
     SDL_strlcpy(s_request_export, export_to != NULL ? export_to : "", sizeof s_request_export);
 }
 
+/* The statistics block after a replay's frames, if it has one. */
+static bool read_stats(FILE* f, const SsrHeader* h, GmMatchStats* out) {
+    SsrStatsBlock block;
+    if (fseek(f, (long)(sizeof *h + h->packed_size), SEEK_SET) != 0 ||  // NOLINT: fseek's type
+        fread(&block, sizeof block, 1, f) != 1 || memcmp(block.magic, "SSRS", 4) != 0 ||
+        block.size != sizeof(GmMatchStats) || block.stats.version != GMSTATS_VERSION)
+    {
+        return false;
+    }
+    *out = block.stats;
+    return true;
+}
+
+bool pc_replay_read_stats(const char* path, GmMatchStats* out) {
+    FILE* f = fopen(path, "rb");
+    if (f == NULL) {
+        return false;
+    }
+    SsrHeader h;
+    bool ok =
+        fread(&h, sizeof h, 1, f) == 1 && memcmp(h.magic, "SSRP", 4) == 0 && read_stats(f, &h, out);
+    fclose(f);
+    return ok;
+}
+
 static bool info_from(const char* path, const char* file, PcReplayInfo* out) {
     FILE* f = fopen(path, "rb");
     if (f == NULL) {
@@ -990,6 +1029,8 @@ static bool info_from(const char* path, const char* file, PcReplayInfo* out) {
     }
     SsrHeader h;
     bool ok = fread(&h, sizeof h, 1, f) == 1 && memcmp(h.magic, "SSRP", 4) == 0;
+    GmMatchStats stats;
+    const bool has_stats = ok && read_stats(f, &h, &stats);
     fseek(f, 0, SEEK_END);
     int64_t size = (int64_t)ftell(f);  // NOLINT: ftell's own type
     fclose(f);
@@ -999,6 +1040,12 @@ static bool info_from(const char* path, const char* file, PcReplayInfo* out) {
     memset(out, 0, sizeof *out);
     SDL_strlcpy(out->path, path, sizeof out->path);
     SDL_strlcpy(out->file, file, sizeof out->file);
+    out->has_stats = has_stats;
+    /* A time-out or an elimination with a winner; not a no-contest, a
+     * retry, or a match left before it ended. */
+    out->has_result = has_stats && stats.has_result && stats.winners_mask != 0 &&
+                      stats.outcome >= 1 && stats.outcome <= 3;
+    out->winners_mask = has_stats ? stats.winners_mask : 0;
     out->playable = h.version == SSR_VERSION && h.header_size == sizeof h &&
                     h.rules_size == RULES_BYTES && h.player_size == sizeof(PlayerInitData) &&
                     h.players == GM_MAX_PLAYERS && h.pad_size == sizeof(PADStatus);

@@ -128,7 +128,7 @@
     </div>
     <div id="replays-view">
       <div id="replay-actions">
-        <button id="replay-watch" class="plate small" data-desc="Watch the selected match. Start pauses, L and R change the speed, A steps a frame while paused, B goes back."><span>Watch</span></button>
+        <button id="replay-watch" class="plate small" data-desc="Watch the selected match (A on a match shows its stats first). Start pauses, L and R change the speed, A steps a frame while paused, B goes back."><span>Watch</span></button>
         <button id="replay-export" class="plate small" data-desc="Save the selected match as an MP4 video you can edit or share."><span>Export Video</span></button>
         <button id="replay-stats" class="plate small" data-desc="Your record from your replays: wins, characters, opponents and stages."><span>Stats</span></button>
         <button id="replay-delete" class="plate small" data-desc="Delete the selected replay. Press twice to confirm."><span>Delete</span></button>
@@ -146,6 +146,15 @@
         <button id="stats-back" class="plate small back" data-desc="Back to the replay list."><span>Back</span></button>
       </div>
       <div id="stats-panel"></div>
+    </div>
+    <div id="game-view">
+      <div id="game-tabs">
+        <button id="game-summary" class="plate small" data-desc="Each player's numbers for this game. Left and Right scroll."><span>Summary</span></button>
+        <button id="game-stocks" class="plate small" data-desc="Every stock lost: when, at what damage, and to whom. Left and Right scroll."><span>Stocks</span></button>
+        <button id="game-watch" class="plate small" data-desc="Watch this game."><span>Watch</span></button>
+        <button id="game-back" class="plate small back" data-desc="Back to the replay list."><span>Back</span></button>
+      </div>
+      <div id="game-panel"></div>
     </div>
     <div id="descbar"><p id="desc">Pick a disc to play.</p></div>
   </div>

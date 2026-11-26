@@ -379,6 +379,37 @@ button.replay.unplayable { color: #7d8199; }
     border: 2dp #b8bccb50;
     border-radius: 6dp 18dp 18dp 6dp;
 }
+/* One game's page: the same layout as the stats page. */
+#game-view { display: none; flex: 1; min-height: 0; flex-direction: row; }
+.in-game #home, .in-game #replays-view { display: none; }
+.in-game #game-view { display: flex; }
+.in-game #title-sub { display: inline-block; }
+#game-tabs {
+    width: 28%;
+    max-width: 320dp;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 22dp;
+}
+#game-tabs .plate { width: 80%; margin-bottom: -10dp; }
+#game-summary { margin-left: 8%; }
+#game-stocks { margin-left: 4%; }
+#game-watch { margin-left: 0; }
+#game-back { margin-top: 22dp; margin-left: 6%; }
+#game-panel {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 14dp 18dp 10dp 22dp;
+    background-color: #0a0c26c8;
+    border: 2dp #b8bccb50;
+    border-radius: 6dp 18dp 18dp 6dp;
+}
+.game-head { font-size: 15dp; color: #ffd84a; margin: 0 0 10dp; }
+.game-num { flex: 1; min-width: 0; text-align: right; }
 .stat-tiles { display: flex; flex-wrap: wrap; }
 .stat-tile {
     width: 23%;
