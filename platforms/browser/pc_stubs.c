@@ -194,6 +194,10 @@ bool pc_can_relaunch(void) {
     return false;
 }
 
+void pc_log_stack(const char* why) {
+    pc_log_line("%s", why);
+}
+
 /* Replays (src/pc/replay.c) need the desktop launcher to be watched and a
  * file system to be kept in, so the browser neither records nor plays them;
  * the simulation keeps netplay's rules for what reproduces. */
