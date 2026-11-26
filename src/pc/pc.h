@@ -74,6 +74,12 @@ bool pc_is_input_hud_enabled(void);
 
 /* Set once the window is closed; the game loop is expected to exit. */
 extern bool pc_exit_requested;
+/* Character select keeps D-pad left for the 20XX Falcon switch while the
+ * local door shows Falcon (src/melee/mn/mncharsel_variant.h): it sets this
+ * to the frame it last did, and quick chat leaves LEFT alone on that frame
+ * and the next (src/pc/vi.c). */
+extern uint32_t pc_chat_left_reserved_frame;
+uint32_t pc_frame_count(void);
 
 /* Vertex array byte sizes for aurora's GXSetArray (src/pc/vtxarray.c).
  * pc_vtx_array_scan walks a PObj's display list at load time; the size of

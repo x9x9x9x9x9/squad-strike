@@ -59,6 +59,12 @@ data is included.
 - **SD Remix** characters (balance changes from sdremix.games). Turn on
   Settings → Gameplay → SD Remix characters. The fighter files come with the
   Windows download.
+- **20XX Captain Falcon:** on character select, press **D-pad left** with
+  Falcon picked (or under your coin) to switch to the 20XX HackPack's SD
+  Remix Falcon, whose grounded down-B is a quick, shine-like kick. A
+  "20XX FALCON" tag shows under your name; press again to switch back. Each
+  player picks their own, and it works with SD Remix on or off. Online, while
+  your door shows Falcon, D-pad left is his switch rather than chat.
 - Kirby's throws work correctly.
 - **Zelda starts as Sheik.** Down-B turns her into Zelda as usual. To start
   a match as Zelda, hold **A** while the match loads.

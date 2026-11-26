@@ -40,7 +40,7 @@ static struct loadData load_data;
 static struct BootExitData leave_data;
 
 #ifdef TARGET_PC
-/* MELEE_BOOT_SCENE=<title|vs|classic|training|credits|unranked|direct|ranked>: skip the whole menu walk and
+/* MELEE_BOOT_SCENE=<title|vs|css|classic|training|credits|unranked|direct|ranked>: skip the whole menu walk and
  * boot into one scene with a fixed setup. Menu navigation here can only be
  * driven by synthetic input, which misses keypresses often enough that an
  * automated run cannot rely on it (see tools/smoke_test.py).
@@ -65,6 +65,8 @@ u8 pc_boot_scene(void)
             scene = GM_TITLE;
         } else if (strcmp(want, "vs") == 0) {
             scene = GM_DEBUG_VS;
+        } else if (strcmp(want, "css") == 0) {
+            scene = GM_VS; /* VS mode, from its character select */
         } else if (strcmp(want, "classic") == 0) {
             scene = GM_CLASSIC;
         } else if (strcmp(want, "training") == 0) {
@@ -82,7 +84,7 @@ u8 pc_boot_scene(void)
             gmOnline_SetKind(ONLINE_KIND_RANKED);
         } else {
             OSReport("MELEE_BOOT_SCENE: unknown scene '%s'; valid values are "
-                     "title, vs, classic, training, credits, unranked, direct, ranked\n",
+                     "title, vs, css, classic, training, credits, unranked, direct, ranked\n",
                      want);
         }
     }

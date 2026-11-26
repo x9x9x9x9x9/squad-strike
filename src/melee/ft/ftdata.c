@@ -11,6 +11,7 @@
 #include <dolphin/dvd.h>
 
 #include "pc/pc.h"
+#include "ftvariant.h"
 #endif
 
 #include "fighter.h"
@@ -1703,6 +1704,88 @@ void ftData_80085A14(FighterKind kind)
     }
 }
 
+#ifdef TARGET_PC
+u8 ftVariant_ports[4];
+
+void ftVariant_Reset(void)
+{
+    memset(ftVariant_ports, 0, sizeof(ftVariant_ports));
+}
+
+/* The 20XX HackPack's SD Remix Falcon (PlCa.sat) changes three entries of
+ * Falcon's motion table: SpecialLw takes the LightThrowLw animation, its
+ * flags and this script (a quick multi-hit kick that ends the move), and
+ * SpecialLwEnd is emptied. */
+#define FTVARIANT_CA_LIGHTTHROWLW 82
+#define FTVARIANT_CA_SPECIALLW 311
+#define FTVARIANT_CA_SPECIALLWEND 312
+#define FTVARIANT_TABLE_MAX 400
+static const u8 ftVariant_falcon20xx_script[] __attribute__((aligned(4))) = {
+    0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEA, 0xA6, 0x00, 0x00, 0x7F, 0x40,
+    0x08, 0x00, 0x00, 0x01, 0x54, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x08,
+    0x28, 0x00, 0x00, 0x00, 0x04, 0x0E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAC, 0x01, 0x80, 0x00,
+    0x44, 0x00, 0x00, 0x00, 0x00, 0x00, 0xEA, 0xAC, 0x00, 0x00, 0x7F, 0x40,
+    0x2C, 0x00, 0x18, 0x0A, 0x09, 0x50, 0x00, 0x00, 0xFD, 0x00, 0x00, 0x00,
+    0x2A, 0x0C, 0x80, 0x12, 0x29, 0x04, 0x01, 0x23, 0x2C, 0x80, 0x18, 0x0A,
+    0x03, 0x00, 0x00, 0x00, 0xF8, 0x00, 0x08, 0x00, 0x2A, 0x0C, 0x80, 0x12,
+    0x29, 0x04, 0x01, 0x23, 0x2D, 0x00, 0x18, 0x0A, 0x03, 0x00, 0x00, 0x00,
+    0xF8, 0x00, 0xF7, 0xFF, 0x2A, 0x0C, 0x80, 0x12, 0x29, 0x04, 0x01, 0x23,
+    0x04, 0x00, 0x00, 0x08, 0x54, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00,
+    0xB8, 0x2C, 0x00, 0x00, 0x04, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00,
+};
+static struct Fighter_WaitAnimData ftVariant_tables[4][FTVARIANT_TABLE_MAX];
+
+static bool ftVariant_named(struct Fighter_WaitAnimData* e, const char* suffix)
+{
+    const char* name = DP(char, e->x0);
+    size_t n, k;
+    if (name == NULL) {
+        return false;
+    }
+    n = strlen(name);
+    k = strlen(suffix);
+    return n >= k && strcmp(name + n - k, suffix) == 0;
+}
+
+void ftVariant_Apply(Fighter* fp)
+{
+    struct Fighter_WaitAnimData* disc;
+    struct Fighter_WaitAnimData* mine;
+    int port = fp->player_idx;
+    u32 count = (u32) fp->x58C;
+
+    if (fp->kind != Ft_Kind_Captain || port < 0 || port >= 4 ||
+        !(ftVariant_ports[port] & FTVARIANT_FALCON_20XX))
+    {
+        return;
+    }
+    disc = DP(struct Fighter_WaitAnimData, fp->ft_data->xC);
+    if (disc == NULL || count <= FTVARIANT_CA_SPECIALLWEND ||
+        count > FTVARIANT_TABLE_MAX ||
+        !ftVariant_named(&disc[FTVARIANT_CA_LIGHTTHROWLW],
+                         "_LightThrowLw_figatree") ||
+        !ftVariant_named(&disc[FTVARIANT_CA_SPECIALLW],
+                         "_SpecialLw_figatree") ||
+        !ftVariant_named(&disc[FTVARIANT_CA_SPECIALLWEND],
+                         "_SpecialLwEnd_figatree"))
+    {
+        pc_log_line("ftvariant: this disc's Falcon is not the one the 20XX "
+                    "version patches; playing the disc's");
+        return;
+    }
+    /* A fresh copy each time a fighter is set up: the animation addresses
+     * (x14) are the loaded kind's, which a reload changes. */
+    mine = ftVariant_tables[port];
+    memcpy(mine, disc, count * sizeof(*mine));
+    mine[FTVARIANT_CA_SPECIALLW] = disc[FTVARIANT_CA_LIGHTTHROWLW];
+    DP_SET(mine[FTVARIANT_CA_SPECIALLW].xC, ftVariant_falcon20xx_script);
+    mine[FTVARIANT_CA_SPECIALLW].x10_animCurrFlags = 2;
+    memset(&mine[FTVARIANT_CA_SPECIALLWEND], 0, sizeof(*mine));
+    fp->x24 = mine;
+}
+#endif
+
 void ftData_80085B10(Fighter* fp)
 {
     FighterKind kind = fp->kind;
@@ -1712,6 +1795,9 @@ void ftData_80085B10(Fighter* fp)
     fp->x5A8 = 0;
     fp->x58C = ftData_Table_Unk0[kind].count;
     ftData_80085A14(kind);
+#ifdef TARGET_PC
+    ftVariant_Apply(fp);
+#endif
 }
 
 void ftData_80085B98(Fighter* fp, int arg1, int arg2)

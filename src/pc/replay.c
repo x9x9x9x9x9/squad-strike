@@ -37,6 +37,7 @@
 #pragma GCC diagnostic ignored "-Wscalar-storage-order" /* disc-struct unions in lb/types.h */
 #include <melee/gm/gm_1A3F.h>
 #include <melee/gm/gmsquad.h>
+#include <melee/ft/ftvariant.h>
 #include <melee/gm/types.h>
 #include <melee/gr/grace.h>
 #include <melee/mn/types.h>
@@ -116,7 +117,10 @@ typedef struct SsrHeader {
     /* The seed entering the match's setup: fighter and stage creation draw
      * from it before the first tick (CPU timers, the stage's own state). */
     uint32_t start_seed;
-    uint8_t reserved[28];
+    uint8_t reserved[24];
+    /* Each port's fighter versions (ftVariant_ports: the 20XX Falcon).
+     * Zero, the disc's fighters, in files from before. */
+    uint8_t variants[4];
 } __attribute__((packed)) SsrHeader;
 
 /* ---- recording -------------------------------------------------------- */
@@ -268,6 +272,7 @@ void pc_replay_match_start(const StartMeleeData* data) {
     memcpy(s_hdr.rules, &data->rules, RULES_BYTES);
     memcpy(s_hdr.player, data->players, sizeof s_hdr.player);
     gmSquad_SaveLive(&s_hdr.squad_live);
+    memcpy(s_hdr.variants, ftVariant_ports, sizeof s_hdr.variants);
     if (gmSquad_ModeAllowed()) {
         memcpy(s_hdr.squad, gmSquad_rows, sizeof s_hdr.squad);
         memcpy(s_hdr.coin_pos, gmSquad_coin_pos, sizeof s_hdr.coin_pos);
@@ -608,6 +613,7 @@ void pc_replay_setup_match(StartMeleeData* start) {
     memcpy(start->players, s_play.player, sizeof s_play.player);
     gmSquad_Restore(s_play.squad, s_play.coin_pos);
     gmSquad_RestoreLive(&s_play.squad_live);
+    memcpy(ftVariant_ports, s_play.variants, sizeof ftVariant_ports);
     grAce_Pick = s_play.ace_pick;
     pc_unlock_state_set(s_play.unlock);
 }

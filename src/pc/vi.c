@@ -35,8 +35,13 @@ extern void browser_yield(void);
 #include "pc/net_rank_session.h"
 
 bool pc_exit_requested;
+uint32_t pc_chat_left_reserved_frame;
 
 static u32 s_retrace_count;
+
+uint32_t pc_frame_count(void) {
+    return s_retrace_count;
+}
 static VIRetraceCallback s_pre_cb;
 static VIRetraceCallback s_post_cb;
 static void* s_next_fb;
@@ -351,6 +356,8 @@ void pc_frame_boundary(void) {
     PADStatus chat_pads[4] = {0};
     if (chat_eligible)
         PADRead(chat_pads);
+    if (s_retrace_count - pc_chat_left_reserved_frame <= 1)
+        chat_pads[0].button &= (u16)~PAD_BUTTON_LEFT; /* the 20XX Falcon switch */
     pc_net_chat_poll(chat_pads[0].button, chat_eligible, SDL_GetTicks());
     ifNetChat_Update(chat_eligible);
 
