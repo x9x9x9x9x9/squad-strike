@@ -2691,11 +2691,13 @@ void ftKb_Init_800EEB00(Fighter_GObj* gobj, BoneDynamicsTemplate** arg1)
 {
 #ifdef TARGET_PC
     /* The Game & Watch colour for Kirby's chef pan and other items: the
-     * 32-bit word at the start of the copy data (ftGw_Init_8014A7F4 writes a
-     * colour to the same place). Decoded as a pointer it wrote 8 bytes into
+     * GXColor at +4 of the copy data, the same one his flat body takes
+     * (ftKb_SpecialN_800F1420). Decoded as a pointer it wrote 8 bytes into
      * the caller's 4-byte GXColor (2026-11-26: "stack smashing" in
-     * it_8027CE64 as Kirby used Game & Watch's neutral B). */
-    *(u32*) arg1 = *DP(u32, ft_80459B88.copies[Ft_Kind_GameWatch]->hat_dynamics[4]);
+     * it_8027CE64); +0 is the 0.01 flatness, which drew the pan blue. */
+    memcpy(arg1,
+           DP(u8, ft_80459B88.copies[Ft_Kind_GameWatch]->hat_dynamics[4]) + 4,
+           sizeof(GXColor));
 #else
     *arg1 = DP(BoneDynamicsTemplate,
                DP(ftDynamics, ft_80459B88.copies[Ft_Kind_GameWatch]
@@ -2706,8 +2708,16 @@ void ftKb_Init_800EEB00(Fighter_GObj* gobj, BoneDynamicsTemplate** arg1)
 
 void ftKb_Init_800EEB1C(Fighter_GObj* gobj, s32* arg1)
 {
+#ifdef TARGET_PC
+    /* The outline GXColor at +8, copied as bytes: read as a swapped int it
+     * came out reversed (a cyan rim on the chef pan). */
+    memcpy(arg1,
+           DP(u8, ft_80459B88.copies[Ft_Kind_GameWatch]->hat_dynamics[4]) + 8,
+           sizeof(GXColor));
+#else
     *arg1 = DP(ftDynamics, ft_80459B88.copies[Ft_Kind_GameWatch]->hat_dynamics[4])
                 ->x4;
+#endif
 }
 
 void ftKb_Init_OnKnockbackEnter(HSD_GObj* gobj)
@@ -3752,6 +3762,15 @@ void ftKb_SpecialN_800F14B4(Fighter_GObj* gobj)
         FtPartsVisLookup* lookup;
         ftKb_LoadHatParts(gobj, 0x18, hat);
         lookup = DP(FtPartsVisLookup, hat->hat_dynamics[3]);
+#ifdef TARGET_PC
+        /* The flat model's detail parts (slot 4) are drawn only in the
+         * outline passes; the hooks hide them for the black body through
+         * hat.x24, so it needs the model count this table is laid out for
+         * (Kirby's, as fp->x5AC uses it below) and the parts start shown.
+         * Empty, they drew black every pass and Kirby lost his details. */
+        fp->u.kb.hat.x24.model_num = fp->x5AC.model_num;
+        fp->u.kb.hat.x24.cleared[4] = true;
+#endif
         fp->u.kb.hat.x24.xC[4] = lookup;
         fp->x5AC.xC[4] = lookup;
         ftParts_80074D7C(&fp->u.kb.hat.x24, 4, &fp->u.kb.hat.x14);
