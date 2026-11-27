@@ -3635,6 +3635,12 @@ static inline void ftKb_LoadHatParts(Fighter_GObj* gobj, int arg1,
     if (fp->u.kb.hat.x1C.data != NULL) {
         memset(fp->u.kb.hat.x1C.data, 0, fighter_x2040_alloc_data.size);
     }
+    /* A hat that replaces parts never sets up hat.x24, the parts table the
+     * model hooks read while it is on, so it held whatever the fighter
+     * memory held before: in squad strike, the Falcon Kirby replaced.
+     * 2026-11-26: a crash reading a junk table pointer as Kirby, with the
+     * Game & Watch copy, cast his shadow. An empty table hides nothing. */
+    memset(&fp->u.kb.hat.x24, 0, sizeof(fp->u.kb.hat.x24));
 #endif
     ftKb_SpecialN_800EF0E4(gobj, arg1, part_dobj_indices);
     ftKb_SpecialN_800EF35C(gobj, arg1, part_dobj_indices);

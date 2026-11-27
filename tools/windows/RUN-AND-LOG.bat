@@ -43,10 +43,12 @@ set RC=%ERRORLEVEL%
 echo.
 echo === melee.exe exited with code %RC% ===
 echo.
-echo Send back these two files from this folder:
+echo Send back these three files from this folder:
 echo    melee-pc.log
 echo    melee-pc-env.log
 echo    melee-frames.log
-echo (after a crash and a restart: melee-pc.prev.log and melee-frames.prev.log)
+echo.
+echo The .prev.log files are from the run before this one. Only send them
+echo too if the crash happened then and you have started the game since.
 echo.
 pause
