@@ -6,7 +6,21 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.11
+## What's new in v1.0.12
+
+- **Fix:** crashes when Kirby swallowed Mr. Game & Watch, as he swallowed
+  him, used the chef pan or cast his shadow (worst in Squad Strike, when
+  Kirby came in after another fighter). Flat Kirby keeps his eyes and
+  mouth, and his pan is black like Game & Watch's own.
+- **20XX Falcon's shine can be jump-cancelled** from frame 11, two frames
+  after its hit comes out (like Fox's shine).
+- **Neutral spawns in 1v1:** with two players, the lower port starts on one
+  side and the higher port on the other, facing each other, whatever ports
+  you're on.
+- `RUN-AND-LOG.bat` now asks for the three log files it writes.
+- Both players need v1.0.12 for online matches.
+
+## Also in v1.0.11
 
 - **Updater.** The launcher tells you when a new version is out. On Windows,
   **Update now** downloads, checks and installs it, then restarts. Your
@@ -132,5 +146,5 @@ for bug reports. Online, both players need this same release.
 - **R**: remove the last fighter added. Hold **L**: clear the squad.
 - Squads fight in the order you picked them, one stock each.
 
-Rumble is off by default (Settings, Gameplay). This build has no auto-updater:
-new versions are posted here.
+Rumble is off by default (Settings, Gameplay). The launcher tells you when a
+new version is out (on Windows, **Update now** installs it).
