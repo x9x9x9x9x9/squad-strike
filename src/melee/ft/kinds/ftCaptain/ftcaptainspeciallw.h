@@ -13,7 +13,10 @@
 /* 0E4354 */ void ftCa_SpecialAirLwEnd_Anim(HSD_GObj* gobj);
 /* 0E4390 */ void ftCa_SpecialAirLwEndAir_Anim(HSD_GObj* gobj);
 /* 0E43CC */ void ftCa_SpecialHiThrow1_Anim(HSD_GObj* gobj);
-/* 0E4408 */ void ftCa_SpecialLw_Phys(HSD_GObj* gobj);
+/* 0E4408 */ #ifdef TARGET_PC
+void ftCa_SpecialLw_IASA(HSD_GObj* gobj);
+#endif
+void ftCa_SpecialLw_Phys(HSD_GObj* gobj);
 /* 0E449C */ void ftCa_SpecialLwEnd_Phys(HSD_GObj* gobj);
 /* 0E455C */ void ftCa_SpecialLwEndAir_Phys(HSD_GObj* gobj);
 /* 0E45E4 */ void ftCa_SpecialAirLw_Phys(HSD_GObj* gobj);

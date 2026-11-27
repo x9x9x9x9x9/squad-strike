@@ -1790,11 +1790,36 @@ static float direction(float x)
     }
 }
 
+#ifdef TARGET_PC
+/* Neutral spawns: with exactly two players, the lower port starts at the
+ * stage's first player spawn and the higher at its second, the two that face
+ * each other, whatever ports they are on (ports 1 and 3 otherwise start on
+ * the same side). Slippi does the same. Two players or not is the same on
+ * both netplay peers and in a replay. */
+static int neutralSpawn(int i)
+{
+    int j, count = 0, rank = 0;
+    for (j = 0; j < 6; j++) {
+        if (Player_GetPlayerSlotType(j) != Gm_PKind_NA) {
+            if (j < i) {
+                rank++;
+            }
+            count++;
+        }
+    }
+    return count == 2 ? rank : i;
+}
+#endif
+
 static inline void getSpawnPoint(int i, Vec3* v)
 {
     VsSceneController* tmp = &controller;
     if (tmp->state.fighters[i].spawn_point == -1) {
+#ifdef TARGET_PC
+        Stage_80224E64(neutralSpawn(i), v);
+#else
         Stage_80224E64(i, v);
+#endif
     } else {
         Stage_80224E64(tmp->state.fighters[i].spawn_point, v);
     }

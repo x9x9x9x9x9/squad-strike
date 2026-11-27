@@ -1,3 +1,4 @@
+#include <string.h>
 #include "ftkirby.h"
 
 #include <stdbool.h>
@@ -2688,10 +2689,19 @@ void ftKb_Init_LoadSpecialAttrs(HSD_GObj* gobj)
 
 void ftKb_Init_800EEB00(Fighter_GObj* gobj, BoneDynamicsTemplate** arg1)
 {
+#ifdef TARGET_PC
+    /* The Game & Watch colour for Kirby's chef pan and other items: the
+     * 32-bit word at the start of the copy data (ftGw_Init_8014A7F4 writes a
+     * colour to the same place). Decoded as a pointer it wrote 8 bytes into
+     * the caller's 4-byte GXColor (2026-11-26: "stack smashing" in
+     * it_8027CE64 as Kirby used Game & Watch's neutral B). */
+    *(u32*) arg1 = *DP(u32, ft_80459B88.copies[Ft_Kind_GameWatch]->hat_dynamics[4]);
+#else
     *arg1 = DP(BoneDynamicsTemplate,
                DP(ftDynamics, ft_80459B88.copies[Ft_Kind_GameWatch]
                                       ->hat_dynamics[4])
                    ->x0.ftDynamicBones);
+#endif
 }
 
 void ftKb_Init_800EEB1C(Fighter_GObj* gobj, s32* arg1)
@@ -3614,6 +3624,18 @@ static inline void ftKb_LoadHatParts(Fighter_GObj* gobj, int arg1,
     ftKb_SpecialN_800EF040(gobj, arg1, hat);
     fp->u.kb.hat.x14.data = HSD_ObjAlloc(&fighter_x2040_alloc_data);
     fp->u.kb.hat.x1C.data = HSD_ObjAlloc(&fighter_x2040_alloc_data);
+#ifdef TARGET_PC
+    /* HSD_ObjAlloc hands back a used block as it was: a slot the hat never
+     * fills kept an old pointer, which the Game & Watch copy's part table
+     * then hid (2026-11-26: a crash reading address -1 as Kirby swallowed
+     * Game & Watch). Empty slots are NULL, and ftParts skips those. */
+    if (fp->u.kb.hat.x14.data != NULL) {
+        memset(fp->u.kb.hat.x14.data, 0, fighter_x2040_alloc_data.size);
+    }
+    if (fp->u.kb.hat.x1C.data != NULL) {
+        memset(fp->u.kb.hat.x1C.data, 0, fighter_x2040_alloc_data.size);
+    }
+#endif
     ftKb_SpecialN_800EF0E4(gobj, arg1, part_dobj_indices);
     ftKb_SpecialN_800EF35C(gobj, arg1, part_dobj_indices);
     ftKb_SpecialN_800EF438(gobj, hat);

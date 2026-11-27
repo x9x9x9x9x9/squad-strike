@@ -61,7 +61,9 @@ data is included.
   Windows download.
 - **20XX Captain Falcon:** on character select, press **D-pad left** with
   Falcon picked (or under your coin) to switch to the 20XX HackPack's SD
-  Remix Falcon, whose grounded down-B is a quick, shine-like kick. A
+  Remix Falcon, whose grounded down-B is a quick, shine-like kick (its hit
+  comes out on frame 9, and from frame 11 it can be jump-cancelled, like
+  Fox's shine). A
   "20XX FALCON" tag shows under your name; press again to switch back. Each
   player picks their own, and it works with SD Remix on or off. Online, while
   your door shows Falcon, D-pad left is his switch rather than chat.
@@ -91,6 +93,11 @@ data is included.
 <img width="1821" height="1437" alt="squad connect codes" src="https://github.com/user-attachments/assets/b822a044-1931-44db-bd35-b5878b05c466" />
 
 <img width="1810" height="1437" alt="squad other online" src="https://github.com/user-attachments/assets/62da45d6-bf00-4907-a170-1abaa6347218" />
+
+### Neutral spawns
+- In any match with two players, the lower port starts at the stage's first
+  spawn and the higher at its second, facing each other, whichever ports
+  they're on (as on Slippi).
 
 ### Replays
 - **Every match is saved**, offline and online, as a small replay file (a few

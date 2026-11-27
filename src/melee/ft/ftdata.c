@@ -1748,6 +1748,13 @@ static bool ftVariant_named(struct Fighter_WaitAnimData* e, const char* suffix)
     return n >= k && strcmp(name + n - k, suffix) == 0;
 }
 
+bool ftVariant_IsFalcon20xx(const Fighter* fp)
+{
+    int port = fp->player_idx;
+    return fp->kind == Ft_Kind_Captain && port >= 0 && port < 4 &&
+           fp->x24 == ftVariant_tables[port];
+}
+
 void ftVariant_Apply(Fighter* fp)
 {
     struct Fighter_WaitAnimData* disc;

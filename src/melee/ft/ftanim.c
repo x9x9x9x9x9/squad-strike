@@ -1084,7 +1084,21 @@ void ftAnim_80070458(Fighter* fp, CostumeTObjList* tobj_list, u32 tobj_idx,
     if (tobj_idx >= tobj_list->n_costume_tobjs) {
         HSD_ASSERTREPORT(1264, 0, "texture no exist! %d %d\n", fp->player_idx,
                          tobj_idx);
+#ifdef TARGET_PC
+        /* Kirby flat with Game & Watch's power has no textures, and his
+         * blink still asks for one (2026-11-26: a crash right after the
+         * swallow). The GameCube read past the list harmlessly; here the
+         * report is all there is to do. */
+        return;
+#endif
     }
+#ifdef TARGET_PC
+    if (tobj_list->costume_tobjs[tobj_idx] == NULL ||
+        tobj_list->costume_tobjs[tobj_idx]->aobj == NULL)
+    {
+        return;
+    }
+#endif
     tobjAnim(&tobj_list->costume_tobjs[tobj_idx], frame);
 }
 

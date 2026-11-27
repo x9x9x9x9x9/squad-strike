@@ -602,6 +602,16 @@ void ftParts_80074B0C(Fighter_GObj* gobj, int model_idx, int val)
     }
 }
 
+#ifdef TARGET_PC
+/* Whether a parts-visibility table's dobj index is one the list holds: the
+ * Game & Watch copy's table for Kirby names some past its end. */
+static bool ftParts_DObjInList(DObjList* dobj_list, u32 i)
+{
+    return dobj_list->data != NULL && i < dobj_list->count &&
+           dobj_list->data[i] != NULL;
+}
+#endif
+
 void ftParts_80074B6C(Fighter* fp, FtPartsVis* vis, int idx,
                       DObjList* dobj_list)
 {
@@ -617,11 +627,21 @@ void ftParts_80074B6C(Fighter* fp, FtPartsVis* vis, int idx,
                 if (j == r25) {
                     int k; // r20
                     for (k = 0; k < r27->x0; k++) {
+#ifdef TARGET_PC
+                        if (!ftParts_DObjInList(dobj_list, r0[k])) {
+                            continue; /* see ftParts_80074D7C */
+                        }
+#endif
                         HSD_DObjClearFlags(dobj_list->data[r0[k]], 1);
                     }
                 } else {
                     int k; // r20
                     for (k = 0; k < r27->x0; k++) {
+#ifdef TARGET_PC
+                        if (!ftParts_DObjInList(dobj_list, r0[k])) {
+                            continue;
+                        }
+#endif
                         HSD_DObjSetFlags(dobj_list->data[r0[k]], 1);
                     }
                 }
@@ -667,6 +687,17 @@ void ftParts_80074D7C(FtPartsVis* vis, int idx, DObjList* dobj_list)
                 r26 = &DP(TempS, lookup[i].x4)[j];
                 r29 = DP(u8, r26->x4);
                 for (k = 0; k < r26->x0; k++) {
+#ifdef TARGET_PC
+                    /* Kirby's Game & Watch copy names parts past the end of
+                     * the list it is given (2026-11-26: a crash on both
+                     * netplay machines as Kirby swallowed Game & Watch). On
+                     * the GameCube that set a bit in whatever followed; here
+                     * the slots past the count can hold any old pointer.
+                     * The flag only hides a part, so skip those. */
+                    if (!ftParts_DObjInList(dobj_list, r29[k])) {
+                        continue;
+                    }
+#endif
                     HSD_DObjSetFlags(dobj_list->data[r29[k]], 1);
                 }
             }

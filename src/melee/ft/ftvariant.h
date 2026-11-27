@@ -23,6 +23,9 @@ extern u8 ftVariant_ports[4];
 /// Called once its kind's data is loaded (ftData_80085B10).
 void ftVariant_Apply(Fighter* fp);
 
+/// Whether this fighter is playing the 20XX Falcon's motion table.
+bool ftVariant_IsFalcon20xx(const Fighter* fp);
+
 /// Back to the disc's fighters for everyone (a new netplay session).
 void ftVariant_Reset(void);
 

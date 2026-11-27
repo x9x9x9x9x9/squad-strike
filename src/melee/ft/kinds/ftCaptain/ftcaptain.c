@@ -201,7 +201,11 @@ MotionState ftCa_Init_MotionStateTable[ftCa_MS_SelfCount] = {
         ftCa_MF_SpecialLw,
         FtMoveId_SpecialLw << 24,
         ftCa_SpecialLw_Anim,
+#ifdef TARGET_PC
+        ftCa_SpecialLw_IASA, /* the 20XX Falcon's jump cancel only */
+#else
         NULL,
+#endif
         ftCa_SpecialLw_Phys,
         ftCa_SpecialLw_Coll,
         ftCamera_UpdateCameraBox,

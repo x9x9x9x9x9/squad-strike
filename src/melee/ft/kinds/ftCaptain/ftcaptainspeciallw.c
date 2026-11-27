@@ -1,4 +1,6 @@
 
+#include <melee/ft/ftvariant.h>
+#include <melee/ft/kinds/ftCommon/ftCo_Jump.h>
 #include "ftcaptainspeciallw.h"
 
 #include <Runtime/platform.h>
@@ -217,6 +219,23 @@ static inline void ftCa_Special_Inline_Friction(Fighter* fp)
     fp->self_vel.x *= friction;
     fp->self_vel.y *= friction;
 }
+
+#ifdef TARGET_PC
+/* The 20XX HackPack's Falcon (ftvariant.h): his grounded down-B, a shine,
+ * can be jump-cancelled like Fox's once its hit has been out for two
+ * frames. The hit comes out on frame 9, so the jump comes from frame 11. */
+#define FTCA_20XX_SHINE_JUMP_FRAME 11
+
+void ftCa_SpecialLw_IASA(HSD_GObj* gobj)
+{
+    Fighter* fp = GET_FIGHTER(gobj);
+    if (fp->ground_or_air == GA_Ground && ftVariant_IsFalcon20xx(fp) &&
+        fp->cur_anim_frame >= FTCA_20XX_SHINE_JUMP_FRAME - 1)
+    {
+        ftCo_Jump_CheckInput(gobj);
+    }
+}
+#endif
 
 void ftCa_SpecialLw_Phys(HSD_GObj* gobj)
 {
