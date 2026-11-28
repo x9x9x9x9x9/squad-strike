@@ -235,22 +235,30 @@ static inline void ftCa_Special_Inline_Friction(Fighter* fp)
 void ftCa_SpecialLw_IASA(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    if (fp->ground_or_air != GA_Ground || !ftVariant_IsFalcon20xx(fp)) {
+    bool hold;
+    if (!ftVariant_IsFalcon20xx(fp)) {
+        return;
+    }
+    /* The hold stops the animation, so anything else must start it again:
+     * shining off a ledge left it stopped in the air, where nothing ends
+     * the move, and Falcon froze until he was hit (2026-11-28). */
+    hold = fp->ground_or_air == GA_Ground &&
+           fp->cur_anim_frame >= FTCA_20XX_SHINE_HOLD_FRAME &&
+           (fp->input.held_buttons[0] & HSD_PAD_B);
+    if (hold) {
+        if (fp->frame_speed_mul != 0.0f) {
+            ftAnim_SetAnimRate(gobj, 0.0f);
+        }
+    } else if (fp->frame_speed_mul == 0.0f) {
+        ftAnim_SetAnimRate(gobj, 1.0f);
+    }
+    if (fp->ground_or_air != GA_Ground) {
         return;
     }
     if (fp->cur_anim_frame < FTCA_20XX_SHINE_TURN_END && ftCo_800C97A8(gobj))
     {
         fp->facing_dir = -fp->facing_dir;
         ftPartSetRotY(fp, FtPart_TopN, M_PI_2 * fp->facing_dir);
-    }
-    if (fp->cur_anim_frame >= FTCA_20XX_SHINE_HOLD_FRAME) {
-        if (fp->input.held_buttons[0] & HSD_PAD_B) {
-            if (fp->frame_speed_mul != 0.0f) {
-                ftAnim_SetAnimRate(gobj, 0.0f);
-            }
-        } else if (fp->frame_speed_mul == 0.0f) {
-            ftAnim_SetAnimRate(gobj, 1.0f);
-        }
     }
     if (fp->cur_anim_frame >= FTCA_20XX_SHINE_JUMP_FRAME) {
         ftCo_Jump_CheckInput(gobj);

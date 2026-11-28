@@ -20,6 +20,9 @@ bool pc_file_cache_get_size(const char* filename, size_t* size);
 /* Stores a pristine copy of raw file data in host memory cache. */
 void pc_file_cache_put(const char* filename, const void* data, size_t size);
 
+/* Forgets a cached file, so its next load reads the disc. */
+void pc_file_cache_drop(const char* filename);
+
 /* Loads a file into the cache now, on the calling thread, unless it is
  * already there; true once it is cached. For loads that must be served from
  * memory (see pc_net_pure_load). */

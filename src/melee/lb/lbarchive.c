@@ -12,6 +12,7 @@
 #include <sysdolphin/baselib/archive.h>
 #include <sysdolphin/baselib/debug.h>
 #ifdef TARGET_PC
+#include "pc/file_cache.h"
 #include "pc/pc.h"
 #include "pc/region.h"
 
@@ -95,7 +96,7 @@ void(lbArchive_LoadSections)(HSD_Archive* archive, void* symbol, ...)
  * joint pointer it needed is a zero disc slot. Reporting here names the file
  * and the mismatch at the point it happens. Archive loads are rare, so this
  * costs nothing measurable. */
-static void pc_archive_check(const char* filename, const void* data,
+static bool pc_archive_check(const char* filename, const void* data,
                              size_t length)
 {
     const u32* hdr = data;
@@ -105,12 +106,12 @@ static void pc_archive_check(const char* filename, const void* data,
         OSReport("ARCHIVE %s: ALLOCATION FAILED (needed %u bytes, read %u)\n",
                  filename, (unsigned) OSRoundUp32B(lbFileGetSize(filename)),
                  (unsigned) length);
-        return;
+        return true; /* nothing to read again into */
     }
     if (length < 0x20) {
         OSReport("ARCHIVE %s: read %u bytes, too short for a DAT header\n",
                  filename, (unsigned) length);
-        return;
+        return false;
     }
 
     file_size = __builtin_bswap32(hdr[0]);
@@ -134,6 +135,24 @@ static void pc_archive_check(const char* filename, const void* data,
                  " length=%u)\n",
                  filename, (unsigned) data_size, (unsigned) nb_reloc,
                  (unsigned) nb_public, (unsigned) length);
+        return false;
+    }
+    return file_size != 0 && file_size <= (u32) length;
+}
+
+/* An archive read with a bad header (a short disc read, or one cached that
+ * way) is dropped from the file cache and read again from the disc once,
+ * before HSD_ArchiveParse would end the game. 2026-11-28: LbBf.dat came
+ * back as zeros as Pokemon Stadium loaded. */
+static void pc_archive_read(const char* filename, void* data, size_t* length)
+{
+    lbFile_8001668C(filename, data, length);
+    if (!pc_archive_check(filename, data, *length)) {
+        pc_log_line("archive: %s read badly (%u bytes); reading it again",
+                    filename, (unsigned) *length);
+        pc_file_cache_drop(lbFileGetFullName(filename));
+        lbFile_8001668C(filename, data, length);
+        pc_archive_check(filename, data, *length);
     }
 }
 
@@ -142,8 +161,7 @@ static inline void readArchive(const char* filename, void* data,
 {
     size_t length;
 
-    lbFile_8001668C(filename, data, &length);
-    pc_archive_check(filename, data, length);
+    pc_archive_read(filename, data, &length);
 #ifdef TARGET_PC
     lbArchive_PcName(filename);
 #endif
@@ -169,8 +187,7 @@ static inline HSD_Archive* lbArchive_LoadArchive_inline(const char* filename)
 
     data = lbHeap_80015BD0(0, OSRoundUp32B(lbFileGetSize(filename)));
     archive = lbHeap_80015BD0(0, sizeof(HSD_Archive));
-    lbFile_8001668C(filename, data, &length);
-    pc_archive_check(filename, data, length);
+    pc_archive_read(filename, data, &length);
 #ifdef TARGET_PC
     lbArchive_PcName(filename);
 #endif

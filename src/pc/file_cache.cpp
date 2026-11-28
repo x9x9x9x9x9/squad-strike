@@ -59,6 +59,18 @@ bool is_archive_name(const std::string& name) {
     return (ext == ".dat" || ext == ".usd");
 }
 
+/* A DAT/USD archive's header gives its size first: a read that came back
+ * short or failed leaves zeros there (2026-11-28: LbBf.dat read as 833 zero
+ * bytes, and Pokemon Stadium's load ended the game). Such data is never
+ * cached, so one bad read cannot be served again. */
+bool archive_header_ok(const uint8_t* p, size_t size) {
+    if (size < 0x20)
+        return false;
+    const uint32_t file_size =
+        uint32_t(p[0]) << 24 | uint32_t(p[1]) << 16 | uint32_t(p[2]) << 8 | uint32_t(p[3]);
+    return file_size != 0 && file_size <= size;
+}
+
 bool is_pinned_file(const std::string& key) {
     // Core system, UI, menu, and common tables that must never be evicted by LRU
     static const char* const s_pinned[] = {"PlCo.dat", "EfCoData.dat", "EfMnData.dat",
@@ -223,7 +235,9 @@ bool preload_single_file(const char* name, int entryNum) {
             void* raw_buf = reinterpret_cast<void*>(
                 (reinterpret_cast<uintptr_t>(raw_mem) + 31) & ~uintptr_t(31));
             s32 bytesRead = DVDReadPrio(&fi, raw_buf, static_cast<s32>(aligned_sz), 0, 1);
-            if (bytesRead >= 0) {
+            /* Only a whole file: a short read (a cancel, a scene change) would
+             * otherwise be cached with garbage where its end should be. */
+            if (bytesRead >= static_cast<s32>(file_len)) {
                 pc_file_cache_put(key.c_str(), raw_buf, file_len);
                 success = true;
             }
@@ -375,6 +389,10 @@ void pc_file_cache_put(const char* filename, const void* data, size_t size) {
     }
 
     std::string key = normalize_key(filename);
+    if (is_archive_name(key) && !archive_header_ok(host_src, size)) {
+        OSReport("[FileCache] NOT STORED: %s (%zu bytes, bad header)\n", key.c_str(), size);
+        return;
+    }
 
     std::lock_guard<std::mutex> lock(s_cacheMutex);
     if (s_fileCache.find(key) != s_fileCache.end()) {
@@ -399,6 +417,20 @@ void pc_file_cache_put(const char* filename, const void* data, size_t size) {
     OSReport("[FileCache] STORED: %s (%zu bytes%s, total: %.2f MB)%s\n", key.c_str(), size,
         pinned ? ", pinned" : "", s_totalCacheBytes / (1024.0 * 1024.0),
         PC_IS_ARAM_ADDR(data) ? " [from ARAM]" : "");
+}
+
+void pc_file_cache_drop(const char* filename) {
+    if (filename == nullptr)
+        return;
+    std::string key = normalize_key(filename);
+    std::lock_guard<std::mutex> lock(s_cacheMutex);
+    auto it = s_fileCache.find(key);
+    if (it == s_fileCache.end())
+        return;
+    if (!it->second.pinned)
+        s_lruList.erase(it->second.lru_it);
+    s_totalCacheBytes -= it->second.data.size();
+    s_fileCache.erase(it);
 }
 
 bool pc_file_cache_require(const char* filename) {
