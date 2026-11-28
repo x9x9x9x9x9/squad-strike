@@ -61,12 +61,13 @@ data is included.
   Windows download.
 - **20XX Captain Falcon:** on character select, press **D-pad left** with
   Falcon picked (or under your coin) to switch to the 20XX HackPack's SD
-  Remix Falcon, whose grounded down-B is a quick, shine-like kick (its hit
-  comes out on frame 9, and from frame 11 it can be jump-cancelled, like
-  Fox's shine). A
-  "20XX FALCON" tag shows under your name; press again to switch back. Each
-  player picks their own, and it works with SD Remix on or off. Online, while
-  your door shows Falcon, D-pad left is his switch rather than chat.
+  Remix Falcon, whose grounded down-B is a fiery shine that works like
+  Fox's: it hits on frame 1, jump-cancels from frame 4, stays out while you
+  hold B, and turns around with the stick. A "20XX FALCON" tag shows on your
+  door; press again to switch back. Each player picks their own, in VS and
+  in Training (where D-pad left also switches the CPU's Falcon while you hold
+  its coin), and it works with SD Remix on or off. Online, while your door
+  shows Falcon, D-pad left is his switch rather than chat.
 - Kirby's throws work correctly.
 - **Zelda starts as Sheik.** Down-B turns her into Zelda as usual. To start
   a match as Zelda, hold **A** while the match loads.

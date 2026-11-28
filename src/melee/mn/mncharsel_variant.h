@@ -8,6 +8,8 @@
  *     the CPU's. A "20XX FALCON" tag under the door's name says which is picked.
  *   - The pick stays with the port for any Falcon it plays, squad members
  *     included, until switched back.
+ *   - Training's character select works the same: its two doors are yours
+ *     and the CPU's.
  *   - Online the D-pad is quick chat: while your door shows Falcon, D-pad
  *     left is his switch, and chat's LEFT choices wait until it doesn't
  *     (pc_chat_left_reserved_frame).
@@ -30,23 +32,46 @@ static void mnCharSel_VariantReset(void)
     }
 }
 
-/* Whether a port plays Captain Falcon: its coin pick, the portrait its
- * door shows, or a squad member. */
-static bool variant_has_falcon(int port, bool shown_only)
+/* Training's character select (one player): door 0 is the player, door 1
+ * the CPU, and the match makes them players 0 and 1 (gm_801B1F70) whatever
+ * the controller's port. VS: each door is its port. */
+static bool variant_training(void)
+{
+    return mnCharSel_804D6CF5 == 1 &&
+           mnCharSel_804D6CB0->match_type == TRAINING_MODE;
+}
+
+static int variant_doors(void)
+{
+    return variant_training() ? 2 : 4;
+}
+
+static bool variant_door_open(int door)
+{
+    /* Training's select leaves slot_type unset; both its doors play. */
+    return variant_training() || squad_door_open(door);
+}
+
+/* Whether a door plays Captain Falcon: the portrait it shows, or (VS) its
+ * coin pick or a squad member. A door's index is its player's. */
+static bool variant_has_falcon(int door, bool shown_only)
 {
     u8 ck, color;
     int i;
-    if (squad_door_shows(port, &ck, &color) && ck == CKind_Captain) {
+    if (squad_door_shows(door, &ck, &color) && ck == CKind_Captain) {
         return true;
     }
     if (shown_only) {
         return false;
     }
-    if (squad_coin_pick(port) == CKind_Captain) {
+    if (variant_training()) {
+        return false; /* its doors show their picks */
+    }
+    if (squad_coin_pick(door) == CKind_Captain) {
         return true;
     }
     for (i = 0; i < GMSQUAD_EXTRA; i++) {
-        if (gmSquad_rows[port][i].ckind == CKind_Captain) {
+        if (gmSquad_rows[door][i].ckind == CKind_Captain) {
             return true;
         }
     }
@@ -62,12 +87,19 @@ static void variant_buttons(int port)
     {
         return;
     }
-    if (cursor->x5 == 1 && cursor->x6 <= 3) {
+    if (variant_training()) {
+        /* The coin in hand says which door; else yours, then the CPU's. */
+        if (cursor->x5 == 1 && cursor->x6 <= 1) {
+            target = cursor->x6;
+        } else {
+            target = variant_has_falcon(0, true) ? 0 : 1;
+        }
+    } else if (cursor->x5 == 1 && cursor->x6 <= 3) {
         target = cursor->x6; /* holding a coin: that door's */
     } else {
         target = port;
     }
-    if (!squad_door_open(target) || !variant_has_falcon(target, true)) {
+    if (!variant_door_open(target) || !variant_has_falcon(target, true)) {
         return;
     }
     ftVariant_ports[target] ^= FTVARIANT_FALCON_20XX;
@@ -77,13 +109,15 @@ static void variant_buttons(int port)
 static void variant_tags(void)
 {
     int p;
-    if (squad_canvas < 0 || mnCharSel_804D6CF5 == 1) {
+    if (squad_canvas < 0) {
         return;
     }
-    for (p = 0; p < 4; p++) {
+    for (p = 0; p < variant_doors(); p++) {
         HSD_Text* text = variant_texts[p];
-        u8 show = squad_door_open(p) && variant_has_falcon(p, false) &&
-                  (ftVariant_ports[p] & FTVARIANT_FALCON_20XX);
+
+        u8 show = variant_door_open(p) && variant_has_falcon(p, false) &&
+                  (ftVariant_ports[p] &
+                   FTVARIANT_FALCON_20XX);
         if (text == NULL) {
             CSSTagData* tag = mnCharSel_803F0E8C[p].data;
             if (tag == NULL || tag->text == NULL) {
@@ -93,8 +127,15 @@ static void variant_tags(void)
             if (text == NULL) {
                 continue;
             }
-            text->pos_x = tag->text->pos_x - 1.86f;
-            text->pos_y = tag->text->pos_y + 3.1f;
+            if (variant_training()) {
+                /* Training's doors are taller and their names sit below
+                 * the screen: the tag goes beside the door's header. */
+                text->pos_x = tag->text->pos_x + 2.2f;
+                text->pos_y = 7.2f;
+            } else {
+                text->pos_x = tag->text->pos_x - 1.86f;
+                text->pos_y = tag->text->pos_y + 3.1f;
+            }
             text->pos_z = tag->text->pos_z;
             text->box_size_x = 288.89f;
             text->box_size_y = 36.0f;
@@ -133,7 +174,9 @@ static void mnCharSel_VariantFrame(void)
     int p;
 
     if (mnCharSel_804D6CB0 == NULL ||
-        mnCharSel_804D6CB0->match_type != VS_MELEE || mnCharSel_804D6CF5 == 1)
+        (!variant_training() &&
+         (mnCharSel_804D6CB0->match_type != VS_MELEE ||
+          mnCharSel_804D6CF5 == 1)))
     {
         return;
     }
@@ -144,8 +187,14 @@ static void mnCharSel_VariantFrame(void)
         session = now_session;
     }
     if (mnCharSel_804D6CF6 == 0) {
-        for (p = 0; p < 4; p++) {
-            variant_buttons(p);
+        if (variant_training()) {
+            if (mnCharSel_804D6CF0 >= 0 && mnCharSel_804D6CF0 < 4) {
+                variant_buttons(mnCharSel_804D6CF0);
+            }
+        } else {
+            for (p = 0; p < 4; p++) {
+                variant_buttons(p);
+            }
         }
     }
     if (pc_net_active()) {

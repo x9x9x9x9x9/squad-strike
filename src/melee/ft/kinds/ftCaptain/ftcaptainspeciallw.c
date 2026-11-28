@@ -1,6 +1,7 @@
 
 #include <melee/ft/ftvariant.h>
 #include <melee/ft/kinds/ftCommon/ftCo_Jump.h>
+#include <melee/ft/kinds/ftCommon/ftCo_Turn.h>
 #include "ftcaptainspeciallw.h"
 
 #include <Runtime/platform.h>
@@ -221,17 +222,37 @@ static inline void ftCa_Special_Inline_Friction(Fighter* fp)
 }
 
 #ifdef TARGET_PC
-/* The 20XX HackPack's Falcon (ftvariant.h): his grounded down-B, a shine,
- * can be jump-cancelled like Fox's once its hit has been out for two
- * frames. The hit comes out on frame 9, so the jump comes from frame 11. */
-#define FTCA_20XX_SHINE_JUMP_FRAME 11
+/* The 20XX HackPack's Falcon (ftvariant.h): his grounded down-B is a
+ * Fox-style shine, timed like the shine 20XX's code gives any fighter: the
+ * explosion hits on frame 1 (the script in ftdata.c), a jump cancels it
+ * from frame 4 (Fox's too), holding B keeps it out at frame 4, and the
+ * stick turns it around before frame 18. Frames as cur_anim_frame counts
+ * them here, the same values 20XX's code compares. */
+#define FTCA_20XX_SHINE_JUMP_FRAME 4
+#define FTCA_20XX_SHINE_HOLD_FRAME 4
+#define FTCA_20XX_SHINE_TURN_END 18
 
 void ftCa_SpecialLw_IASA(HSD_GObj* gobj)
 {
     Fighter* fp = GET_FIGHTER(gobj);
-    if (fp->ground_or_air == GA_Ground && ftVariant_IsFalcon20xx(fp) &&
-        fp->cur_anim_frame >= FTCA_20XX_SHINE_JUMP_FRAME - 1)
+    if (fp->ground_or_air != GA_Ground || !ftVariant_IsFalcon20xx(fp)) {
+        return;
+    }
+    if (fp->cur_anim_frame < FTCA_20XX_SHINE_TURN_END && ftCo_800C97A8(gobj))
     {
+        fp->facing_dir = -fp->facing_dir;
+        ftPartSetRotY(fp, FtPart_TopN, M_PI_2 * fp->facing_dir);
+    }
+    if (fp->cur_anim_frame >= FTCA_20XX_SHINE_HOLD_FRAME) {
+        if (fp->input.held_buttons[0] & HSD_PAD_B) {
+            if (fp->frame_speed_mul != 0.0f) {
+                ftAnim_SetAnimRate(gobj, 0.0f);
+            }
+        } else if (fp->frame_speed_mul == 0.0f) {
+            ftAnim_SetAnimRate(gobj, 1.0f);
+        }
+    }
+    if (fp->cur_anim_frame >= FTCA_20XX_SHINE_JUMP_FRAME) {
         ftCo_Jump_CheckInput(gobj);
     }
 }
