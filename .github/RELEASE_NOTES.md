@@ -6,7 +6,17 @@ and credits are on the [project page](https://github.com/x9x9x9x9x9/squad-strike
 
 You need your own **Super Smash Bros. Melee NTSC-U 1.02 (GALE01)** disc image.
 
-## What's new in v1.0.12
+## What's new in v1.1.01
+
+- **20XX Falcon's shine works like Fox's.** His grounded down-B (the fiery
+  explosion, same 10% hit) now comes out on frame 1, can be jump-cancelled
+  from frame 4, stays out while you hold B, and turns around with the
+  stick. This is the timing 20XX's own code gives its shine.
+- **20XX Falcon in Training.** D-pad left with Falcon on your door switches
+  him there too; hold the CPU's coin and press it to switch the CPU's Falcon.
+- Both players need v1.1.01 for online matches.
+
+## Also in v1.0.12
 
 - **Fix:** crashes when Kirby swallowed Mr. Game & Watch, as he swallowed
   him, used the chef pan or cast his shadow (worst in Squad Strike, when

@@ -54,6 +54,7 @@ int main(int argc, char** argv) {
     assert(pc::is_update_available("v1.0.10-test", "v1.0.10"));
     assert(!pc::is_update_available("v1.0.10", "v1.0.10"));
     assert(!pc::is_update_available("v1.0.11", "v1.0.10"));
+    assert(pc::is_update_available("v1.0.12", "v1.1.01"));
 
     assert(sha256_hex("", 0) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     assert(
