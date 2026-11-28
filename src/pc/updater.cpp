@@ -1063,6 +1063,12 @@ bool extract_zip(const fs::path& zip, const fs::path& dest, std::string& error) 
                 z.next_out = outbuf.data();
                 z.avail_out = uInt(outbuf.size());
                 zr = inflate(&z, Z_NO_FLUSH);
+                /* Z_BUF_ERROR: the output filled exactly as this input ran out,
+                 * so the next call had nothing to do; read on. (2026-11-28: the
+                 * Melee HD pack failed to install as "damaged".) The size and
+                 * CRC checks below catch real damage. */
+                if (zr == Z_BUF_ERROR)
+                    break;
                 if (zr != Z_OK && zr != Z_STREAM_END) {
                     ok = false;
                     break;

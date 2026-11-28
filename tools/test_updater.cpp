@@ -89,6 +89,14 @@ int main(int argc, char** argv) {
         assert(extract_zip(argv[1], out, error));
         assert(slurp(out / "melee.exe") == "program");
         assert(slurp(out / "resources" / "a.txt") == std::string(5000, 'z'));
+        /* A deflated file whose output fills the inflate buffer exactly as an
+         * input chunk ends (make_test_zip.py): inflate's Z_BUF_ERROR then is
+         * no damage. */
+        {
+            const std::string edge = slurp(out / "resources" / "edge.bin");
+            assert(edge.size() == 65641 + 150000);
+            assert(edge.compare(0, 65641, std::string(65641, '\0')) == 0);
+        }
         assert(fs::is_directory(out / "empty"));
         assert(!fs::exists(out.parent_path() / "escape.txt"));
         assert(sha256_file(out / "melee.exe") == sha256_hex("program", 7));
