@@ -115,6 +115,8 @@ uint16_t VIPadFrameBufferWidth(uint16_t width);
 
 /* Feature queries */
 bool pc_is_custom_textures_enabled(void);
+/* "Other HD textures": the Melee HD pack (hdpack.hpp). */
+bool pc_is_hd_textures_enabled(void);
 bool pc_is_unlock_all_enabled(void);
 bool pc_is_frozen_stadium_enabled(void);
 /* Squad Strike / Stage Expansion: launcher Gameplay settings (and the

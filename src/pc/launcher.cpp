@@ -10,6 +10,7 @@
 #include "net.h"
 #include "pc.h"
 #include "updater.hpp"
+#include "hdpack.hpp"
 #include <melee/gm/gmstats.h>
 #include "replay.h"
 #include "video_export.h"
@@ -311,6 +312,9 @@ class Launcher final : public Rml::EventListener {
     SDL_Window* window;
     Rml::ElementDocument* document;
     std::shared_ptr<DialogResult> dialog;
+    std::shared_ptr<DialogResult> hd_dialog; /* Install HD pack from zip */
+    pc::hdpack::Status last_hd_status = pc::hdpack::Status::Missing;
+    uint64_t last_hd_done = ~0ull;
     std::future<launcher::DiscInfo> inspection;
     std::future<launcher::Verification> verification;
     std::atomic_bool cancel{false};
@@ -400,7 +404,8 @@ class Launcher final : public Rml::EventListener {
         switch (tab) {
         case 0:
             return {"display", "sync", "resolution", "aspect", "hud-mode", "magnifier", "aa",
-                "filter", "filter-mode", "fps", "custom-textures", "backend", "performance"};
+                "filter", "filter-mode", "fps", "custom-textures", "hd-textures", "hd-pack",
+                "hd-page", "hd-zip", "backend", "performance"};
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb"};
         case 2:
@@ -726,6 +731,7 @@ class Launcher final : public Rml::EventListener {
         text("filter", std::to_string(prefs.anisotropy) + "x");
         text("filter-mode", filter_name(prefs.filter_mode));
         text("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
+        refresh_hd(true);
         text("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         text("magnifier", prefs.magnifier ? "On" : "Widescreen (top only)");
         text("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
@@ -1011,6 +1017,108 @@ class Launcher final : public Rml::EventListener {
         pc_replay_request(r.path, out_utf8.c_str());
         SDL_Log("Launcher: exporting %s to %s", r.path, out_utf8.c_str());
         begin_game();
+    }
+    /* "Other HD textures": the toggle, and the pack's download or install. */
+    void refresh_hd(bool force = false) {
+        using pc::hdpack::Status;
+        const auto st = pc::hdpack::state();
+        if (!force && st.status == last_hd_status && st.done == last_hd_done)
+            return;
+        const bool finished =
+            last_hd_status != st.status &&
+            (st.status == Status::Installed || st.status == Status::Failed) &&
+            (last_hd_status == Status::Downloading || last_hd_status == Status::Installing);
+        last_hd_status = st.status;
+        last_hd_done = st.done;
+        text("hd-textures", prefs.hd_textures ? "On" : "Off");
+        std::string detail, action;
+        switch (st.status) {
+        case Status::Missing:
+            detail = "Not installed";
+            action = "Download";
+            break;
+        case Status::Installed:
+            detail = "Installed";
+            action = "Open folder";
+            break;
+        case Status::Downloading:
+            if (st.done == 0)
+                detail = st.message;
+            else if (st.total > 0)
+                detail = "Downloading " +
+                         std::to_string(int(std::min<uint64_t>(100, st.done * 100 / st.total))) +
+                         "%";
+            else
+                detail = "Downloading " + std::to_string(st.done >> 20) + " MB";
+            action = "Cancel";
+            break;
+        case Status::Installing:
+            detail = "Installing...";
+            action = "Installing...";
+            break;
+        case Status::Failed:
+            detail = "Not installed";
+            action = "Retry";
+            break;
+        }
+        text("hd-status", detail);
+        text("hd-pack", action);
+        if (finished)
+            status(st.message, st.status == Status::Failed);
+    }
+    void hd_action(const std::string& id) {
+        using pc::hdpack::Status;
+        const auto st = pc::hdpack::state();
+        if (id == "hd-textures") {
+            prefs.hd_textures = !prefs.hd_textures;
+            save();
+            if (prefs.hd_textures && (st.status == Status::Missing || st.status == Status::Failed))
+                pc::hdpack::download_async();
+        } else if (id == "hd-pack") {
+            if (st.status == Status::Missing || st.status == Status::Failed)
+                pc::hdpack::download_async();
+            else if (st.status == Status::Downloading)
+                pc::hdpack::cancel();
+            else if (st.status == Status::Installed) {
+                std::string url = "file://";
+                const std::string dir = pc::hdpack::dir_utf8();
+                if (dir.empty() || dir[0] != '/')
+                    url += "/";
+                url += dir;
+                SDL_OpenURL(url.c_str());
+            }
+        } else if (id == "hd-page") {
+            status("Opening the HD pack's page in your browser...");
+            SDL_OpenURL(pc::hdpack::page_url());
+        } else if (id == "hd-zip" && !hd_dialog && st.status != Status::Downloading &&
+                   st.status != Status::Installing)
+        {
+            static const SDL_DialogFileFilter filters[] = {
+                {"Zip files", "zip"}, {"All files", "*"}};
+            hd_dialog = std::make_shared<DialogResult>();
+            SDL_ShowOpenFileDialog(dialog_done, new std::shared_ptr<DialogResult>(hd_dialog),
+                window, filters, 2, nullptr, false);
+        }
+        refresh_hd(true);
+        element(id.c_str())->Focus();
+    }
+    void poll_hd_dialog() {
+        if (!hd_dialog)
+            return;
+        std::string path, error;
+        {
+            std::lock_guard lock(hd_dialog->mutex);
+            if (!hd_dialog->ready)
+                return;
+            path = hd_dialog->path;
+            error = hd_dialog->error;
+        }
+        hd_dialog.reset();
+        if (!error.empty())
+            status("File chooser failed: " + error, true);
+        else if (!path.empty())
+            pc::hdpack::install_zip_async(std::filesystem::u8path(path));
+        refresh_hd(true);
     }
     /* The update notice: shown from the moment a newer release is found until
      * Later, and the restart once it is installed. */
@@ -1519,6 +1627,10 @@ class Launcher final : public Rml::EventListener {
             update_dismissed = true;
             refresh_update(true);
             element(supported ? "play" : "choose")->Focus();
+            return;
+        }
+        if (id == "hd-textures" || id == "hd-pack" || id == "hd-page" || id == "hd-zip") {
+            hd_action(id);
             return;
         }
         if (id == "check-updates") {
@@ -2072,6 +2184,9 @@ public:
                 }
             }
             refresh_update();
+            poll_hd_dialog();
+            if (settings)
+                refresh_hd();
             if (result != -2)
                 break;
             if (aurora_begin_frame())
@@ -2313,7 +2428,7 @@ public:
         switch (tab) {
         case 0:
             return {"display", "sync", "resolution", "aspect", "hud-mode", "magnifier", "aa",
-                "filter", "filter-mode", "custom-textures", "backend"};
+                "filter", "filter-mode", "custom-textures", "hd-textures", "backend"};
         case 1:
             return {"volume", "music-volume", "sfx-volume", "mute", "reverb", "fps", "scale"};
         case 2:
@@ -2521,6 +2636,9 @@ public:
         label("filter", std::to_string(prefs.anisotropy) + "x");
         label("filter-mode", filter_name(prefs.filter_mode));
         label("custom-textures", prefs.custom_textures ? "Enabled" : "Disabled");
+        label("hd-textures", !pc::hdpack::installed() ? "Not installed" :
+                             prefs.hd_textures        ? "On" :
+                                                        "Off");
         label("hud-mode", prefs.hud_mode == 0 ? "Classic (4:3)" : "Wide (16:9)");
         label("magnifier", prefs.magnifier ? "On" : "Widescreen (top only)");
         label("frozen-stadium", prefs.frozen_stadium ? "Hazardless" : "Normal");
@@ -2803,6 +2921,11 @@ public:
         } else if (id == "custom-textures") {
             prefs.custom_textures = !prefs.custom_textures;
             pc_textures_reload();
+        } else if (id == "hd-textures") {
+            if (pc::hdpack::installed()) {
+                prefs.hd_textures = !prefs.hd_textures;
+                pc_textures_reload();
+            }
         } else if (id == "hud-mode") {
             prefs.hud_mode = (prefs.hud_mode + 1) % 2;
         } else if (id == "magnifier") {
@@ -3182,6 +3305,10 @@ extern "C" void pc_menu_update(void) {
 
 extern "C" bool pc_is_custom_textures_enabled(void) {
     return prefs.custom_textures;
+}
+
+extern "C" bool pc_is_hd_textures_enabled(void) {
+    return prefs.hd_textures;
 }
 extern "C" bool pc_net_rules(bool* unlock_all, bool* frozen_stadium);
 extern "C" bool pc_is_unlock_all_enabled(void) {

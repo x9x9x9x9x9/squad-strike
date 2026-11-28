@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,6 +45,10 @@ State state();
 void cleanup_previous();
 /* Stop any download and wait for the worker, for shutdown. */
 void shutdown();
+/* An HTTPS GET for other downloads (the HD texture pack): the body goes to
+ * `sink` (false stops it). `who` names the server in errors. */
+bool fetch(const std::string& url, const std::function<bool(const char*, std::size_t)>& sink,
+    std::string& error, const char* who);
 
 /* ---- exposed for tools/test_updater.cpp ---- */
 struct Asset {

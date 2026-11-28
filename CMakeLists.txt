@@ -235,6 +235,7 @@ set(PC_SOURCES
         src/pc/sdremix.cpp
         src/pc/textures.cpp
         src/pc/updater.cpp
+        src/pc/hdpack.cpp
         src/pc/version.cpp
         # Netplay (docs/netcode-plan.md). net.c is the session and rollback
         # loop; the rest are its modules behind src/pc/net_internal.h.
@@ -488,7 +489,7 @@ if (NOT ANDROID AND NOT IOS AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
     add_dependencies(unit_tests launcher_data_test)
 
     add_executable(updater_test EXCLUDE_FROM_ALL tools/test_updater.cpp src/pc/updater.cpp
-            src/pc/version.cpp)
+            src/pc/hdpack.cpp src/pc/version.cpp)
     target_include_directories(updater_test PRIVATE src src/pc)
     target_link_libraries(updater_test PRIVATE aurora::main ZLIB::ZLIB ${MELEE_NETWORK_LIBS})
     target_compile_options(updater_test PRIVATE -UNDEBUG)

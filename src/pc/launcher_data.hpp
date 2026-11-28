@@ -48,6 +48,7 @@ struct Preferences {
     int backend = 0;
     bool mute = false, fps = false, reverb = true;
     bool custom_textures = true;
+    bool hd_textures = false;
     bool unlock_all = false;
     int hud_mode = 0;
     bool magnifier = true;       // the off-screen magnifying glass (off: only above the top)

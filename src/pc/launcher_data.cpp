@@ -411,17 +411,19 @@ Preferences load_preferences(const std::filesystem::path& path) {
             float value;
             if (row >> value && std::isfinite(value) && value >= 0.75f && value <= 1.5f)
                 prefs.scale = value;
-        } else if (key == "custom_textures" || key == "unlock_all" || key == "frozen_stadium" ||
-                   key == "free_camera" || key == "ucf" || key == "reverb" ||
-                   key == "squad_strike" || key == "stage_expansion" || key == "sd_remix" ||
-                   key == "show_ping" || key == "vibration" || key == "magnifier" ||
-                   key == "results_screen" || key == "net_two_players" || key == "save_replays" ||
-                   key == "check_updates")
+        } else if (key == "custom_textures" || key == "hd_textures" || key == "unlock_all" ||
+                   key == "frozen_stadium" || key == "free_camera" || key == "ucf" ||
+                   key == "reverb" || key == "squad_strike" || key == "stage_expansion" ||
+                   key == "sd_remix" || key == "show_ping" || key == "vibration" ||
+                   key == "magnifier" || key == "results_screen" || key == "net_two_players" ||
+                   key == "save_replays" || key == "check_updates")
         {
             int value;
             if (row >> value && (value == 0 || value == 1)) {
                 if (key == "custom_textures")
                     prefs.custom_textures = value;
+                else if (key == "hd_textures")
+                    prefs.hd_textures = value;
                 else if (key == "unlock_all")
                     prefs.unlock_all = value;
                 else if (key == "frozen_stadium")
@@ -495,6 +497,7 @@ bool save_preferences(
          << prefs.free_camera << "\nucf " << prefs.ucf << "\nmusic_volume " << prefs.music_volume
          << "\nsfx_volume " << prefs.sfx_volume << "\ninstall_id " << std::hex << prefs.install_id
          << std::dec << '\n';
+    text << "hd_textures " << prefs.hd_textures << '\n';
     text << "reverb " << prefs.reverb << '\n'
          << "squad_strike " << prefs.squad_strike << '\n'
          << "stage_expansion " << prefs.stage_expansion << '\n'

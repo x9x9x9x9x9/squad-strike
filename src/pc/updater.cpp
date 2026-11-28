@@ -42,6 +42,7 @@ constexpr const char* kLatestApi =
     "https://api.github.com/repos/x9x9x9x9x9/squad-strike/releases/latest";
 constexpr const char* kReleasesPage = "https://github.com/x9x9x9x9x9/squad-strike/releases";
 constexpr const char* kUserAgent = "SquadStrike-Updater";
+constexpr const char* kGitHubAccept = "application/vnd.github+json, application/octet-stream";
 /* Moved-aside files from the previous update; removed at the next start. */
 constexpr const char* kOldSuffix = ".update-old";
 
@@ -334,7 +335,8 @@ std::wstring widen(const std::string& s) {
         MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, w.data(), n);
     return w;
 }
-bool http_get(const std::string& url, const Sink& sink, std::string& error) {
+bool http_get(const std::string& url, const Sink& sink, std::string& error,
+    const char* accept = kGitHubAccept, const char* who = "GitHub") {
     std::wstring wurl = widen(url);
     URL_COMPONENTS parts{};
     parts.dwStructSize = sizeof parts;
@@ -364,18 +366,17 @@ bool http_get(const std::string& url, const Sink& sink, std::string& error) {
                                 parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) :
                             nullptr;
     bool ok = request &&
-              WinHttpSendRequest(request,
-                  L"Accept: application/vnd.github+json, application/octet-stream\r\n", DWORD(-1),
-                  WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
+              WinHttpSendRequest(request, widen(std::string("Accept: ") + accept + "\r\n").c_str(),
+                  DWORD(-1), WINHTTP_NO_REQUEST_DATA, 0, 0, 0) &&
               WinHttpReceiveResponse(request, nullptr);
     if (!ok)
-        error = "could not reach GitHub (" + std::to_string(GetLastError()) + ")";
+        error = std::string("could not reach ") + who + " (" + std::to_string(GetLastError()) + ")";
     if (ok) {
         DWORD code = 0, size = sizeof code;
         WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
             WINHTTP_HEADER_NAME_BY_INDEX, &code, &size, WINHTTP_NO_HEADER_INDEX);
         if (code < 200 || code >= 300) {
-            error = "GitHub answered " + std::to_string(code);
+            error = std::string(who) + " answered " + std::to_string(code);
             ok = false;
         }
     }
@@ -403,14 +404,14 @@ bool http_get(const std::string& url, const Sink& sink, std::string& error) {
 size_t curl_sink(char* p, size_t size, size_t n, void* user) {
     return (*static_cast<const Sink*>(user))(p, size * n) ? size * n : 0;
 }
-bool http_get(const std::string& url, const Sink& sink, std::string& error) {
+bool http_get(const std::string& url, const Sink& sink, std::string& error,
+    const char* accept = kGitHubAccept, const char* who = "GitHub") {
     CURL* curl = curl_easy_init();
     if (!curl) {
         error = "no network library";
         return false;
     }
-    curl_slist* headers =
-        curl_slist_append(nullptr, "Accept: application/vnd.github+json, application/octet-stream");
+    curl_slist* headers = curl_slist_append(nullptr, (std::string("Accept: ") + accept).c_str());
     curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
     curl_easy_setopt(curl, CURLOPT_USERAGENT, kUserAgent);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -430,13 +431,14 @@ bool http_get(const std::string& url, const Sink& sink, std::string& error) {
         return false;
     }
     if (code < 200 || code >= 300) {
-        error = "GitHub answered " + std::to_string(code);
+        error = std::string(who) + " answered " + std::to_string(code);
         return false;
     }
     return true;
 }
 #else
-bool http_get(const std::string&, const Sink&, std::string& error) {
+bool http_get(const std::string&, const Sink&, std::string& error, const char* = nullptr,
+    const char* = nullptr) {
     error = "this build cannot download";
     return false;
 }
@@ -734,6 +736,11 @@ void run_worker(void (*fn)()) {
 }
 
 }  // namespace
+
+bool fetch(const std::string& url, const std::function<bool(const char*, std::size_t)>& sink,
+    std::string& error, const char* who) {
+    return http_get(url, sink, error, "*/*", who);
+}
 
 /* ---- public ------------------------------------------------------------- */
 

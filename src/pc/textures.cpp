@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 #include "paths.h"
 #include "textures.h"
+#include "hdpack.hpp"
 #include "pc.h"
 
 #include <dolphin/gx.h>
@@ -16,6 +17,21 @@
 namespace {
 
 aurora::texture::ReplacementGroup s_replacements;
+/* "Other HD textures" (hdpack.hpp), under the player's own textures. */
+aurora::texture::ReplacementGroup s_hd;
+constexpr aurora::texture::ReplacementOptions kCustomOptions{.priority = 1};
+constexpr aurora::texture::ReplacementOptions kHdOptions{.priority = 0};
+
+void load_hd() {
+    aurora::texture::unregister_replacements(s_hd);
+    s_hd.registrations.clear();
+    if (!pc_is_hd_textures_enabled() || !pc::hdpack::installed())
+        return;
+    const auto dir = pc::hdpack::dir();
+    s_hd = aurora::texture::load_replacement_directory(dir, kHdOptions);
+    SDL_Log("Other HD textures: loaded %zu replacement(s) from %s", s_hd.registrations.size(),
+        pc::hdpack::dir_utf8().c_str());
+}
 std::filesystem::path s_textures_dir;
 std::string s_textures_dir_str;
 bool s_initialized = false;
@@ -60,6 +76,7 @@ extern "C" void pc_textures_init(void) {
         return;
     }
     s_initialized = true;
+    load_hd();
 
     if (!pc_is_custom_textures_enabled()) {
         return;
@@ -69,13 +86,15 @@ extern "C" void pc_textures_init(void) {
     s_textures_dir_str = s_textures_dir.string();
 
     if (!s_textures_dir.empty()) {
-        s_replacements = aurora::texture::load_replacement_directory(s_textures_dir);
+        s_replacements =
+            aurora::texture::load_replacement_directory(s_textures_dir, kCustomOptions);
         SDL_Log("Custom textures: loaded %zu replacement(s) from %s",
             s_replacements.registrations.size(), s_textures_dir_str.c_str());
     }
 }
 
 extern "C" void pc_textures_reload(void) {
+    load_hd();
     if (!pc_is_custom_textures_enabled()) {
         aurora::texture::unregister_replacements(s_replacements);
         s_replacements.registrations.clear();
@@ -86,13 +105,16 @@ extern "C" void pc_textures_reload(void) {
     s_textures_dir_str = s_textures_dir.string();
 
     if (!s_textures_dir.empty()) {
-        aurora::texture::reload_replacement_directory(s_textures_dir, s_replacements);
+        aurora::texture::reload_replacement_directory(
+            s_textures_dir, s_replacements, kCustomOptions);
         SDL_Log("Custom textures: reloaded %zu replacement(s) from %s",
             s_replacements.registrations.size(), s_textures_dir_str.c_str());
     }
 }
 
 extern "C" void pc_textures_shutdown(void) {
+    aurora::texture::unregister_replacements(s_hd);
+    s_hd.registrations.clear();
     if (!s_replacements.registrations.empty()) {
         aurora::texture::unregister_replacements(s_replacements);
         s_replacements.registrations.clear();

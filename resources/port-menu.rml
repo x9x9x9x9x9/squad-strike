@@ -96,10 +96,15 @@
               </span>
               <button id="filter-mode" class="value">Off</button>
             </div>
-            <div class="row" data-desc="Load replacement textures from the textures directory.">
-              <span class="name">Custom HD textures<span class="detail">Load replacement textures from the textures directory.</span>
+            <div class="row" data-desc="Your own Dolphin-format textures from the textures folder.">
+              <span class="name">Custom HD textures<span class="detail">Your own Dolphin-format textures from the textures folder.</span>
               </span>
               <button id="custom-textures" class="value">Enabled</button>
+            </div>
+            <div class="row" data-desc="The Melee HD texture pack. Install it from the launcher's Graphics page.">
+              <span class="name">Other HD textures<span class="detail">The Melee HD texture pack. Install it from the launcher's Graphics page.</span>
+              </span>
+              <button id="hd-textures" class="value">Off</button>
             </div>
             <div class="row" data-desc="Graphics backend RESTART">
               <span class="name">Graphics backend <span class="badge">RESTART</span>

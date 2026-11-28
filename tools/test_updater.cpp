@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /* The updater's offline parts: the release JSON, picking this platform's
  * package, SHA-256, and unpacking a zip (tools/make_test_zip.py writes it). */
+#include "pc/hdpack.hpp"
 #include "pc/updater.hpp"
 #include "pc/version.hpp"
 
@@ -19,6 +20,11 @@ extern "C" void pc_relaunch_to(const char*, const char*) {
     std::abort();
 }
 
+/* hdpack.cpp's folder; not used here. */
+extern "C" char* pc_get_pref_path(void) {
+    return nullptr;
+}
+
 static std::string slurp(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
     std::stringstream ss;
@@ -27,6 +33,17 @@ static std::string slurp(const fs::path& p) {
 }
 
 int main(int argc, char** argv) {
+    /* The HD pack's MediaFire page: the plain link, and the base64 one
+     * newer pages keep in data-scrambled-url. */
+    assert(
+        pc::hdpack::find_download_link(
+            R"(<a class="input popsok" aria-label="Download file" href="https://download2278.mediafire.com/abc_DEF/4embgcgt2wcc6q0/Melee+HD.zip" id="downloadButton">)") ==
+        "https://download2278.mediafire.com/abc_DEF/4embgcgt2wcc6q0/Melee+HD.zip");
+    assert(
+        pc::hdpack::find_download_link(
+            R"(<a id="downloadButton" href="#" data-scrambled-url="aHR0cHM6Ly9kb3dubG9hZDEubWVkaWFmaXJlLmNvbS94L3kuemlw">)") ==
+        "https://download1.mediafire.com/x/y.zip");
+    assert(pc::hdpack::find_download_link("<html>nothing</html>").empty());
     const char* json = R"({"url":"x","html_url":"https://github.com/o/r/releases/tag/v1.0.11",
         "tag_name":"v1.0.11","name":"v1.0.11","draft":false,"prerelease":false,
         "body":"notes with \"quotes\" and é","assets":[

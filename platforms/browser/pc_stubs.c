@@ -83,6 +83,9 @@ int pc_get_hud_mode(void) {
 bool pc_is_custom_textures_enabled(void) {
     return false;
 }
+bool pc_is_hd_textures_enabled(void) {
+    return false;
+}
 /* Netplay lobby identity and Direct Connect settings (net_lan.c, net_match.c); the lobby itself is
  * unreachable here. */
 const char* pc_get_net_name(void) {

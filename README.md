@@ -267,6 +267,16 @@ settings:
 - **Video:** Magnifying glass: **Widescreen (top only)** shows the bubble only
   for a fighter above the screen, since a widescreen view keeps fighters past
   the sides in sight.
+- **HD textures (Graphics):** **Other HD textures** turns on the Melee HD
+  texture pack: HD menus, character select, HUD, hit effects, stages and some
+  character textures (the fighters' shapes stay the same; SD Remix and 20XX
+  costumes keep their own textures). It is not part of the download: turning
+  it on downloads it (790 MB) from the pack's MediaFire page into an
+  `hd-textures` folder beside your settings. If that fails, **Open page**
+  downloads the zip in your browser and **Choose zip** installs it. It only
+  changes what you see, so online partners need not have it. **Custom HD
+  textures** is separate: your own Dolphin-format textures (`tex1_` files)
+  from a `textures` folder, which win where both replace the same texture.
 - **Online:** your connect code, a friend's code, input delay, ping display,
   players on this computer.
 - **Graphics / Audio / Controls:** resolution up to 10x, MSAA, filtering,
@@ -299,6 +309,9 @@ Fuck no. This shit was made with Claude over the course of a week. Sure I had to
 - **[SD Remix](https://sdremix.games)**
   ([repository](https://github.com/underscoreglook/SD-Remix)) by the SD Remix
   team: the SD Remix character files and balance changes.
+- **[Melee HD](https://assets.melee.tv)** by the Melee HD team (David V.
+  Kimball and contributors): the HD texture pack the **Other HD textures**
+  setting downloads.
 - **Stage Expansion** by **UnclePunch**: the hazard-free stage layouts,
   ported here from his Gecko code.
 - **Squad Strike** is sort of ported from my buddy Tyler who tried to make squad strike work in Gecko
